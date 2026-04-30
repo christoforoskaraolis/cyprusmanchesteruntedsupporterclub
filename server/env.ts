@@ -9,7 +9,9 @@ function readRequired(name: string): string {
   const v = read(name)
   if (!v) {
     throw new Error(
-      `[server] Missing required env var ${name}. Set it in .env at the repo root.`,
+      `[server] Missing required env var ${name}. ` +
+        `For local dev, set it in .env at the repo root. ` +
+        `For Railway, add it under Service Variables and redeploy.`,
     )
   }
   return v
