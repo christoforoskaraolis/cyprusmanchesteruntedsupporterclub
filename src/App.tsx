@@ -3263,6 +3263,7 @@ function App() {
     const authMessageSuccess =
       message?.startsWith('Check your email') ||
       message?.startsWith('If an account exists for that email')
+    const showResendVerificationAction = message === 'Please verify your email before signing in'
 
     return (
       <div className="auth-layout">
@@ -3406,14 +3407,16 @@ function App() {
                     >
                       Forgot your password?
                     </button>
-                    <button
-                      type="button"
-                      className="auth-forgot-link"
-                      disabled={resendVerificationSubmitting}
-                      onClick={() => void handleResendVerificationClick()}
-                    >
-                      {resendVerificationSubmitting ? 'Sending…' : 'Resend verification email'}
-                    </button>
+                    {showResendVerificationAction && (
+                      <button
+                        type="button"
+                        className="auth-forgot-link"
+                        disabled={resendVerificationSubmitting}
+                        onClick={() => void handleResendVerificationClick()}
+                      >
+                        {resendVerificationSubmitting ? 'Sending…' : 'Resend verification email'}
+                      </button>
+                    )}
                   </div>
                 )}
 
