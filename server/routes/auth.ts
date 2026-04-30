@@ -159,6 +159,31 @@ authRouter.post(
   }),
 )
 
+authRouter.post(
+  '/resend-verification',
+  asyncHandler(async (req, res) => {
+    const email = String(req.body?.email ?? '')
+      .trim()
+      .toLowerCase()
+    if (!email) throw badRequest('Email is required')
+
+    const { rows } = await query<{ user_id: string; email_verified_at: string | null }>(
+      `select user_id, email_verified_at
+       from public.auth_users
+       where email = $1
+       limit 1`,
+      [email],
+    )
+    const row = rows[0]
+    if (row && !row.email_verified_at) {
+      await createAndSendVerificationEmail(row.user_id, email, req.headers.origin)
+    }
+
+    // Return the same shape regardless of account state to avoid user enumeration.
+    res.json({ ok: true })
+  }),
+)
+
 authRouter.get(
   '/me',
   requireUser,

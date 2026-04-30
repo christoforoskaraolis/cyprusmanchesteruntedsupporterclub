@@ -2243,6 +2243,7 @@ function App() {
     signIn,
     signUp,
     verifyEmail,
+    resendVerificationEmail,
     resetPasswordForEmail,
     updatePasswordAfterRecovery,
     signOut,
@@ -2301,6 +2302,7 @@ function App() {
   const [recoveryError, setRecoveryError] = useState<string | null>(null)
   const [recoverySubmitting, setRecoverySubmitting] = useState(false)
   const [forgotSubmitting, setForgotSubmitting] = useState(false)
+  const [resendVerificationSubmitting, setResendVerificationSubmitting] = useState(false)
   const adminStatusCheckedRef = useRef(false)
   const [merchProducts, setMerchProducts] = useState<MerchandiseProduct[]>([])
   const [merchLoading, setMerchLoading] = useState(false)
@@ -3087,6 +3089,26 @@ function App() {
     )
   }
 
+  async function handleResendVerificationClick() {
+    setMessage(null)
+    if (!email.trim()) {
+      setMessage('Please enter your email first.')
+      return
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+      setMessage('Please enter a valid email address.')
+      return
+    }
+    setResendVerificationSubmitting(true)
+    const { error } = await resendVerificationEmail(email.trim())
+    setResendVerificationSubmitting(false)
+    if (error) {
+      setMessage(error.message)
+      return
+    }
+    setMessage('If an account exists for that email and is not yet verified, we sent a new verification email.')
+  }
+
   async function handleRecoverySubmit(e: FormEvent) {
     e.preventDefault()
     setRecoveryError(null)
@@ -3383,6 +3405,14 @@ function App() {
                       }}
                     >
                       Forgot your password?
+                    </button>
+                    <button
+                      type="button"
+                      className="auth-forgot-link"
+                      disabled={resendVerificationSubmitting}
+                      onClick={() => void handleResendVerificationClick()}
+                    >
+                      {resendVerificationSubmitting ? 'Sending…' : 'Resend verification email'}
                     </button>
                   </div>
                 )}

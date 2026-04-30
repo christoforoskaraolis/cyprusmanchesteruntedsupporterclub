@@ -33,6 +33,7 @@ type AuthContextValue = {
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>
   signUp: (email: string, password: string, fullName: string) => Promise<{ error: Error | null; requiresEmailVerification?: boolean }>
   verifyEmail: (token: string) => Promise<{ error: Error | null }>
+  resendVerificationEmail: (email: string) => Promise<{ error: Error | null }>
   resetPasswordForEmail: (email: string) => Promise<{ error: Error | null }>
   updatePasswordAfterRecovery: (newPassword: string) => Promise<{ error: Error | null }>
   signOut: () => Promise<void>
@@ -168,6 +169,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
+  const resendVerificationEmail = useCallback(async (email: string) => {
+    try {
+      const response = await fetch('/api/auth/resend-verification', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: email.trim() }),
+      })
+      const payload = (await response.json().catch(() => ({}))) as { error?: string }
+      if (!response.ok) return { error: new Error(payload.error ?? 'Could not resend verification email') }
+      return { error: null }
+    } catch (error) {
+      return { error: asError(error) }
+    }
+  }, [])
+
   const resetPasswordForEmail = useCallback(async (email: string) => {
     const normalized = email.trim()
     if (!normalized) return { error: new Error('Enter an email address') }
@@ -197,6 +213,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       signIn,
       signUp,
       verifyEmail,
+      resendVerificationEmail,
       resetPasswordForEmail,
       updatePasswordAfterRecovery,
       signOut,
@@ -210,6 +227,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       signIn,
       signUp,
       verifyEmail,
+      resendVerificationEmail,
       resetPasswordForEmail,
       updatePasswordAfterRecovery,
       signOut,
