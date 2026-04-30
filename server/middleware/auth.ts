@@ -1,8 +1,8 @@
 import type { NextFunction, Request, Response } from 'express'
-import { createClient, type SupabaseClient } from '@supabase/supabase-js'
-import { env } from '../env.ts'
+import jwt from 'jsonwebtoken'
 import { query } from '../db.ts'
 import { forbidden, unauthorized } from '../lib/errors.ts'
+import { env } from '../env.ts'
 
 export type AuthenticatedUser = {
   id: string
@@ -16,31 +16,6 @@ declare module 'express-serve-static-core' {
   }
 }
 
-let supabaseAdmin: SupabaseClient | null = null
-function getSupabase(): SupabaseClient {
-  if (supabaseAdmin) return supabaseAdmin
-  if (!env.supabaseUrl || !env.supabaseAnonKey) {
-    throw new Error(
-      '[server] Supabase auth env not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in .env.',
-    )
-  }
-  supabaseAdmin = createClient(env.supabaseUrl, env.supabaseAnonKey, {
-    auth: { persistSession: false, autoRefreshToken: false },
-  })
-  return supabaseAdmin
-}
-
-async function readSupabaseIsAdmin(token: string, userId: string): Promise<boolean | null> {
-  if (!env.supabaseUrl || !env.supabaseAnonKey) return null
-  const scoped = createClient(env.supabaseUrl, env.supabaseAnonKey, {
-    auth: { persistSession: false, autoRefreshToken: false },
-    global: { headers: { Authorization: `Bearer ${token}` } },
-  })
-  const { data, error } = await scoped.from('profiles').select('is_admin').eq('id', userId).maybeSingle()
-  if (error || !data) return null
-  return data.is_admin === true
-}
-
 function readBearer(req: Request): string | null {
   const raw = req.headers['authorization']
   const header = Array.isArray(raw) ? raw[0] : raw
@@ -49,9 +24,25 @@ function readBearer(req: Request): string | null {
   return match ? match[1].trim() : null
 }
 
-async function ensureProfileRow(userId: string, email: string | null): Promise<boolean> {
-  // Returns is_admin. Auto-creates a profile row on first sight so admin
-  // toggling can be done directly in Neon without a separate provisioning step.
+type AuthTokenPayload = {
+  sub: string
+  email?: string | null
+}
+
+function parseToken(token: string): AuthTokenPayload | null {
+  try {
+    const decoded = jwt.verify(token, env.authJwtSecret)
+    if (!decoded || typeof decoded !== 'object') return null
+    const sub = typeof decoded.sub === 'string' ? decoded.sub : ''
+    if (!sub) return null
+    const email = typeof decoded.email === 'string' ? decoded.email : null
+    return { sub, email }
+  } catch {
+    return null
+  }
+}
+
+async function ensureProfileRow(userId: string, email: string | null): Promise<void> {
   await query(
     `insert into public.profiles (id, email)
      values ($1, $2)
@@ -59,11 +50,6 @@ async function ensureProfileRow(userId: string, email: string | null): Promise<b
      where public.profiles.email is distinct from excluded.email`,
     [userId, email],
   )
-  const { rows } = await query<{ is_admin: boolean }>(
-    `select is_admin from public.profiles where id = $1`,
-    [userId],
-  )
-  return rows[0]?.is_admin === true
 }
 
 async function isEmailMarkedAdmin(email: string | null): Promise<boolean> {
@@ -80,22 +66,21 @@ async function isEmailMarkedAdmin(email: string | null): Promise<boolean> {
 async function authenticate(req: Request): Promise<AuthenticatedUser | null> {
   const token = readBearer(req)
   if (!token) return null
-  const sb = getSupabase()
-  const { data, error } = await sb.auth.getUser(token)
-  if (error || !data.user) return null
-  const user = data.user
-  let isAdmin = await ensureProfileRow(user.id, user.email ?? null)
-  const supabaseAdminFlag = await readSupabaseIsAdmin(token, user.id)
-  if (supabaseAdminFlag !== null && supabaseAdminFlag !== isAdmin) {
-    await query(`update public.profiles set is_admin = $2 where id = $1`, [user.id, supabaseAdminFlag])
-    isAdmin = supabaseAdminFlag
-  }
-  const emailAdmin = await isEmailMarkedAdmin(user.email ?? null)
+  const payload = parseToken(token)
+  if (!payload) return null
+  const userId = payload.sub
+  const email = payload.email ?? null
+  await ensureProfileRow(userId, email)
+
+  const { rows } = await query<{ is_admin: boolean }>(`select is_admin from public.profiles where id = $1`, [userId])
+  let isAdmin = rows[0]?.is_admin === true
+
+  const emailAdmin = await isEmailMarkedAdmin(email)
   if (emailAdmin && !isAdmin) {
-    await query(`update public.profiles set is_admin = true where id = $1`, [user.id])
+    await query(`update public.profiles set is_admin = true where id = $1`, [userId])
     isAdmin = true
   }
-  return { id: user.id, email: user.email ?? null, isAdmin }
+  return { id: userId, email, isAdmin }
 }
 
 export async function attachUser(req: Request, _res: Response, next: NextFunction) {

@@ -19,8 +19,7 @@ function readRequired(name: string): string {
 
 export const env = {
   databaseUrl: readRequired('DATABASE_URL'),
+  authJwtSecret: readRequired('AUTH_JWT_SECRET'),
   port: Number(read('PORT') || read('SERVER_PORT') || 3001),
-  supabaseUrl: read('VITE_SUPABASE_URL'),
-  supabaseAnonKey: read('VITE_SUPABASE_ANON_KEY'),
   isProduction: read('NODE_ENV') === 'production',
 }

@@ -14,6 +14,7 @@ import { merchandiseRouter } from './routes/merchandise.ts'
 import { membershipRouter } from './routes/membership.ts'
 import { adminUsersRouter } from './routes/adminUsers.ts'
 import { officialMembershipsRouter } from './routes/officialMemberships.ts'
+import { authRouter } from './routes/auth.ts'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
@@ -27,6 +28,7 @@ app.use(express.json({ limit: '5mb' }))
 app.use(attachUser)
 
 app.use('/api/health', healthRouter)
+app.use('/api/auth', authRouter)
 app.use('/api/news', newsRouter)
 app.use('/api/fixtures', fixturesRouter)
 app.use('/api/tickets', ticketsRouter)

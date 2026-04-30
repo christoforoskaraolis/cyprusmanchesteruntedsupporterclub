@@ -1,4 +1,4 @@
-import { supabase } from './supabase'
+import { getAuthToken } from './authSession'
 
 export function asError(error: unknown): Error {
   if (error instanceof Error) return error
@@ -6,7 +6,7 @@ export function asError(error: unknown): Error {
 }
 
 async function authHeaders(): Promise<Record<string, string>> {
-  const token = supabase ? (await supabase.auth.getSession()).data.session?.access_token : null
+  const token = getAuthToken()
   return token ? { Authorization: `Bearer ${token}` } : {}
 }
 

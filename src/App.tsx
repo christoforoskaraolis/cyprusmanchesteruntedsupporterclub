@@ -3138,20 +3138,19 @@ function App() {
     return (
       <div className="auth-layout">
         <div className="auth-page setup-missing-page">
-          <h1 className="auth-title">Supabase not configured</h1>
+          <h1 className="auth-title">Server environment is not configured</h1>
           <p className="section-lead">
-            Create a project at{' '}
-            <a href="https://supabase.com/dashboard" target="_blank" rel="noopener noreferrer">
-              supabase.com
-            </a>
-            , run the SQL in <code className="admin-inline-code">supabase/migrations/</code>, then add to{' '}
-            <code className="admin-inline-code">.env</code>:
+            Set the backend environment variables in <code className="admin-inline-code">.env</code> (or Railway
+            Service Variables):
           </p>
           <pre className="setup-env-sample">
-            VITE_SUPABASE_URL=https://xxxx.supabase.co{'\n'}
-            VITE_SUPABASE_ANON_KEY=eyJ...
+            DATABASE_URL=postgresql://...{'\n'}
+            AUTH_JWT_SECRET=your-long-random-secret
           </pre>
-          <p className="auth-footnote">Copy <code className="admin-inline-code">.env.example</code> to <code className="admin-inline-code">.env</code> and fill in your keys.</p>
+          <p className="auth-footnote">
+            Copy <code className="admin-inline-code">.env.example</code> to <code className="admin-inline-code">.env</code>{' '}
+            and fill in your values.
+          </p>
         </div>
       </div>
     )

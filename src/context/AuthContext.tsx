@@ -7,13 +7,23 @@ import {
   useState,
   type ReactNode,
 } from 'react'
-import type { Session, User } from '@supabase/supabase-js'
-import { isSupabaseConfigured, supabase } from '../lib/supabase'
+import { clearAuthToken, getAuthToken, setAuthToken } from '../lib/authSession'
+import { asError } from '../lib/apiClient'
+
+type AuthUser = {
+  id: string
+  email: string | null
+}
+
+type AuthSession = {
+  access_token: string
+  user: AuthUser
+}
 
 type AuthContextValue = {
   configured: boolean
-  session: Session | null
-  user: User | null
+  session: AuthSession | null
+  user: AuthUser | null
   loading: boolean
   isAdmin: boolean
   /** True after user opens the password-reset link from email (set new password). */
@@ -22,9 +32,7 @@ type AuthContextValue = {
   refreshAdminStatus: () => Promise<void>
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>
   signUp: (email: string, password: string, fullName: string) => Promise<{ error: Error | null }>
-  /** Sends Supabase password reset email. Add this site URL under Auth → Redirect URLs. */
   resetPasswordForEmail: (email: string) => Promise<{ error: Error | null }>
-  /** Call after user lands from reset link; clears recovery mode on success. */
   updatePasswordAfterRecovery: (newPassword: string) => Promise<{ error: Error | null }>
   signOut: () => Promise<void>
 }
@@ -32,110 +40,131 @@ type AuthContextValue = {
 const AuthContext = createContext<AuthContextValue | null>(null)
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [session, setSession] = useState<Session | null>(null)
+  const [session, setSession] = useState<AuthSession | null>(null)
   const [loading, setLoading] = useState(true)
   const [isAdmin, setIsAdmin] = useState(false)
-  const [passwordRecoveryPending, setPasswordRecoveryPending] = useState(false)
+  const [passwordRecoveryPending] = useState(false)
 
   useEffect(() => {
-    if (!isSupabaseConfigured || !supabase) {
+    const token = getAuthToken()
+    if (!token) {
       setLoading(false)
       return
     }
-
-    supabase.auth
-      .getSession()
-      .then(({ data: { session: s } }) => {
-        setSession(s)
-        setLoading(false)
-      })
-      .catch((err) => {
-        console.error('[CMUSC] getSession failed:', err)
-        setLoading(false)
-      })
-
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((event, s) => {
-      setSession(s)
-      if (event === 'PASSWORD_RECOVERY') {
-        setPasswordRecoveryPending(true)
-      }
-      if (event === 'SIGNED_OUT') {
-        setPasswordRecoveryPending(false)
-      }
+    fetch('/api/auth/me', {
+      headers: { Authorization: `Bearer ${token}` },
     })
-
-    return () => subscription.unsubscribe()
+      .then(async (response) => {
+        if (!response.ok) throw new Error('Session expired')
+        return (await response.json()) as { user: AuthUser; isAdmin: boolean }
+      })
+      .then((data) => {
+        setSession({ access_token: token, user: data.user })
+        setIsAdmin(data.isAdmin === true)
+      })
+      .catch(() => {
+        clearAuthToken()
+        setSession(null)
+        setIsAdmin(false)
+      })
+      .finally(() => setLoading(false))
   }, [])
 
   const refreshAdminStatus = useCallback(async () => {
-    const uid = session?.user?.id
-    if (!uid || !isSupabaseConfigured || !supabase) {
+    const token = session?.access_token
+    if (!token) {
       setIsAdmin(false)
       return
     }
-    const { data, error } = await supabase.from('profiles').select('is_admin').eq('id', uid).maybeSingle()
-    if (error) {
-      console.error('[CMUSC] profiles is_admin read failed:', error.message, error)
+    try {
+      const response = await fetch('/api/auth/me', {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      if (!response.ok) throw new Error('Failed to refresh admin status')
+      const data = (await response.json()) as { user: AuthUser; isAdmin: boolean }
+      setSession({ access_token: token, user: data.user })
+      setIsAdmin(data.isAdmin === true)
+    } catch {
+      clearAuthToken()
+      setSession(null)
       setIsAdmin(false)
-      return
     }
-    if (!data) {
-      console.warn(
-        '[CMUSC] No profile row for this user, or RLS returned no rows. Check profiles.id matches Authentication → Users and run latest SQL in supabase/migrations.',
-      )
-      setIsAdmin(false)
-      return
-    }
-    setIsAdmin(data.is_admin === true)
-  }, [session?.user?.id])
+  }, [session?.access_token])
 
   useEffect(() => {
     void refreshAdminStatus()
   }, [refreshAdminStatus])
 
   const signIn = useCallback(async (email: string, password: string) => {
-    if (!supabase) return { error: new Error('Supabase is not configured') }
-    const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password })
-    return { error: error ? new Error(error.message) : null }
+    try {
+      const response = await fetch('/api/auth/sign-in', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: email.trim(), password }),
+      })
+      const payload = (await response.json().catch(() => ({}))) as {
+        error?: string
+        token?: string
+        user?: AuthUser
+        isAdmin?: boolean
+      }
+      if (!response.ok || !payload.token || !payload.user) {
+        return { error: new Error(payload.error ?? 'Sign in failed') }
+      }
+      setAuthToken(payload.token)
+      setSession({ access_token: payload.token, user: payload.user })
+      setIsAdmin(payload.isAdmin === true)
+      return { error: null }
+    } catch (error) {
+      return { error: asError(error) }
+    }
   }, [])
 
   const signUp = useCallback(async (email: string, password: string, fullName: string) => {
-    if (!supabase) return { error: new Error('Supabase is not configured') }
-    const { error } = await supabase.auth.signUp({
-      email: email.trim(),
-      password,
-      options: {
-        data: { full_name: fullName.trim() },
-      },
-    })
-    return { error: error ? new Error(error.message) : null }
+    try {
+      const response = await fetch('/api/auth/sign-up', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: email.trim(), password, fullName: fullName.trim() }),
+      })
+      const payload = (await response.json().catch(() => ({}))) as {
+        error?: string
+        token?: string
+        user?: AuthUser
+        isAdmin?: boolean
+      }
+      if (!response.ok || !payload.token || !payload.user) {
+        return { error: new Error(payload.error ?? 'Create account failed') }
+      }
+      setAuthToken(payload.token)
+      setSession({ access_token: payload.token, user: payload.user })
+      setIsAdmin(payload.isAdmin === true)
+      return { error: null }
+    } catch (error) {
+      return { error: asError(error) }
+    }
   }, [])
 
   const resetPasswordForEmail = useCallback(async (email: string) => {
-    if (!supabase) return { error: new Error('Supabase is not configured') }
-    const redirectTo = `${window.location.origin}/`
-    const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), { redirectTo })
-    return { error: error ? new Error(error.message) : null }
+    const normalized = email.trim()
+    if (!normalized) return { error: new Error('Enter an email address') }
+    return { error: new Error('Password reset by email is not configured yet in Neon-only mode') }
   }, [])
 
-  const updatePasswordAfterRecovery = useCallback(async (newPassword: string) => {
-    if (!supabase) return { error: new Error('Supabase is not configured') }
-    const { error } = await supabase.auth.updateUser({ password: newPassword })
-    if (!error) setPasswordRecoveryPending(false)
-    return { error: error ? new Error(error.message) : null }
-  }, [])
+  const updatePasswordAfterRecovery = useCallback(
+    async (_newPassword: string) => ({ error: new Error('Password recovery is not configured yet in Neon-only mode') }),
+    [],
+  )
 
   const signOut = useCallback(async () => {
-    if (supabase) await supabase.auth.signOut()
+    clearAuthToken()
+    setSession(null)
     setIsAdmin(false)
-    setPasswordRecoveryPending(false)
   }, [])
 
   const value = useMemo<AuthContextValue>(
     () => ({
-      configured: isSupabaseConfigured,
+      configured: true,
       session,
       user: session?.user ?? null,
       loading,
