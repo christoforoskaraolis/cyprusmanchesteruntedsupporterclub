@@ -31,7 +31,8 @@ type AuthContextValue = {
   /** Re-read profiles.is_admin (e.g. after enabling admin in Supabase). */
   refreshAdminStatus: () => Promise<void>
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>
-  signUp: (email: string, password: string, fullName: string) => Promise<{ error: Error | null }>
+  signUp: (email: string, password: string, fullName: string) => Promise<{ error: Error | null; requiresEmailVerification?: boolean }>
+  verifyEmail: (token: string) => Promise<{ error: Error | null }>
   resetPasswordForEmail: (email: string) => Promise<{ error: Error | null }>
   updatePasswordAfterRecovery: (newPassword: string) => Promise<{ error: Error | null }>
   signOut: () => Promise<void>
@@ -132,13 +133,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         token?: string
         user?: AuthUser
         isAdmin?: boolean
+        requiresEmailVerification?: boolean
       }
-      if (!response.ok || !payload.token || !payload.user) {
+      if (!response.ok) {
         return { error: new Error(payload.error ?? 'Create account failed') }
+      }
+      if (payload.requiresEmailVerification) {
+        return { error: null, requiresEmailVerification: true }
+      }
+      if (!payload.token || !payload.user) {
+        return { error: new Error('Create account failed') }
       }
       setAuthToken(payload.token)
       setSession({ access_token: payload.token, user: payload.user })
       setIsAdmin(payload.isAdmin === true)
+      return { error: null, requiresEmailVerification: false }
+    } catch (error) {
+      return { error: asError(error) }
+    }
+  }, [])
+
+  const verifyEmail = useCallback(async (token: string) => {
+    try {
+      const response = await fetch('/api/auth/verify-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: token.trim() }),
+      })
+      const payload = (await response.json().catch(() => ({}))) as { error?: string }
+      if (!response.ok) return { error: new Error(payload.error ?? 'Email verification failed') }
       return { error: null }
     } catch (error) {
       return { error: asError(error) }
@@ -173,6 +196,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       refreshAdminStatus,
       signIn,
       signUp,
+      verifyEmail,
       resetPasswordForEmail,
       updatePasswordAfterRecovery,
       signOut,
@@ -185,6 +209,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       refreshAdminStatus,
       signIn,
       signUp,
+      verifyEmail,
       resetPasswordForEmail,
       updatePasswordAfterRecovery,
       signOut,

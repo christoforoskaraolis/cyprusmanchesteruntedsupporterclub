@@ -21,5 +21,12 @@ export const env = {
   databaseUrl: readRequired('DATABASE_URL'),
   authJwtSecret: readRequired('AUTH_JWT_SECRET'),
   port: Number(read('PORT') || read('SERVER_PORT') || 3001),
+  publicAppUrl: read('PUBLIC_APP_URL'),
+  smtpHost: read('SMTP_HOST'),
+  smtpPort: Number(read('SMTP_PORT') || 587),
+  smtpSecure: read('SMTP_SECURE') === 'true',
+  smtpUser: read('SMTP_USER'),
+  smtpPass: read('SMTP_PASS'),
+  smtpFrom: read('SMTP_FROM'),
   isProduction: read('NODE_ENV') === 'production',
 }

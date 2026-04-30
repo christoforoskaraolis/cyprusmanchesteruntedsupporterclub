@@ -2242,6 +2242,7 @@ function App() {
     refreshAdminStatus,
     signIn,
     signUp,
+    verifyEmail,
     resetPasswordForEmail,
     updatePasswordAfterRecovery,
     signOut,
@@ -2338,8 +2339,8 @@ function App() {
 
   const isMembershipActive = membershipRecord?.status === 'active'
   const isMembershipPending = membershipRecord?.status === 'pending'
-  /** Match ticket requests are available to any signed-in user. */
-  const showMatchTickets = Boolean(user?.id)
+  /** Match ticket requests are available only to active members. */
+  const showMatchTickets = Boolean(user?.id && isMembershipActive)
   /** Merchandise is available to any signed-in user. */
   const showMerchandise = Boolean(user?.id)
   const fixturesSource = fixturesFeed
@@ -2840,6 +2841,26 @@ function App() {
     if (activePage === 'merchandise' || activePage === 'tickets') openPage('home')
   }, [showMatchTickets, activePage, openPage])
 
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const params = new URLSearchParams(window.location.search)
+    const verifyToken = params.get('verifyEmailToken')?.trim()
+    if (!verifyToken) return
+    void (async () => {
+      const { error } = await verifyEmail(verifyToken)
+      if (error) {
+        setMessage(error.message)
+      } else {
+        setMode('sign-in')
+        setMessage('Email verified successfully. You can now sign in.')
+      }
+      params.delete('verifyEmailToken')
+      const next = params.toString()
+      const nextUrl = `${window.location.pathname}${next ? `?${next}` : ''}${window.location.hash}`
+      window.history.replaceState({}, '', nextUrl)
+    })()
+  }, [verifyEmail])
+
   const loadAdminRegistry = useCallback(async () => {
     if (!isAdmin) return
     setRegistryLoading(true)
@@ -3122,12 +3143,17 @@ function App() {
         return
       }
     } else {
-      const { error } = await signUp(email, password, `${name.trim()} ${surname.trim()}`)
+      const { error, requiresEmailVerification } = await signUp(email, password, `${name.trim()} ${surname.trim()}`)
       if (error) {
         setMessage(error.message)
         return
       }
-      setMessage('Check your email to confirm your account if required, then sign in.')
+      if (requiresEmailVerification) {
+        setMode('sign-in')
+        setMessage('We sent a verification email. Please verify your email, then sign in.')
+        resetForm()
+        return
+      }
     }
 
     openPage('home')
@@ -4517,6 +4543,19 @@ function App() {
               })()}
               .
             </p>
+            {!isMembershipActive && (
+              <div className="section-card" style={{ marginBottom: '1rem' }}>
+                <h2 className="section-title" style={{ marginBottom: '0.5rem' }}>
+                  Cyprus Club Membership
+                </h2>
+                <p className="section-lead" style={{ marginBottom: '0.75rem' }}>
+                  Register for Cyprus Club Membership to unlock match ticket requests.
+                </p>
+                <button type="button" className="top-bar-pill-btn" onClick={() => openPage('mycmusc')}>
+                  Register for Cyprus Club Membership
+                </button>
+              </div>
+            )}
             {newsLoading ? (
               <p className="section-lead">Loading latest club announcements...</p>
             ) : newsPosts.length === 0 ? (
