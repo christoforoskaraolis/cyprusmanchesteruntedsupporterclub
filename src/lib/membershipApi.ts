@@ -3,6 +3,7 @@ import { apiGet, apiSend, asError } from './apiClient'
 
 export type MemberRegistryEntry = {
   applicationId: string
+  email: string | null
   status: 'pending' | 'active'
   submittedAt: string
   activatedAt?: string
@@ -24,7 +25,7 @@ export type MemberRegistryEntry = {
 
 export type MemberApplicationPayload = Omit<
   MemberRegistryEntry,
-  'applicationId' | 'status' | 'submittedAt' | 'activatedAt' | 'validUntil' | 'membershipNumber'
+  'applicationId' | 'email' | 'status' | 'submittedAt' | 'activatedAt' | 'validUntil' | 'membershipNumber'
 >
 
 export type DbMembershipApplication = {
@@ -46,6 +47,7 @@ export type DbMembershipApplication = {
   activated_at: string | null
   membership_number?: number | null
   valid_until?: string | null
+  profile_email?: string | null
 }
 
 export type DbRenewalRequest = {
@@ -85,6 +87,7 @@ export function formatMembershipNumber(n: number | null | undefined): string {
 export function dbRowToMemberEntry(row: DbMembershipApplication): MemberRegistryEntry {
   return {
     applicationId: row.application_id,
+    email: row.profile_email ?? null,
     status: row.status,
     submittedAt: row.submitted_at,
     activatedAt: row.activated_at ?? undefined,

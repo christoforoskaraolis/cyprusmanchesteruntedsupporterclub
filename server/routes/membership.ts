@@ -108,7 +108,12 @@ membershipRouter.get(
   '/applications',
   requireAdmin,
   asyncHandler(async (_req, res) => {
-    const { rows } = await query<any>(`select * from public.membership_applications order by submitted_at desc`)
+    const { rows } = await query<any>(
+      `select ma.*, p.email as profile_email
+       from public.membership_applications ma
+       left join public.profiles p on p.id = ma.user_id
+       order by ma.submitted_at desc`,
+    )
     res.json({ rows })
   }),
 )

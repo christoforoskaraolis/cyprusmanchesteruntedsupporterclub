@@ -901,6 +901,7 @@ function AdminConsole({
   function exportMembersReport() {
     const headers = [
       'Application ID',
+      'Email',
       'Status',
       'Membership Number',
       'Official MU ID',
@@ -919,6 +920,7 @@ function AdminConsole({
     ]
     const rows = memberRegistry.map((m) => [
       m.applicationId,
+      m.email ?? '',
       m.status,
       m.membershipNumber ?? '',
       m.officialMuMembershipId,
@@ -1429,7 +1431,11 @@ function AdminConsole({
                   )}
                   <div>
                     <dt>Date of birth</dt>
-                    <dd>{m.dateOfBirth}</dd>
+                    <dd>{formatDateOfBirthDdMmYyyy(m.dateOfBirth)}</dd>
+                  </div>
+                  <div>
+                    <dt>Email</dt>
+                    <dd>{m.email ?? '—'}</dd>
                   </div>
                   <div>
                     <dt>Address</dt>
@@ -2477,6 +2483,26 @@ function formatDateOfBirthLabel(raw: string): string {
     return parsedIso.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })
   }
 
+  return value
+}
+
+function formatDateOfBirthDdMmYyyy(raw: string): string {
+  const value = raw.trim()
+  if (!value) return '—'
+  const parsedFromInput = parseDateOfBirthInput(value)
+  if (parsedFromInput) {
+    const dd = String(parsedFromInput.getDate()).padStart(2, '0')
+    const mm = String(parsedFromInput.getMonth() + 1).padStart(2, '0')
+    const yyyy = String(parsedFromInput.getFullYear())
+    return `${dd}-${mm}-${yyyy}`
+  }
+  const parsedIso = new Date(value)
+  if (!Number.isNaN(parsedIso.getTime())) {
+    const dd = String(parsedIso.getDate()).padStart(2, '0')
+    const mm = String(parsedIso.getMonth() + 1).padStart(2, '0')
+    const yyyy = String(parsedIso.getFullYear())
+    return `${dd}-${mm}-${yyyy}`
+  }
   return value
 }
 
