@@ -150,6 +150,15 @@ officialMembershipsRouter.put(
 )
 
 officialMembershipsRouter.delete(
+  '/requests/:id',
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    await query(`delete from public.official_membership_requests where id = $1`, [req.params.id])
+    res.json({ ok: true })
+  }),
+)
+
+officialMembershipsRouter.delete(
   '/:id',
   requireAdmin,
   asyncHandler(async (req, res) => {

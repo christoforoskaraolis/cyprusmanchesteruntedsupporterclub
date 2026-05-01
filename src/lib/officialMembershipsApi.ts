@@ -101,3 +101,12 @@ export async function setAdminOfficialMembershipRequestStatus(
     return { error: asError(error) }
   }
 }
+
+export async function deleteAdminOfficialMembershipRequest(requestId: string) {
+  try {
+    await apiSend(`/api/official-memberships/requests/${requestId}`, 'DELETE')
+    return { error: undefined }
+  } catch (error) {
+    return { error: asError(error) }
+  }
+}

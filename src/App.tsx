@@ -58,6 +58,7 @@ import {
   fetchAdminOfficialMembershipRequests,
   createOfficialMembershipRequest,
   createOfficialMembershipOffer,
+  deleteAdminOfficialMembershipRequest,
   deleteOfficialMembershipOffer,
   fetchOfficialMembershipOffers,
   fetchMyOfficialMembershipRequests,
@@ -771,6 +772,7 @@ type AdminConsoleProps = {
     status: 'pending' | 'completed' | 'rejected' | 'cancelled',
     officialMuMembershipId?: string,
   ) => Promise<void>
+  onDeleteOfficialRequest: (requestId: string) => Promise<void>
 }
 
 function AdminConsole({
@@ -813,6 +815,7 @@ function AdminConsole({
   onCreateOfficialOffer,
   onDeleteOfficialOffer,
   onSetOfficialRequestStatus,
+  onDeleteOfficialRequest,
 }: AdminConsoleProps) {
   const [adminTab, setAdminTab] = useState<AdminTab>('members')
   const [filter, setFilter] = useState<AdminFilter>('all')
@@ -890,6 +893,112 @@ function AdminConsole({
       o.lines.some((line) => line.title.toLowerCase().includes(q))
     )
   })
+
+  function reportStamp(): string {
+    return new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')
+  }
+
+  function exportMembersReport() {
+    const headers = [
+      'Application ID',
+      'Status',
+      'Membership Number',
+      'Official MU ID',
+      'First Name',
+      'Last Name',
+      'Mobile',
+      'Date of Birth',
+      'Address',
+      'Area',
+      'Postal Code',
+      'City',
+      'Country',
+      'Submitted At',
+      'Activated At',
+      'Valid Until',
+    ]
+    const rows = memberRegistry.map((m) => [
+      m.applicationId,
+      m.status,
+      m.membershipNumber ?? '',
+      m.officialMuMembershipId,
+      m.firstName,
+      m.lastName,
+      m.mobilePhone,
+      m.dateOfBirth,
+      m.address,
+      m.area,
+      m.postalCode,
+      m.city,
+      m.country,
+      m.submittedAt,
+      m.activatedAt ?? '',
+      m.validUntil ?? '',
+    ])
+    downloadCsv(`members-report-${reportStamp()}.csv`, headers, rows)
+  }
+
+  function exportTicketsReport() {
+    const headers = ['Request ID', 'Match Key', 'User ID', 'Status', 'Requested At']
+    const rows = pendingTicketRequests.map((r) => [r.id, r.matchKey, r.userId, r.status, r.requestedAt])
+    downloadCsv(`tickets-report-${reportStamp()}.csv`, headers, rows)
+  }
+
+  function exportMerchandiseReport() {
+    const headers = ['Order ID', 'User ID', 'Status', 'Total EUR', 'Delivery Branch', 'Created At', 'Lines']
+    const rows = merchandiseOrders.map((o) => [
+      o.id,
+      o.userId,
+      o.status,
+      o.totalEur.toFixed(2),
+      o.deliveryBranch,
+      o.createdAt,
+      o.lines.map((line) => `${line.title} x${line.quantity} (€${line.unitPriceEur.toFixed(2)})`).join(' | '),
+    ])
+    downloadCsv(`merchandise-report-${reportStamp()}.csv`, headers, rows)
+  }
+
+  function exportOfficialMembershipsReport() {
+    const headers = [
+      'Request ID',
+      'Status',
+      'Requested At',
+      'Offer',
+      'Offer Price EUR',
+      'User ID',
+      'Name',
+      'Email',
+      'Mobile',
+      'Date of Birth',
+      'Address',
+      'Area',
+      'Postal Code',
+      'City',
+      'Country',
+      'Official MU ID',
+      'Application Reference',
+    ]
+    const rows = officialRequests.map((r) => [
+      r.id,
+      r.status,
+      r.requestedAt,
+      r.offerTitle,
+      r.offerPriceEur.toFixed(2),
+      r.userId,
+      r.user.fullName ?? '',
+      r.user.email ?? '',
+      r.user.mobilePhone ?? '',
+      r.user.dateOfBirth ?? '',
+      r.user.address ?? '',
+      r.user.area ?? '',
+      r.user.postalCode ?? '',
+      r.user.city ?? '',
+      r.user.country ?? '',
+      r.user.officialMuMembershipId ?? '',
+      r.user.applicationId ?? '',
+    ])
+    downloadCsv(`official-memberships-report-${reportStamp()}.csv`, headers, rows)
+  }
 
   async function onPickAdminMerchPhotos(files: FileList | null) {
     if (!files || files.length === 0) return
@@ -1144,6 +1253,9 @@ function AdminConsole({
           value={memberSearch}
           onChange={(e) => setMemberSearch(e.target.value)}
         />
+        <button type="button" className="admin-merch-create-btn" onClick={exportMembersReport}>
+          Export Excel
+        </button>
       </div>
       {memberActionError && <p className="admin-empty" style={{ color: '#b91c1c' }}>{memberActionError}</p>}
 
@@ -1383,6 +1495,9 @@ function AdminConsole({
           <div className="admin-block-head">
             <h2 className="admin-block-title">Ticket requests</h2>
             <p className="admin-block-lead">Track requests through pending, accepted, and completed stages.</p>
+            <button type="button" className="admin-merch-create-btn" onClick={exportTicketsReport}>
+              Export Excel
+            </button>
           </div>
           <section className="admin-panel-block" aria-label="Match ticket availability">
             <div className="admin-block-head">
@@ -1705,6 +1820,9 @@ function AdminConsole({
             <p className="admin-block-lead">
               Orders from the Merchandise shop. Match payments to these rows, then mark as paid before dispatch.
             </p>
+            <button type="button" className="admin-merch-create-btn" onClick={exportMerchandiseReport}>
+              Export Excel
+            </button>
           </div>
           <section className="admin-panel-block" aria-label="Manage merchandise products">
             <div className="admin-block-head">
@@ -1931,6 +2049,9 @@ function AdminConsole({
             <div className="admin-block-head">
               <h3 className="admin-block-title">Official membership requests</h3>
               <p className="admin-block-lead">Requests submitted by users are listed here for admin processing.</p>
+              <button type="button" className="admin-merch-create-btn" onClick={exportOfficialMembershipsReport}>
+                Export Excel
+              </button>
             </div>
             {officialRequestsLoading ? (
               <p className="admin-empty">Loading requests…</p>
@@ -1999,6 +2120,23 @@ function AdminConsole({
                           }}
                         >
                           Reject
+                        </button>
+                        <button
+                          type="button"
+                          className="admin-news-delete-btn"
+                          disabled={officialRequestBusyId !== null}
+                          onClick={async () => {
+                            const yes = window.confirm('Delete this official membership request?')
+                            if (!yes) return
+                            setOfficialRequestBusyId(row.id)
+                            try {
+                              await onDeleteOfficialRequest(row.id)
+                            } finally {
+                              setOfficialRequestBusyId(null)
+                            }
+                          }}
+                        >
+                          Delete
                         </button>
                       </div>
                       {expanded && (
@@ -2346,6 +2484,27 @@ function isOldTraffordHomeFixture(f: UpcomingFixture): boolean {
   if (!f.home) return false
   const venue = f.venue.toLowerCase()
   return venue.includes('old trafford') || venue.includes('manchester')
+}
+
+function csvCell(value: unknown): string {
+  const s = value == null ? '' : String(value)
+  if (/[",\n\r]/.test(s)) return `"${s.replace(/"/g, '""')}"`
+  return s
+}
+
+function downloadCsv(filename: string, headers: string[], rows: unknown[][]): void {
+  if (typeof window === 'undefined') return
+  const body = rows.map((row) => row.map((cell) => csvCell(cell)).join(',')).join('\n')
+  const csv = `\uFEFF${headers.join(',')}\n${body}`
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  URL.revokeObjectURL(url)
 }
 
 function App() {
@@ -3099,6 +3258,13 @@ function App() {
     await refreshMyMembership()
   }
 
+  async function applyDeleteOfficialRequest(requestId: string) {
+    const { error } = await deleteAdminOfficialMembershipRequest(requestId)
+    if (error) throw new Error(error.message)
+    await loadAdminRegistry()
+    await refreshMyMembership()
+  }
+
   async function applySetMembershipPending(applicationId: string) {
     const { error } = await setApplicationStatus(applicationId, 'pending')
     if (error) throw new Error(error.message)
@@ -3636,6 +3802,7 @@ function App() {
               onCreateOfficialOffer={applyCreateOfficialOffer}
               onDeleteOfficialOffer={applyDeleteOfficialOffer}
               onSetOfficialRequestStatus={applySetOfficialRequestStatus}
+              onDeleteOfficialRequest={applyDeleteOfficialRequest}
             />
           ) : (
             <div className="section-page admin-page">
