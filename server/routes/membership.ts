@@ -1,6 +1,7 @@
 import { Router } from 'express'
 import { query } from '../db.ts'
 import { asyncHandler } from '../lib/asyncHandler.ts'
+import { HttpError, badRequest, notFound } from '../lib/errors.ts'
 import { requireAdmin, requireUser } from '../middleware/auth.ts'
 
 export const membershipRouter = Router()
@@ -123,6 +124,52 @@ membershipRouter.put(
        where application_id = $2`,
       [status, req.params.applicationId],
     )
+    res.json({ ok: true })
+  }),
+)
+
+membershipRouter.put(
+  '/applications/:applicationId/member-id',
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const applicationId = String(req.params.applicationId ?? '').trim()
+    const memberId = String((req.body as { memberId?: string })?.memberId ?? '').trim()
+    if (!applicationId) throw badRequest('Application ID is required')
+
+    if (memberId) {
+      const { rows: duplicateRows } = await query<{ application_id: string }>(
+        `select application_id
+         from public.membership_applications
+         where official_mu_membership_id = $1
+           and application_id <> $2
+         limit 1`,
+        [memberId, applicationId],
+      )
+      if (duplicateRows.length > 0) {
+        throw new HttpError(409, 'This member ID is already used by another request')
+      }
+    }
+
+    const { rows } = await query<{ application_id: string }>(
+      `update public.membership_applications
+       set official_mu_membership_id = $1
+       where application_id = $2
+       returning application_id`,
+      [memberId || null, applicationId],
+    )
+    if (rows.length === 0) throw notFound('Membership request not found')
+    res.json({ ok: true })
+  }),
+)
+
+membershipRouter.delete(
+  '/applications/:applicationId',
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const applicationId = String(req.params.applicationId ?? '').trim()
+    if (!applicationId) throw badRequest('Application ID is required')
+    const { rowCount } = await query(`delete from public.membership_applications where application_id = $1`, [applicationId])
+    if (!rowCount) throw notFound('Membership request not found')
     res.json({ ok: true })
   }),
 )

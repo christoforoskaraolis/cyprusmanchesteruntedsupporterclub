@@ -176,6 +176,24 @@ export async function setApplicationStatus(applicationId: string, status: 'pendi
   }
 }
 
+export async function updateApplicationMemberId(applicationId: string, memberId: string) {
+  try {
+    await apiSend(`/api/membership/applications/${applicationId}/member-id`, 'PUT', { memberId })
+    return { error: undefined }
+  } catch (error) {
+    return { error: asError(error) }
+  }
+}
+
+export async function deleteMembershipApplication(applicationId: string) {
+  try {
+    await apiSend(`/api/membership/applications/${applicationId}`, 'DELETE')
+    return { error: undefined }
+  } catch (error) {
+    return { error: asError(error) }
+  }
+}
+
 export async function insertRenewalRequest(userId: string, applicationId: string) {
   void userId
   try {

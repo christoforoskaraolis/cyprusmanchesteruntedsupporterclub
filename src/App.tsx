@@ -10,6 +10,7 @@ import {
   type PendingRenewalListRow,
   completeRenewalRequest,
   dbRowToMemberEntry,
+  deleteMembershipApplication,
   fetchAllMembershipApplications,
   fetchMyLatestApplication,
   fetchMyPendingRenewal,
@@ -20,6 +21,7 @@ import {
   insertMembershipApplication,
   insertRenewalRequest,
   setApplicationStatus,
+  updateApplicationMemberId,
   updateMyProfileDetails,
 } from './lib/membershipApi.ts'
 import { fetchCachedFixtures, syncFixturesFromManutd, type UpcomingFixture } from './lib/fixturesApi.ts'
@@ -731,6 +733,8 @@ type AdminConsoleProps = {
   pendingTicketRequests: AdminFixtureTicketRequest[]
   onActivate: (applicationId: string) => Promise<void>
   onSetPending: (applicationId: string) => Promise<void>
+  onDeleteMemberRequest: (applicationId: string) => Promise<void>
+  onUpdateMemberId: (applicationId: string, memberId: string) => Promise<void>
   onCompleteRenewal: (row: PendingRenewalListRow) => Promise<void>
   onApproveTicketRequest: (row: AdminFixtureTicketRequest) => Promise<void>
   onCompleteTicketRequest: (row: AdminFixtureTicketRequest) => Promise<void>
@@ -774,6 +778,8 @@ function AdminConsole({
   pendingTicketRequests,
   onActivate,
   onSetPending,
+  onDeleteMemberRequest,
+  onUpdateMemberId,
   onCompleteRenewal,
   onApproveTicketRequest,
   onCompleteTicketRequest,
@@ -839,6 +845,8 @@ function AdminConsole({
   const [officialRequestBusyId, setOfficialRequestBusyId] = useState<string | null>(null)
   const [expandedOfficialRequestId, setExpandedOfficialRequestId] = useState<string | null>(null)
   const [officialMuIdDraftByRequestId, setOfficialMuIdDraftByRequestId] = useState<Record<string, string>>({})
+  const [memberIdDraftByApplicationId, setMemberIdDraftByApplicationId] = useState<Record<string, string>>({})
+  const [memberActionError, setMemberActionError] = useState<string | null>(null)
   const pendingMembersCount = memberRegistry.filter((member) => member.status === 'pending').length
   const activeMembersCount = memberRegistry.filter((member) => member.status === 'active').length
   const pendingOrdersCount = merchandiseOrders.filter((order) => order.status === 'pending').length
@@ -1133,6 +1141,7 @@ function AdminConsole({
           onChange={(e) => setMemberSearch(e.target.value)}
         />
       </div>
+      {memberActionError && <p className="admin-empty" style={{ color: '#b91c1c' }}>{memberActionError}</p>}
 
       {loading ? (
         <p className="admin-empty">Loading members…</p>
@@ -1208,6 +1217,28 @@ function AdminConsole({
                 >
                   {expandedId === m.applicationId ? 'Hide details' : 'Full details'}
                 </button>
+                <button
+                  type="button"
+                  className="admin-news-delete-btn"
+                  disabled={busyId !== null}
+                  onClick={async () => {
+                    const yes = window.confirm(
+                      `Delete membership request ${m.applicationId}? This cannot be undone.`,
+                    )
+                    if (!yes) return
+                    setMemberActionError(null)
+                    setBusyId(m.applicationId)
+                    try {
+                      await onDeleteMemberRequest(m.applicationId)
+                    } catch (error) {
+                      setMemberActionError(error instanceof Error ? error.message : 'Could not delete request.')
+                    } finally {
+                      setBusyId(null)
+                    }
+                  }}
+                >
+                  {busyId === m.applicationId ? 'Deleting…' : 'Delete request'}
+                </button>
               </div>
               {expandedId === m.applicationId && (
                 <dl className="admin-member-dl">
@@ -1249,7 +1280,41 @@ function AdminConsole({
                   </div>
                   <div>
                     <dt>Official MU ID</dt>
-                    <dd>{m.officialMuMembershipId || '—'}</dd>
+                    <dd>
+                      <div className="admin-merch-create-row">
+                        <input
+                          className="admin-merch-create-input"
+                          type="text"
+                          placeholder="Official member ID"
+                          value={memberIdDraftByApplicationId[m.applicationId] ?? m.officialMuMembershipId ?? ''}
+                          onChange={(e) =>
+                            setMemberIdDraftByApplicationId((prev) => ({ ...prev, [m.applicationId]: e.target.value }))
+                          }
+                          disabled={busyId !== null}
+                        />
+                        <button
+                          type="button"
+                          className="admin-merch-create-btn"
+                          disabled={busyId !== null}
+                          onClick={async () => {
+                            setMemberActionError(null)
+                            setBusyId(m.applicationId)
+                            try {
+                              const memberId = (memberIdDraftByApplicationId[m.applicationId] ?? m.officialMuMembershipId ?? '').trim()
+                              await onUpdateMemberId(m.applicationId, memberId)
+                            } catch (error) {
+                              setMemberActionError(
+                                error instanceof Error ? error.message : 'Could not update member ID.',
+                              )
+                            } finally {
+                              setBusyId(null)
+                            }
+                          }}
+                        >
+                          {busyId === m.applicationId ? 'Saving…' : 'Save ID'}
+                        </button>
+                      </div>
+                    </dd>
                   </div>
                 </dl>
               )}
@@ -2988,6 +3053,20 @@ function App() {
     await refreshMyMembership()
   }
 
+  async function applyDeleteMemberRequest(applicationId: string) {
+    const { error } = await deleteMembershipApplication(applicationId)
+    if (error) throw new Error(error.message)
+    await loadAdminRegistry()
+    await refreshMyMembership()
+  }
+
+  async function applyUpdateMemberId(applicationId: string, memberId: string) {
+    const { error } = await updateApplicationMemberId(applicationId, memberId)
+    if (error) throw new Error(error.message)
+    await loadAdminRegistry()
+    await refreshMyMembership()
+  }
+
   async function applyCompleteRenewal(row: PendingRenewalListRow) {
     const currentVu =
       row.membership_applications?.valid_until && row.membership_applications.valid_until !== ''
@@ -3464,6 +3543,8 @@ function App() {
               pendingTicketRequests={pendingTicketRequests}
               onActivate={applyActivateMembership}
               onSetPending={applySetMembershipPending}
+              onDeleteMemberRequest={applyDeleteMemberRequest}
+              onUpdateMemberId={applyUpdateMemberId}
               onCompleteRenewal={applyCompleteRenewal}
               onApproveTicketRequest={applyApproveTicketRequest}
               onCompleteTicketRequest={applyCompleteTicketRequest}
