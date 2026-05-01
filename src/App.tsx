@@ -80,7 +80,7 @@ const CMUSC_PAYMENT_IBAN = 'LT70 3250 0300 6556 3775'
 const CMUSC_PAYMENT_SWIFT = 'REVOLT21'
 const CMUSC_PAYMENT_BANK_NAME = 'Revolut Bank UAB'
 const CMUSC_PAYMENT_BANK_ADDRESS = 'Konstitucijos ave. 21B, 08130, Vilnius, Lithuania'
-const CMUSC_PAYMENT_REVOLUT = 'https://revolut.me/yourclub'
+const CMUSC_PAYMENT_REVOLUT = 'https://revolut.me/clmanutd'
 const TICKET_RESERVATION_FEE_EUR = 20
 
 function ClubPaymentMethodFields() {

@@ -54,17 +54,8 @@ authRouter.post(
     if (!email || !password) throw badRequest('Email and password are required')
     if (password.length < 8) throw badRequest('Password must be at least 8 characters')
 
-    const { rows: existing } = await query<{ user_id: string; email_verified_at: string | null }>(
-      `select user_id, email_verified_at from public.auth_users where email = $1`,
-      [email],
-    )
-    if (existing.length > 0) {
-      const existingUser = existing[0]
-      if (existingUser.email_verified_at) throw badRequest('An account with this email already exists')
-      await createAndSendVerificationEmail(existingUser.user_id, email, req.headers.origin)
-      res.status(200).json({ requiresEmailVerification: true })
-      return
-    }
+    const { rows: existing } = await query<{ user_id: string }>(`select user_id from public.auth_users where email = $1`, [email])
+    if (existing.length > 0) throw badRequest('There is already an account with this email')
 
     const passwordHash = await bcrypt.hash(password, 12)
     const userId = await withTransaction(async (client) => {
