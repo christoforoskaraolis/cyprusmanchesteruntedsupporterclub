@@ -194,6 +194,15 @@ export async function deleteMembershipApplication(applicationId: string) {
   }
 }
 
+export async function updateApplicationMembershipNumber(applicationId: string, membershipNumber: number | null) {
+  try {
+    await apiSend(`/api/membership/applications/${applicationId}/membership-number`, 'PUT', { membershipNumber })
+    return { error: undefined }
+  } catch (error) {
+    return { error: asError(error) }
+  }
+}
+
 export async function insertRenewalRequest(userId: string, applicationId: string) {
   void userId
   try {

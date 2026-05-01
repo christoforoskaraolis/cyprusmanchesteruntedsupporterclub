@@ -162,6 +162,49 @@ membershipRouter.put(
   }),
 )
 
+membershipRouter.put(
+  '/applications/:applicationId/membership-number',
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const applicationId = String(req.params.applicationId ?? '').trim()
+    const rawMembershipNumber = (req.body as { membershipNumber?: unknown })?.membershipNumber
+    if (!applicationId) throw badRequest('Application ID is required')
+
+    let membershipNumber: number | null = null
+    if (rawMembershipNumber !== null && rawMembershipNumber !== undefined && String(rawMembershipNumber).trim() !== '') {
+      const parsed = Number(rawMembershipNumber)
+      if (!Number.isInteger(parsed) || parsed < 1) {
+        throw badRequest('Membership number must be a positive integer')
+      }
+      membershipNumber = parsed
+    }
+
+    if (membershipNumber != null) {
+      const { rows: duplicateRows } = await query<{ application_id: string }>(
+        `select application_id
+         from public.membership_applications
+         where membership_number = $1
+           and application_id <> $2
+         limit 1`,
+        [membershipNumber, applicationId],
+      )
+      if (duplicateRows.length > 0) {
+        throw new HttpError(409, 'This membership number is already used by another request')
+      }
+    }
+
+    const { rows } = await query<{ application_id: string }>(
+      `update public.membership_applications
+       set membership_number = $1
+       where application_id = $2
+       returning application_id`,
+      [membershipNumber, applicationId],
+    )
+    if (rows.length === 0) throw notFound('Membership request not found')
+    res.json({ ok: true })
+  }),
+)
+
 membershipRouter.delete(
   '/applications/:applicationId',
   requireAdmin,

@@ -22,6 +22,7 @@ import {
   insertRenewalRequest,
   setApplicationStatus,
   updateApplicationMemberId,
+  updateApplicationMembershipNumber,
   updateMyProfileDetails,
 } from './lib/membershipApi.ts'
 import { fetchCachedFixtures, syncFixturesFromManutd, type UpcomingFixture } from './lib/fixturesApi.ts'
@@ -735,6 +736,7 @@ type AdminConsoleProps = {
   onSetPending: (applicationId: string) => Promise<void>
   onDeleteMemberRequest: (applicationId: string) => Promise<void>
   onUpdateMemberId: (applicationId: string, memberId: string) => Promise<void>
+  onUpdateMembershipNumber: (applicationId: string, membershipNumber: number | null) => Promise<void>
   onCompleteRenewal: (row: PendingRenewalListRow) => Promise<void>
   onApproveTicketRequest: (row: AdminFixtureTicketRequest) => Promise<void>
   onCompleteTicketRequest: (row: AdminFixtureTicketRequest) => Promise<void>
@@ -780,6 +782,7 @@ function AdminConsole({
   onSetPending,
   onDeleteMemberRequest,
   onUpdateMemberId,
+  onUpdateMembershipNumber,
   onCompleteRenewal,
   onApproveTicketRequest,
   onCompleteTicketRequest,
@@ -846,6 +849,7 @@ function AdminConsole({
   const [expandedOfficialRequestId, setExpandedOfficialRequestId] = useState<string | null>(null)
   const [officialMuIdDraftByRequestId, setOfficialMuIdDraftByRequestId] = useState<Record<string, string>>({})
   const [memberIdDraftByApplicationId, setMemberIdDraftByApplicationId] = useState<Record<string, string>>({})
+  const [membershipNumberDraftByApplicationId, setMembershipNumberDraftByApplicationId] = useState<Record<string, string>>({})
   const [memberActionError, setMemberActionError] = useState<string | null>(null)
   const pendingMembersCount = memberRegistry.filter((member) => member.status === 'pending').length
   const activeMembersCount = memberRegistry.filter((member) => member.status === 'active').length
@@ -1247,9 +1251,58 @@ function AdminConsole({
                       <div>
                         <dt>Membership number</dt>
                         <dd>
-                          {m.membershipNumber != null
-                            ? formatMembershipNumber(m.membershipNumber)
-                            : '— (run latest DB migration)'}
+                          <div className="admin-merch-create-row">
+                            <input
+                              className="admin-merch-create-input"
+                              type="number"
+                              min={1}
+                              step={1}
+                              placeholder="Membership number"
+                              value={
+                                membershipNumberDraftByApplicationId[m.applicationId] ??
+                                (m.membershipNumber != null ? String(m.membershipNumber) : '')
+                              }
+                              onChange={(e) =>
+                                setMembershipNumberDraftByApplicationId((prev) => ({
+                                  ...prev,
+                                  [m.applicationId]: e.target.value,
+                                }))
+                              }
+                              disabled={busyId !== null}
+                            />
+                            <button
+                              type="button"
+                              className="admin-merch-create-btn"
+                              disabled={busyId !== null}
+                              onClick={async () => {
+                                setMemberActionError(null)
+                                setBusyId(m.applicationId)
+                                try {
+                                  const raw =
+                                    membershipNumberDraftByApplicationId[m.applicationId] ??
+                                    (m.membershipNumber != null ? String(m.membershipNumber) : '')
+                                  const trimmed = raw.trim()
+                                  if (!trimmed) {
+                                    await onUpdateMembershipNumber(m.applicationId, null)
+                                  } else {
+                                    const parsed = Number(trimmed)
+                                    if (!Number.isInteger(parsed) || parsed < 1) {
+                                      throw new Error('Membership number must be a positive integer.')
+                                    }
+                                    await onUpdateMembershipNumber(m.applicationId, parsed)
+                                  }
+                                } catch (error) {
+                                  setMemberActionError(
+                                    error instanceof Error ? error.message : 'Could not update membership number.',
+                                  )
+                                } finally {
+                                  setBusyId(null)
+                                }
+                              }}
+                            >
+                              {busyId === m.applicationId ? 'Saving…' : 'Save number'}
+                            </button>
+                          </div>
                         </dd>
                       </div>
                       <div>
@@ -3067,6 +3120,13 @@ function App() {
     await refreshMyMembership()
   }
 
+  async function applyUpdateMembershipNumber(applicationId: string, membershipNumber: number | null) {
+    const { error } = await updateApplicationMembershipNumber(applicationId, membershipNumber)
+    if (error) throw new Error(error.message)
+    await loadAdminRegistry()
+    await refreshMyMembership()
+  }
+
   async function applyCompleteRenewal(row: PendingRenewalListRow) {
     const currentVu =
       row.membership_applications?.valid_until && row.membership_applications.valid_until !== ''
@@ -3545,6 +3605,7 @@ function App() {
               onSetPending={applySetMembershipPending}
               onDeleteMemberRequest={applyDeleteMemberRequest}
               onUpdateMemberId={applyUpdateMemberId}
+              onUpdateMembershipNumber={applyUpdateMembershipNumber}
               onCompleteRenewal={applyCompleteRenewal}
               onApproveTicketRequest={applyApproveTicketRequest}
               onCompleteTicketRequest={applyCompleteTicketRequest}
