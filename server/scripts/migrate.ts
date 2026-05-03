@@ -1,14 +1,28 @@
+import 'dotenv/config'
+import pg from 'pg'
 import { readdir, readFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { pool, query } from '../db.ts'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
 const migrationsDir = join(__dirname, '..', 'migrations')
 
+const databaseUrl = typeof process.env.DATABASE_URL === 'string' ? process.env.DATABASE_URL.trim() : ''
+if (!databaseUrl) {
+  console.error('[migrate] Missing DATABASE_URL. Add it to .env (local) or Railway Service Variables.')
+  process.exit(1)
+}
+
+const pool = new pg.Pool({
+  connectionString: databaseUrl,
+  max: 2,
+  idleTimeoutMillis: 30_000,
+  connectionTimeoutMillis: 10_000,
+})
+
 async function ensureMigrationsTable(): Promise<void> {
-  await query(`
+  await pool.query(`
     create table if not exists public._migrations (
       id text primary key,
       applied_at timestamptz not null default now()
@@ -17,7 +31,7 @@ async function ensureMigrationsTable(): Promise<void> {
 }
 
 async function appliedIds(): Promise<Set<string>> {
-  const { rows } = await query<{ id: string }>(`select id from public._migrations`)
+  const { rows } = await pool.query<{ id: string }>(`select id from public._migrations`)
   return new Set(rows.map((r) => r.id))
 }
 
