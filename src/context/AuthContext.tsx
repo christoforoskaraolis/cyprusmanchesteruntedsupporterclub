@@ -26,8 +26,6 @@ type AuthContextValue = {
   user: AuthUser | null
   loading: boolean
   isAdmin: boolean
-  /** True after user opens the password-reset link from email (set new password). */
-  passwordRecoveryPending: boolean
   /** Re-read profiles.is_admin (e.g. after enabling admin in Supabase). */
   refreshAdminStatus: () => Promise<void>
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>
@@ -35,7 +33,7 @@ type AuthContextValue = {
   verifyEmail: (token: string) => Promise<{ error: Error | null }>
   resendVerificationEmail: (email: string) => Promise<{ error: Error | null }>
   resetPasswordForEmail: (email: string) => Promise<{ error: Error | null }>
-  updatePasswordAfterRecovery: (newPassword: string) => Promise<{ error: Error | null }>
+  updatePasswordAfterRecovery: (newPassword: string, recoveryToken: string) => Promise<{ error: Error | null }>
   signOut: () => Promise<void>
 }
 
@@ -45,7 +43,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<AuthSession | null>(null)
   const [loading, setLoading] = useState(true)
   const [isAdmin, setIsAdmin] = useState(false)
-  const [passwordRecoveryPending] = useState(false)
 
   useEffect(() => {
     const token = getAuthToken()
@@ -187,13 +184,36 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const resetPasswordForEmail = useCallback(async (email: string) => {
     const normalized = email.trim()
     if (!normalized) return { error: new Error('Enter an email address') }
-    return { error: new Error('Password reset by email is not configured yet in Neon-only mode') }
+    try {
+      const response = await fetch('/api/auth/forgot-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: normalized }),
+      })
+      const payload = (await response.json().catch(() => ({}))) as { error?: string }
+      if (!response.ok) return { error: new Error(payload.error ?? 'Could not request password reset') }
+      return { error: null }
+    } catch (error) {
+      return { error: asError(error) }
+    }
   }, [])
 
-  const updatePasswordAfterRecovery = useCallback(
-    async (_newPassword: string) => ({ error: new Error('Password recovery is not configured yet in Neon-only mode') }),
-    [],
-  )
+  const updatePasswordAfterRecovery = useCallback(async (newPassword: string, recoveryToken: string) => {
+    const token = recoveryToken.trim()
+    if (!token) return { error: new Error('Reset link is missing or invalid') }
+    try {
+      const response = await fetch('/api/auth/reset-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token, newPassword }),
+      })
+      const payload = (await response.json().catch(() => ({}))) as { error?: string }
+      if (!response.ok) return { error: new Error(payload.error ?? 'Could not update password') }
+      return { error: null }
+    } catch (error) {
+      return { error: asError(error) }
+    }
+  }, [])
 
   const signOut = useCallback(async () => {
     clearAuthToken()
@@ -208,7 +228,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       user: session?.user ?? null,
       loading,
       isAdmin,
-      passwordRecoveryPending,
       refreshAdminStatus,
       signIn,
       signUp,
@@ -222,7 +241,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       session,
       loading,
       isAdmin,
-      passwordRecoveryPending,
       refreshAdminStatus,
       signIn,
       signUp,

@@ -2541,7 +2541,6 @@ function App() {
     session,
     user,
     isAdmin,
-    passwordRecoveryPending,
     refreshAdminStatus,
     signIn,
     signUp,
@@ -2604,6 +2603,7 @@ function App() {
   const [recoveryPasswordConfirm, setRecoveryPasswordConfirm] = useState('')
   const [recoveryError, setRecoveryError] = useState<string | null>(null)
   const [recoverySubmitting, setRecoverySubmitting] = useState(false)
+  const [passwordResetToken, setPasswordResetToken] = useState<string | null>(null)
   const [forgotSubmitting, setForgotSubmitting] = useState(false)
   const [resendVerificationSubmitting, setResendVerificationSubmitting] = useState(false)
   const adminStatusCheckedRef = useRef(false)
@@ -3149,6 +3149,19 @@ function App() {
   useEffect(() => {
     if (typeof window === 'undefined') return
     const params = new URLSearchParams(window.location.search)
+    const resetTok = params.get('resetPasswordToken')?.trim()
+    if (resetTok) {
+      setPasswordResetToken(resetTok)
+      params.delete('resetPasswordToken')
+      const next = params.toString()
+      const nextUrl = `${window.location.pathname}${next ? `?${next}` : ''}${window.location.hash}`
+      window.history.replaceState({}, '', nextUrl)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const params = new URLSearchParams(window.location.search)
     const verifyToken = params.get('verifyEmailToken')?.trim()
     if (!verifyToken) return
     void (async () => {
@@ -3451,8 +3464,12 @@ function App() {
       setRecoveryError('Passwords do not match.')
       return
     }
+    if (!passwordResetToken) {
+      setRecoveryError('Reset link is missing or invalid. Request a new link from the sign-in page.')
+      return
+    }
     setRecoverySubmitting(true)
-    const { error } = await updatePasswordAfterRecovery(recoveryPassword)
+    const { error } = await updatePasswordAfterRecovery(recoveryPassword, passwordResetToken)
     setRecoverySubmitting(false)
     if (error) {
       setRecoveryError(error.message)
@@ -3460,6 +3477,9 @@ function App() {
     }
     setRecoveryPassword('')
     setRecoveryPasswordConfirm('')
+    setPasswordResetToken(null)
+    setMode('sign-in')
+    setMessage('Your password was updated. You can now sign in.')
   }
 
   async function handleSubmit(e: FormEvent) {
@@ -3535,15 +3555,7 @@ function App() {
     )
   }
 
-  if (authLoading) {
-    return (
-      <div className="auth-layout app-loading-screen">
-        <p className="app-loading-text">Loading…</p>
-      </div>
-    )
-  }
-
-  if (session && passwordRecoveryPending) {
+  if (passwordResetToken) {
     return (
       <div className="auth-layout">
         <div className="auth-page">
@@ -3590,10 +3602,19 @@ function App() {
     )
   }
 
+  if (authLoading) {
+    return (
+      <div className="auth-layout app-loading-screen">
+        <p className="app-loading-text">Loading…</p>
+      </div>
+    )
+  }
+
   if (!session) {
     const authMessageSuccess =
       message?.startsWith('Check your email') ||
-      message?.startsWith('If an account exists for that email')
+      message?.startsWith('If an account exists for that email') ||
+      message === 'Your password was updated. You can now sign in.'
     const showResendVerificationAction = message === 'Please verify your email before signing in'
 
     return (
@@ -4738,6 +4759,29 @@ function App() {
                 <p className="membership-pending-meta">
                   Submitted: {new Date(membershipRecord.submittedAt).toLocaleString('en-GB')}
                 </p>
+
+                <div
+                  className="membership-payment-card membership-pending-payment"
+                  role="region"
+                  aria-labelledby="membership-pending-payment-heading"
+                >
+                  <h3 id="membership-pending-payment-heading" className="membership-payment-title">
+                    Payment — membership fee
+                  </h3>
+                  <p className="membership-payment-fee">
+                    <strong>Membership fee:</strong> €{MEMBERSHIP_FEE_EUR} for the membership season (
+                    {formatLongDate(1, 5, MEMBERSHIP_DISPLAY_START_YEAR)} –{' '}
+                    {formatLongDate(31, 4, MEMBERSHIP_DISPLAY_END_YEAR)}).
+                  </p>
+                  <p className="membership-payment-intro">
+                    Pay using one of the options below while your application is reviewed. Include your{' '}
+                    <strong>full name</strong> and your <strong>application reference</strong> (
+                    <code className="mycmusc-inline-ref">{membershipRecord.applicationId}</code>) in the payment
+                    reference so we can match your transfer.
+                  </p>
+                  <ClubPaymentMethodFields />
+                </div>
+
                 <p className="mycmusc-reg-hint membership-pending-footnote" role="note">
                   Once the committee activates your Cyprus club membership, you will <strong>unlock</strong> official
                   Manchester United membership registration, <strong>match ticket requests</strong>,{' '}

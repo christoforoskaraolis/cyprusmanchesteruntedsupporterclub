@@ -22,6 +22,26 @@ function signToken(userId: string, email: string): string {
   return jwt.sign({ sub: userId, email }, env.authJwtSecret, { expiresIn: '30d' })
 }
 
+async function createAndSendPasswordResetEmail(userId: string, email: string, reqOrigin: string | undefined): Promise<void> {
+  const rawToken = crypto.randomBytes(32).toString('hex')
+  const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex')
+  await query(`delete from public.auth_password_resets where user_id = $1 and consumed_at is null`, [userId])
+  await query(
+    `insert into public.auth_password_resets (user_id, token_hash, expires_at)
+     values ($1, $2, now() + interval '1 hour')`,
+    [userId, tokenHash],
+  )
+
+  const baseUrl = env.publicAppUrl || reqOrigin || 'http://localhost:5173'
+  const resetUrl = `${baseUrl.replace(/\/+$/, '')}/?resetPasswordToken=${rawToken}`
+  await sendEmail(
+    email,
+    'Reset your CMUSC password',
+    `You asked to reset your password for the Cyprus Manchester United Supporters Club portal.\n\nOpen this link to choose a new password:\n${resetUrl}\n\nThis link expires in 1 hour. If you did not request this, you can ignore this email.`,
+    `<p>You asked to reset your password for the Cyprus Manchester United Supporters Club portal.</p><p><a href="${resetUrl}">Choose a new password</a></p><p>This link expires in 1 hour. If you did not request this, you can ignore this email.</p>`,
+  )
+}
+
 async function createAndSendVerificationEmail(userId: string, email: string, reqOrigin: string | undefined): Promise<void> {
   const rawToken = crypto.randomBytes(32).toString('hex')
   const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex')
@@ -147,6 +167,64 @@ authRouter.post(
     })
 
     res.json({ verified: true })
+  }),
+)
+
+authRouter.post(
+  '/forgot-password',
+  asyncHandler(async (req, res) => {
+    const email = String(req.body?.email ?? '')
+      .trim()
+      .toLowerCase()
+    if (!email) throw badRequest('Email is required')
+
+    const { rows } = await query<{ user_id: string }>(
+      `select user_id from public.auth_users where email = $1 limit 1`,
+      [email],
+    )
+    const userId = rows[0]?.user_id
+    if (userId) {
+      await createAndSendPasswordResetEmail(userId, email, req.headers.origin)
+    }
+
+    res.json({ ok: true })
+  }),
+)
+
+authRouter.post(
+  '/reset-password',
+  asyncHandler(async (req, res) => {
+    const token = String(req.body?.token ?? '').trim()
+    const newPassword = String(req.body?.newPassword ?? '')
+    if (!token) throw badRequest('Reset token is required')
+    if (!newPassword) throw badRequest('New password is required')
+    if (newPassword.length < 8) throw badRequest('Password must be at least 8 characters')
+
+    const tokenHash = crypto.createHash('sha256').update(token).digest('hex')
+    const { rows } = await query<{ user_id: string }>(
+      `select user_id
+       from public.auth_password_resets
+       where token_hash = $1
+         and consumed_at is null
+         and expires_at > now()
+       limit 1`,
+      [tokenHash],
+    )
+    const userId = rows[0]?.user_id
+    if (!userId) throw badRequest('Reset link is invalid or has expired')
+
+    const passwordHash = await bcrypt.hash(newPassword, 12)
+    await withTransaction(async (client) => {
+      await client.query(
+        `update public.auth_password_resets
+         set consumed_at = now()
+         where token_hash = $1 and consumed_at is null`,
+        [tokenHash],
+      )
+      await client.query(`update public.auth_users set password_hash = $1 where user_id = $2`, [passwordHash, userId])
+    })
+
+    res.json({ ok: true })
   }),
 )
 
