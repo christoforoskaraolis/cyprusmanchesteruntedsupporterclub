@@ -2630,6 +2630,11 @@
   font-weight: 600;
 }
 
+.auth-footnote-highlight {
+  color: #000;
+  font-weight: 700;
+}
+
 .setup-missing-page {
   text-align: left;
 }

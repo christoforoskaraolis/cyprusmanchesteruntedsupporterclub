@@ -2311,11 +2311,21 @@ function AdminConsole({
 }
 
 type Mode = 'sign-in' | 'create-account' | 'forgot-password'
-type ActivePage = 'home' | 'board' | 'news' | 'social' | 'mycmusc' | 'tickets' | 'merchandise' | 'official-memberships'
+type ActivePage =
+  | 'home'
+  | 'board'
+  | 'contact'
+  | 'news'
+  | 'social'
+  | 'mycmusc'
+  | 'tickets'
+  | 'merchandise'
+  | 'official-memberships'
 
 function pageFromPath(pathname: string): ActivePage {
   const clean = pathname.replace(/\/+$/, '') || '/'
-  if (clean === '/contact') return 'board'
+  if (clean === '/board') return 'board'
+  if (clean === '/contact') return 'contact'
   if (clean === '/news') return 'news'
   if (clean === '/social') return 'social'
   if (clean === '/mycmusc') return 'mycmusc'
@@ -2326,7 +2336,8 @@ function pageFromPath(pathname: string): ActivePage {
 }
 
 function pathFromPage(page: ActivePage): string {
-  if (page === 'board') return '/contact'
+  if (page === 'board') return '/board'
+  if (page === 'contact') return '/contact'
   if (page === 'news') return '/news'
   if (page === 'social') return '/social'
   if (page === 'mycmusc') return '/mycmusc'
@@ -3783,7 +3794,9 @@ function App() {
 
               {!isAdminRoute && (
                 <p className="auth-footnote">
-                  First visit? Choose <strong>Create account</strong> with your email, name, surname, and password.
+                  <span className="auth-footnote-highlight">
+                    By clicking the Create Account button, you will receive an email asking you to very your account details
+                  </span>
                 </p>
               )}
             </>
@@ -3931,7 +3944,7 @@ function App() {
             Social Media
           </button>
           <button type="button" className={`sub-red-link ${activePage === 'board' ? 'is-active' : ''}`} onClick={() => openPage('board')}>
-            Contact Us
+            Board
           </button>
           {showMerchandise && (
             <button
@@ -3942,6 +3955,9 @@ function App() {
               Merchandise
             </button>
           )}
+          <button type="button" className={`sub-red-link ${activePage === 'contact' ? 'is-active' : ''}`} onClick={() => openPage('contact')}>
+            Contact Us
+          </button>
         </div>
       </nav>
 
@@ -4112,6 +4128,64 @@ function App() {
           onClose={() => setNewsDetailPost(null)}
         />
         {activePage === 'board' && (
+          <div className="board-page">
+            <h1 className="board-title">Board</h1>
+            <ul className="contact-list">
+              <li className="contact-card">
+                <p className="contact-name">Δημήτρης Ναθαναήλ (Πρόεδρος)</p>
+              </li>
+              <li className="contact-card">
+                <p className="contact-name">Μάριος Ηροδότου (Αντιπρόεδρος)</p>
+              </li>
+              <li className="contact-card">
+                <p className="contact-name">Θαλής Αλεξάνδρου (Αντιπρόεδρος)</p>
+              </li>
+              <li className="contact-card">
+                <p className="contact-name">Γρηγόρης Γρηγορίου (Αντιπρόεδρος)</p>
+              </li>
+              <li className="contact-card">
+                <p className="contact-name">Χαράλαμπος Λοΐζου (Γραμματέας)</p>
+              </li>
+              <li className="contact-card">
+                <p className="contact-name">Χρίστος Απέγητος (Βοηθός Γραμματέας)</p>
+              </li>
+              <li className="contact-card">
+                <p className="contact-name">Νεόφυτος Ιωάννου (Ταμίας)</p>
+              </li>
+              <li className="contact-card">
+                <p className="contact-name">Θεόδωρος Σαββίδης (Βοηθός Ταμίας)</p>
+              </li>
+              <li className="contact-card">
+                <p className="contact-name">Γιάννης Νικολαΐδης (Μέλος)</p>
+              </li>
+              <li className="contact-card">
+                <p className="contact-name">Στέλιος Χατζηχριστοφή (Μέλος)</p>
+              </li>
+              <li className="contact-card">
+                <p className="contact-name">Εύρος Αλεξάνδρου (Μέλος)</p>
+              </li>
+              <li className="contact-card">
+                <p className="contact-name">Άκης Νικολάου (Μέλος)</p>
+              </li>
+              <li className="contact-card">
+                <p className="contact-name">Άνδρος Eid (Μέλος)</p>
+              </li>
+              <li className="contact-card">
+                <p className="contact-name">Μιχάλης Πετουφάς (Μέλος)</p>
+              </li>
+              <li className="contact-card">
+                <p className="contact-name">Μάρκος Ασβεστάς (Μέλος)</p>
+              </li>
+              <li className="contact-card">
+                <p className="contact-name">Κωνσταντίνος Πατσιάς (Μέλος)</p>
+              </li>
+              <li className="contact-card">
+                <p className="contact-name">Ρώνης Σωτηριάδης (Επίτημος Πρόεδρος)</p>
+              </li>
+            </ul>
+          </div>
+        )}
+        {activePage === 'contact' && (
           <div className="board-page">
             <h1 className="board-title">Contact Us</h1>
             <p className="board-lead">Reach the Cyprus Manchester United Supporters Club committee:</p>
