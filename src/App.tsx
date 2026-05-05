@@ -3633,7 +3633,7 @@ function App() {
         <div className="auth-page">
           <header className="auth-header">
             <ClubLogoMark className="auth-badge" />
-            <h1 className="auth-title">{isAdminRoute ? 'Admin login' : 'Cyprus Manchester United Supporters Club'}</h1>
+            <h1 className="auth-title">{isAdminRoute ? 'Admin login' : 'Welcome to the home of Cyprus Manchester United Supporters Club'}</h1>
             <p className="auth-subtitle">{isAdminRoute ? 'Sign in with an admin account' : 'Member access'}</p>
           </header>
 
