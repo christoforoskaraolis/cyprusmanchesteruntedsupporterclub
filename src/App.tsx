@@ -3794,9 +3794,15 @@ function App() {
 
               {!isAdminRoute && (
                 <p className="auth-footnote">
-                  <span className="auth-footnote-highlight">
-                    By clicking the Create Account button, you will receive an email asking you to very your account details
-                  </span>
+                  {mode === 'create-account' ? (
+                    <span className="auth-footnote-highlight">
+                      By clicking the Create Account button, you will receive an email asking you to very your account details.
+                    </span>
+                  ) : (
+                    <>
+                      First visit? Choose <strong>Create account</strong> with your email, name, surname, and password.
+                    </>
+                  )}
                 </p>
               )}
             </>
