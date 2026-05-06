@@ -46,6 +46,8 @@ import {
   fetchMyMerchandiseOrders,
   insertMerchandiseOrder,
   insertMerchandiseProduct,
+  reorderMerchandiseProducts,
+  updateMerchandiseProduct,
   updateMerchandiseOrderStatus,
   type MerchandiseOrderLine,
   type MerchandiseOrderRow,
@@ -62,7 +64,9 @@ import {
   deleteOfficialMembershipOffer,
   fetchOfficialMembershipOffers,
   fetchMyOfficialMembershipRequests,
+  reorderOfficialMembershipOffers,
   setAdminOfficialMembershipRequestStatus,
+  updateOfficialMembershipOffer,
   type AdminOfficialMembershipRequest,
   type OfficialMembershipOffer,
   type OfficialMembershipRequest,
@@ -735,7 +739,9 @@ type AdminConsoleProps = {
   onUpdateMerchandiseOrderStatus: (orderId: string, status: MerchandiseOrderStatus) => Promise<void>
   merchandiseProducts: MerchandiseProduct[]
   onCreateMerchandiseProduct: (payload: { title: string; priceEur: number; photos: string[] }) => Promise<void>
+  onUpdateMerchandiseProduct: (id: string, payload: { title: string; priceEur: number; photos?: string[] }) => Promise<void>
   onDeleteMerchandiseProduct: (id: string) => Promise<void>
+  onReorderMerchandiseProducts: (ids: string[]) => Promise<void>
   ticketFixtures: UpcomingFixture[]
   ticketWindowByKey: Record<string, FixtureTicketWindowStatus>
   onSetFixtureTicketStatus: (fixture: UpcomingFixture, status: FixtureTicketWindowStatus) => Promise<void>
@@ -750,7 +756,9 @@ type AdminConsoleProps = {
   officialRequests: AdminOfficialMembershipRequest[]
   officialRequestsLoading: boolean
   onCreateOfficialOffer: (payload: { title: string; priceEur: number; imageUrl: string }) => Promise<void>
+  onUpdateOfficialOffer: (id: string, payload: { title: string; priceEur: number; imageUrl?: string }) => Promise<void>
   onDeleteOfficialOffer: (id: string) => Promise<void>
+  onReorderOfficialOffers: (ids: string[]) => Promise<void>
   onSetOfficialRequestStatus: (
     requestId: string,
     status: 'pending' | 'completed' | 'rejected' | 'cancelled',
@@ -782,7 +790,9 @@ function AdminConsole({
   onUpdateMerchandiseOrderStatus,
   merchandiseProducts,
   onCreateMerchandiseProduct,
+  onUpdateMerchandiseProduct,
   onDeleteMerchandiseProduct,
+  onReorderMerchandiseProducts,
   ticketFixtures,
   ticketWindowByKey,
   onSetFixtureTicketStatus,
@@ -797,7 +807,9 @@ function AdminConsole({
   officialRequests,
   officialRequestsLoading,
   onCreateOfficialOffer,
+  onUpdateOfficialOffer,
   onDeleteOfficialOffer,
+  onReorderOfficialOffers,
   onSetOfficialRequestStatus,
   onDeleteOfficialRequest,
 }: AdminConsoleProps) {
@@ -825,6 +837,7 @@ function AdminConsole({
   const [adminMerchPhotos, setAdminMerchPhotos] = useState<string[]>([])
   const [adminMerchBusy, setAdminMerchBusy] = useState(false)
   const [adminMerchError, setAdminMerchError] = useState<string | null>(null)
+  const [editingMerchById, setEditingMerchById] = useState<Record<string, { title: string; price: string }>>({})
   const [newAdminEmail, setNewAdminEmail] = useState('')
   const [adminUsersBusy, setAdminUsersBusy] = useState(false)
   const [officialTitle, setOfficialTitle] = useState('')
@@ -832,6 +845,7 @@ function AdminConsole({
   const [officialImageUrl, setOfficialImageUrl] = useState('')
   const [officialBusy, setOfficialBusy] = useState(false)
   const [officialError, setOfficialError] = useState<string | null>(null)
+  const [editingOfficialById, setEditingOfficialById] = useState<Record<string, { title: string; price: string }>>({})
   const [officialRequestBusyId, setOfficialRequestBusyId] = useState<string | null>(null)
   const [expandedOfficialRequestId, setExpandedOfficialRequestId] = useState<string | null>(null)
   const [officialMuIdDraftByRequestId, setOfficialMuIdDraftByRequestId] = useState<Record<string, string>>({})
@@ -984,6 +998,13 @@ function AdminConsole({
       r.user.applicationId ?? '',
     ])
     downloadCsv(`official-memberships-report-${reportStamp()}.csv`, headers, rows)
+  }
+
+  function moveItem(ids: string[], from: number, to: number) {
+    const next = [...ids]
+    const [picked] = next.splice(from, 1)
+    next.splice(to, 0, picked)
+    return next
   }
 
   async function onPickAdminMerchPhotos(files: FileList | null) {
@@ -1817,7 +1838,7 @@ function AdminConsole({
           <section className="admin-panel-block" aria-label="Manage merchandise products">
             <div className="admin-block-head">
               <h3 className="admin-block-title">Manage merchandise products</h3>
-              <p className="admin-block-lead">Add new products and remove existing ones.</p>
+              <p className="admin-block-lead">Add, edit, delete, and reorder products.</p>
             </div>
             {adminMerchError && <p className="auth-message is-error">{adminMerchError}</p>}
             <div className="merch-admin-grid">
@@ -1905,7 +1926,12 @@ function AdminConsole({
               {adminMerchBusy ? 'Saving…' : 'Publish product'}
             </button>
             <ul className="merch-grid" style={{ marginTop: '1rem' }}>
-              {merchandiseProducts.map((product) => (
+              {merchandiseProducts.map((product, index) => {
+                const draft = editingMerchById[product.id] ?? {
+                  title: product.title,
+                  price: product.priceEur.toFixed(2),
+                }
+                return (
                 <li key={product.id} className="merch-card">
                   <div className="merch-card-visual">
                     {product.photos[0] ? (
@@ -1919,6 +1945,105 @@ function AdminConsole({
                   <div className="merch-card-body">
                     <h4 className="merch-card-title">{product.title}</h4>
                     <p className="merch-card-price">€{product.priceEur.toFixed(2)}</p>
+                    <label className="auth-field membership-field">
+                      <span className="auth-label">Edit title</span>
+                      <input
+                        className="auth-input"
+                        type="text"
+                        value={draft.title}
+                        onChange={(ev) =>
+                          setEditingMerchById((prev) => ({
+                            ...prev,
+                            [product.id]: { ...draft, title: ev.target.value },
+                          }))
+                        }
+                        disabled={adminMerchBusy}
+                      />
+                    </label>
+                    <label className="auth-field membership-field">
+                      <span className="auth-label">Edit price (€)</span>
+                      <input
+                        className="auth-input"
+                        type="text"
+                        inputMode="decimal"
+                        value={draft.price}
+                        onChange={(ev) =>
+                          setEditingMerchById((prev) => ({
+                            ...prev,
+                            [product.id]: { ...draft, price: ev.target.value },
+                          }))
+                        }
+                        disabled={adminMerchBusy}
+                      />
+                    </label>
+                    <div className="admin-ticket-request-actions">
+                      <button
+                        type="button"
+                        className="mycmusc-reg-btn mycmusc-reg-btn--secondary"
+                        disabled={adminMerchBusy || index === 0}
+                        onClick={async () => {
+                          setAdminMerchBusy(true)
+                          try {
+                            const ids = moveItem(
+                              merchandiseProducts.map((row) => row.id),
+                              index,
+                              index - 1,
+                            )
+                            await onReorderMerchandiseProducts(ids)
+                          } catch (err) {
+                            setAdminMerchError(err instanceof Error ? err.message : 'Could not reorder product.')
+                          } finally {
+                            setAdminMerchBusy(false)
+                          }
+                        }}
+                      >
+                        Move up
+                      </button>
+                      <button
+                        type="button"
+                        className="mycmusc-reg-btn mycmusc-reg-btn--secondary"
+                        disabled={adminMerchBusy || index === merchandiseProducts.length - 1}
+                        onClick={async () => {
+                          setAdminMerchBusy(true)
+                          try {
+                            const ids = moveItem(
+                              merchandiseProducts.map((row) => row.id),
+                              index,
+                              index + 1,
+                            )
+                            await onReorderMerchandiseProducts(ids)
+                          } catch (err) {
+                            setAdminMerchError(err instanceof Error ? err.message : 'Could not reorder product.')
+                          } finally {
+                            setAdminMerchBusy(false)
+                          }
+                        }}
+                      >
+                        Move down
+                      </button>
+                      <button
+                        type="button"
+                        className="mycmusc-reg-btn mycmusc-reg-btn--primary"
+                        disabled={adminMerchBusy}
+                        onClick={async () => {
+                          const title = draft.title.trim()
+                          const price = Number(draft.price.replace(',', '.'))
+                          if (!title) return setAdminMerchError('Title is required.')
+                          if (!Number.isFinite(price) || price < 0) return setAdminMerchError('Please enter a valid price.')
+                          setAdminMerchBusy(true)
+                          setAdminMerchError(null)
+                          try {
+                            await onUpdateMerchandiseProduct(product.id, { title, priceEur: price })
+                          } catch (err) {
+                            setAdminMerchError(err instanceof Error ? err.message : 'Could not update product.')
+                          } finally {
+                            setAdminMerchBusy(false)
+                          }
+                        }}
+                      >
+                        Save
+                      </button>
+                    </div>
                     <button
                       type="button"
                       className="mycmusc-reg-btn mycmusc-reg-btn--secondary merch-card-delete"
@@ -1940,7 +2065,7 @@ function AdminConsole({
                     </button>
                   </div>
                 </li>
-              ))}
+              )})}
             </ul>
           </section>
           <div className="admin-search-row">
@@ -2033,7 +2158,7 @@ function AdminConsole({
         <section className="admin-panel-block" aria-label="Official Manchester United memberships">
           <div className="admin-block-head">
             <h2 className="admin-block-title">Official Manchester United memberships</h2>
-            <p className="admin-block-lead">Add offers with title, picture, and price.</p>
+            <p className="admin-block-lead">Add, edit, delete, and reorder offers with title, picture, and price.</p>
           </div>
           <section className="admin-panel-block" aria-label="Official membership requests">
             <div className="admin-block-head">
@@ -2250,7 +2375,12 @@ function AdminConsole({
             <p className="admin-empty">No official membership offers yet.</p>
           ) : (
             <ul className="merch-grid" style={{ marginTop: '1rem' }}>
-              {officialOffers.map((offer) => (
+              {officialOffers.map((offer, index) => {
+                const draft = editingOfficialById[offer.id] ?? {
+                  title: offer.title,
+                  price: offer.priceEur.toFixed(2),
+                }
+                return (
                 <li key={offer.id} className="merch-card">
                   <div className="merch-card-visual">
                     {offer.imageUrl ? (
@@ -2264,6 +2394,105 @@ function AdminConsole({
                   <div className="merch-card-body">
                     <h4 className="merch-card-title">{offer.title}</h4>
                     <p className="merch-card-price">€{offer.priceEur.toFixed(2)}</p>
+                    <label className="auth-field membership-field">
+                      <span className="auth-label">Edit title</span>
+                      <input
+                        className="auth-input"
+                        type="text"
+                        value={draft.title}
+                        onChange={(ev) =>
+                          setEditingOfficialById((prev) => ({
+                            ...prev,
+                            [offer.id]: { ...draft, title: ev.target.value },
+                          }))
+                        }
+                        disabled={officialBusy}
+                      />
+                    </label>
+                    <label className="auth-field membership-field">
+                      <span className="auth-label">Edit price (€)</span>
+                      <input
+                        className="auth-input"
+                        type="text"
+                        inputMode="decimal"
+                        value={draft.price}
+                        onChange={(ev) =>
+                          setEditingOfficialById((prev) => ({
+                            ...prev,
+                            [offer.id]: { ...draft, price: ev.target.value },
+                          }))
+                        }
+                        disabled={officialBusy}
+                      />
+                    </label>
+                    <div className="admin-ticket-request-actions">
+                      <button
+                        type="button"
+                        className="mycmusc-reg-btn mycmusc-reg-btn--secondary"
+                        disabled={officialBusy || index === 0}
+                        onClick={async () => {
+                          setOfficialBusy(true)
+                          try {
+                            const ids = moveItem(
+                              officialOffers.map((row) => row.id),
+                              index,
+                              index - 1,
+                            )
+                            await onReorderOfficialOffers(ids)
+                          } catch (err) {
+                            setOfficialError(err instanceof Error ? err.message : 'Could not reorder offer.')
+                          } finally {
+                            setOfficialBusy(false)
+                          }
+                        }}
+                      >
+                        Move up
+                      </button>
+                      <button
+                        type="button"
+                        className="mycmusc-reg-btn mycmusc-reg-btn--secondary"
+                        disabled={officialBusy || index === officialOffers.length - 1}
+                        onClick={async () => {
+                          setOfficialBusy(true)
+                          try {
+                            const ids = moveItem(
+                              officialOffers.map((row) => row.id),
+                              index,
+                              index + 1,
+                            )
+                            await onReorderOfficialOffers(ids)
+                          } catch (err) {
+                            setOfficialError(err instanceof Error ? err.message : 'Could not reorder offer.')
+                          } finally {
+                            setOfficialBusy(false)
+                          }
+                        }}
+                      >
+                        Move down
+                      </button>
+                      <button
+                        type="button"
+                        className="mycmusc-reg-btn mycmusc-reg-btn--primary"
+                        disabled={officialBusy}
+                        onClick={async () => {
+                          const title = draft.title.trim()
+                          const price = Number(draft.price.replace(',', '.'))
+                          if (!title) return setOfficialError('Title is required.')
+                          if (!Number.isFinite(price) || price < 0) return setOfficialError('Please enter a valid price.')
+                          setOfficialBusy(true)
+                          setOfficialError(null)
+                          try {
+                            await onUpdateOfficialOffer(offer.id, { title, priceEur: price })
+                          } catch (err) {
+                            setOfficialError(err instanceof Error ? err.message : 'Could not update offer.')
+                          } finally {
+                            setOfficialBusy(false)
+                          }
+                        }}
+                      >
+                        Save
+                      </button>
+                    </div>
                     <button
                       type="button"
                       className="mycmusc-reg-btn mycmusc-reg-btn--secondary merch-card-delete"
@@ -2283,7 +2512,7 @@ function AdminConsole({
                     </button>
                   </div>
                 </li>
-              ))}
+              )})}
             </ul>
           )}
         </section>
@@ -2982,6 +3211,21 @@ function App() {
     await loadMerchandiseProducts()
   }
 
+  async function applyUpdateMerchandiseProductFromAdmin(
+    id: string,
+    payload: { title: string; priceEur: number; photos?: string[] },
+  ) {
+    const { error } = await updateMerchandiseProduct(id, payload)
+    if (error) throw new Error(error.message)
+    await loadMerchandiseProducts()
+  }
+
+  async function applyReorderMerchandiseProductsFromAdmin(ids: string[]) {
+    const { error } = await reorderMerchandiseProducts(ids)
+    if (error) throw new Error(error.message)
+    await loadMerchandiseProducts()
+  }
+
   async function applyCreateAdminUser(email: string) {
     const { error } = await createAdminUser(email)
     if (error) {
@@ -3013,6 +3257,20 @@ function App() {
 
   async function applyDeleteOfficialOffer(id: string) {
     const { error } = await deleteOfficialMembershipOffer(id)
+    if (error) throw error
+    const refreshed = await fetchOfficialMembershipOffers()
+    if (!refreshed.error) setOfficialOffers(refreshed.rows)
+  }
+
+  async function applyUpdateOfficialOffer(id: string, payload: { title: string; priceEur: number; imageUrl?: string }) {
+    const { error } = await updateOfficialMembershipOffer(id, payload)
+    if (error) throw error
+    const refreshed = await fetchOfficialMembershipOffers()
+    if (!refreshed.error) setOfficialOffers(refreshed.rows)
+  }
+
+  async function applyReorderOfficialOffers(ids: string[]) {
+    const { error } = await reorderOfficialMembershipOffers(ids)
     if (error) throw error
     const refreshed = await fetchOfficialMembershipOffers()
     if (!refreshed.error) setOfficialOffers(refreshed.rows)
@@ -3839,7 +4097,9 @@ function App() {
               onUpdateMerchandiseOrderStatus={applyUpdateMerchandiseOrderStatus}
               merchandiseProducts={merchProducts}
               onCreateMerchandiseProduct={applyCreateMerchandiseProductFromAdmin}
+              onUpdateMerchandiseProduct={applyUpdateMerchandiseProductFromAdmin}
               onDeleteMerchandiseProduct={applyDeleteMerchandiseProductFromAdmin}
+              onReorderMerchandiseProducts={applyReorderMerchandiseProductsFromAdmin}
               ticketFixtures={ticketFixtures}
               ticketWindowByKey={ticketWindowByKey}
               onSetFixtureTicketStatus={setFixtureTicketStatus}
@@ -3854,7 +4114,9 @@ function App() {
               officialRequests={adminOfficialRequests}
               officialRequestsLoading={adminOfficialRequestsLoading}
               onCreateOfficialOffer={applyCreateOfficialOffer}
+              onUpdateOfficialOffer={applyUpdateOfficialOffer}
               onDeleteOfficialOffer={applyDeleteOfficialOffer}
+              onReorderOfficialOffers={applyReorderOfficialOffers}
               onSetOfficialRequestStatus={applySetOfficialRequestStatus}
               onDeleteOfficialRequest={applyDeleteOfficialRequest}
             />
@@ -4187,6 +4449,9 @@ function App() {
               <li className="contact-card">
                 <p className="contact-role">Club Chairman</p>
                 <p className="contact-name">Demitris Nathanael</p>
+                <a className="contact-phone" href="tel:+35799472227">
+                  +357 99 472 227
+                </a>
               </li>
               <li className="contact-card">
                 <p className="contact-role">Club Secretary</p>

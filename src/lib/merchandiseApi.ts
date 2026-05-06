@@ -61,6 +61,27 @@ export async function deleteMerchandiseProduct(id: string) {
   }
 }
 
+export async function updateMerchandiseProduct(
+  id: string,
+  payload: { title: string; priceEur: number; photos?: string[] },
+) {
+  try {
+    await apiSend(`/api/merchandise/products/${id}`, 'PUT', payload)
+    return { error: undefined }
+  } catch (error) {
+    return { error: asError(error) }
+  }
+}
+
+export async function reorderMerchandiseProducts(ids: string[]) {
+  try {
+    await apiSend('/api/merchandise/products/reorder', 'PUT', { ids })
+    return { error: undefined }
+  } catch (error) {
+    return { error: asError(error) }
+  }
+}
+
 export async function insertMerchandiseOrder(payload: {
   userId: string
   lines: MerchandiseOrderLine[]

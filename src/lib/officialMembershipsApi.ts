@@ -62,6 +62,27 @@ export async function deleteOfficialMembershipOffer(id: string) {
   }
 }
 
+export async function updateOfficialMembershipOffer(
+  id: string,
+  payload: { title: string; priceEur: number; imageUrl?: string },
+) {
+  try {
+    await apiSend(`/api/official-memberships/${id}`, 'PUT', payload)
+    return { error: undefined }
+  } catch (error) {
+    return { error: asError(error) }
+  }
+}
+
+export async function reorderOfficialMembershipOffers(ids: string[]) {
+  try {
+    await apiSend('/api/official-memberships/reorder', 'PUT', { ids })
+    return { error: undefined }
+  } catch (error) {
+    return { error: asError(error) }
+  }
+}
+
 export async function fetchMyOfficialMembershipRequests() {
   try {
     const data = await apiGet<{ rows: OfficialMembershipRequest[] }>('/api/official-memberships/requests/my')

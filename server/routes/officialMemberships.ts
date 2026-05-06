@@ -19,7 +19,7 @@ officialMembershipsRouter.get(
     }>(
       `select id, title, price_eur, image_url, created_at, updated_at
        from public.official_membership_offers
-       order by created_at desc`,
+       order by sort_order asc, created_at asc`,
     )
     res.json({
       rows: rows.map((r) => ({
@@ -40,11 +40,61 @@ officialMembershipsRouter.post(
   asyncHandler(async (req, res) => {
     const { title, priceEur, imageUrl } = req.body as { title: string; priceEur: number; imageUrl: string }
     await query(
-      `insert into public.official_membership_offers (title, price_eur, image_url, created_by, updated_by)
-       values ($1, $2, $3, $4, $4)`,
+      `insert into public.official_membership_offers (title, price_eur, image_url, sort_order, created_by, updated_by)
+       values (
+         $1,
+         $2,
+         $3,
+         coalesce((select max(sort_order) + 1 from public.official_membership_offers), 1),
+         $4,
+         $4
+       )`,
       [title.trim(), priceEur, imageUrl ?? '', req.user!.id],
     )
     res.status(201).json({ ok: true })
+  }),
+)
+
+officialMembershipsRouter.put(
+  '/:id',
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const { title, priceEur, imageUrl } = req.body as { title: string; priceEur: number; imageUrl?: string }
+    await query(
+      `update public.official_membership_offers
+       set title = $1,
+           price_eur = $2,
+           image_url = coalesce($3, image_url),
+           updated_by = $4
+       where id = $5`,
+      [title.trim(), priceEur, imageUrl ?? null, req.user!.id, req.params.id],
+    )
+    res.json({ ok: true })
+  }),
+)
+
+officialMembershipsRouter.put(
+  '/reorder',
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const { ids } = req.body as { ids: string[] }
+    if (!Array.isArray(ids) || ids.length === 0) return res.status(400).json({ error: 'ids are required' })
+    await query('begin')
+    try {
+      for (let i = 0; i < ids.length; i += 1) {
+        await query(
+          `update public.official_membership_offers
+           set sort_order = $1, updated_by = $2
+           where id = $3`,
+          [i + 1, req.user!.id, ids[i]],
+        )
+      }
+      await query('commit')
+      res.json({ ok: true })
+    } catch (error) {
+      await query('rollback')
+      throw error
+    }
   }),
 )
 
