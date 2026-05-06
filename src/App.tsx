@@ -2645,7 +2645,6 @@ function App() {
   const showMerchandise = Boolean(user?.id)
   const welcomeFirstName =
     myProfile?.fullName?.trim().split(/\s+/)[0] ||
-    user?.user_metadata?.first_name ||
     user?.email?.split('@')[0] ||
     'Member'
   const fixturesSource = fixturesFeed
@@ -4600,6 +4599,9 @@ function App() {
                   isInRenewalNoticeWindow(validUntilIso) && !myPendingRenewal
                 return (
               <>
+                <p className="section-lead mycmusc-reg-lead">
+                  Welcome, <strong>{welcomeFirstName}</strong>
+                </p>
                 <div className="mycmusc-member-header">
                   <div className="mycmusc-member-status-row">
                     <span className="mycmusc-status-label">Membership status</span>
