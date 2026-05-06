@@ -402,22 +402,6 @@ function CyprusMembershipForm({ onBack, onSubmitApplication }: CyprusMembershipF
           />
         </label>
 
-        <div className="membership-payment-card" role="region" aria-labelledby="membership-payment-heading">
-          <h3 id="membership-payment-heading" className="membership-payment-title">
-            Payment — before you submit
-          </h3>
-          <p className="membership-payment-fee">
-            <strong>Membership fee:</strong> €{MEMBERSHIP_FEE_EUR} for the membership season (
-            {periodStart} – {periodEnd}).
-          </p>
-          <p className="membership-payment-intro">
-            Use one of the options below to pay. Please include your <strong>full name</strong> as the payment
-            reference so we can match your transfer to this application.
-          </p>
-
-          <ClubPaymentMethodFields />
-        </div>
-
         <label className="membership-checkbox-row">
           <input
             type="checkbox"
@@ -2659,6 +2643,11 @@ function App() {
   const showMatchTickets = Boolean(user?.id && isMembershipActive)
   /** Merchandise is available to any signed-in user. */
   const showMerchandise = Boolean(user?.id)
+  const welcomeFirstName =
+    myProfile?.fullName?.trim().split(/\s+/)[0] ||
+    user?.user_metadata?.first_name ||
+    user?.email?.split('@')[0] ||
+    'Member'
   const fixturesSource = fixturesFeed
   const upcomingFixtures = fixturesSource
     .filter((m) => new Date(m.kickoffIso).getTime() >= Date.now())
@@ -3796,7 +3785,7 @@ function App() {
                 <p className="auth-footnote">
                   {mode === 'create-account' ? (
                     <span className="auth-footnote-highlight">
-                      By clicking the Create Account button, you will receive an email asking you to very your account details.
+                      By clicking the Create Account button, you will receive an email asking you to verify your account details.
                     </span>
                   ) : (
                     <>
@@ -4876,10 +4865,15 @@ function App() {
             ) : (
               <>
                 <p className="section-lead mycmusc-reg-lead">
-                  Start by registering with the <strong>Cyprus MU Supporters Club</strong>. When your Cyprus club
-                  membership is <strong>active</strong>, that unlocks official{' '}
-                  <strong>Manchester United membership</strong> registration — and other member-only features such as{' '}
-                  <strong>match ticket requests</strong> and <strong>Merchandise</strong>.
+                  Welcome, <strong>{welcomeFirstName}</strong>
+                </p>
+                <p className="section-lead mycmusc-reg-lead">
+                  As part of the Cyprus Manchester United Supporters Club you will have access to match tickets, club
+                  events, merchandise, group trips to Old Trafford, and many more!
+                </p>
+                <p className="section-lead mycmusc-reg-lead">
+                  Please complete the registration procedure to select your Membership Package, pay your Membership Fee
+                  and unlock your Membership Benefits!
                 </p>
                 <div className="mycmusc-reg-actions">
                   <button
@@ -4898,11 +4892,6 @@ function App() {
                     Register for Official Man Utd Membership Registration
                   </button>
                 </div>
-                <p className="mycmusc-reg-hint" role="note">
-                  Registering for Cyprus club membership is what lets you unlock official MU membership, match ticket
-                  requests, Merchandise, and the rest of the members&apos; experience once your application is approved and
-                  activated.
-                </p>
               </>
             )}
           </div>
