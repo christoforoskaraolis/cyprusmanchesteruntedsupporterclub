@@ -72,4 +72,4 @@ export default defineConfig([
 ])
 ```
 
-Deployment trigger note: repository updated on 2026-05-01.
+Deployment trigger note: repository updated on 2026-05-06.
