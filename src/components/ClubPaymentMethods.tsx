@@ -14,6 +14,9 @@ export const CMUSC_PAYMENT_BANK_NAME = 'Revolut Bank UAB'
 export const CMUSC_PAYMENT_BANK_ADDRESS = 'Konstitucijos ave. 21B, 08130, Vilnius, Lithuania'
 export const CMUSC_PAYMENT_REVOLUT = 'https://revolut.me/clmanutd'
 
+/** Added only to Stripe card payments (bank transfer and Revolut are not affected). */
+export const STRIPE_SERVICE_FEE_EUR = 1
+
 export type StripePaymentOption = {
   amountEur: number
   description: string
@@ -23,6 +26,7 @@ export type StripePaymentOption = {
 }
 
 function StripePaySection({ stripe }: { stripe: StripePaymentOption }) {
+  const stripeTotalEur = stripe.amountEur + STRIPE_SERVICE_FEE_EUR
   const [status, setStatus] = useState<'loading' | 'ready' | 'unavailable'>('loading')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -65,8 +69,9 @@ function StripePaySection({ stripe }: { stripe: StripePaymentOption }) {
     <div className="membership-payment-method membership-payment-method--stripe">
       <span className="membership-payment-method-label">Pay with card (Stripe)</span>
       <p className="membership-payment-intro">
-        Pay securely online with card. You will be redirected to Stripe to complete payment of{' '}
-        <strong>€{stripe.amountEur.toFixed(2)}</strong>.
+        Pay securely online with card. A <strong>€{STRIPE_SERVICE_FEE_EUR.toFixed(2)} service charge</strong> applies to
+        Stripe payments only (€{stripe.amountEur.toFixed(2)} + €{STRIPE_SERVICE_FEE_EUR.toFixed(2)} ={' '}
+        <strong>€{stripeTotalEur.toFixed(2)} total</strong>). You will be redirected to Stripe to complete payment.
       </p>
       {status === 'loading' && <p className="membership-payment-intro">Loading card payment option…</p>}
       {status === 'unavailable' && (
@@ -84,7 +89,7 @@ function StripePaySection({ stripe }: { stripe: StripePaymentOption }) {
             disabled={busy}
             onClick={() => void handlePay()}
           >
-            {busy ? 'Redirecting to Stripe…' : `Pay €${stripe.amountEur.toFixed(2)} with Stripe`}
+            {busy ? 'Redirecting to Stripe…' : `Pay €${stripeTotalEur.toFixed(2)} with Stripe`}
           </button>
         </>
       )}

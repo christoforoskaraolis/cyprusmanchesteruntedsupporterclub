@@ -7,6 +7,7 @@ import { requireUser } from '../middleware/auth.ts'
 export const stripeRouter = Router()
 
 const PAYMENT_KINDS = new Set(['membership', 'renewal', 'ticket', 'merchandise', 'official_membership'])
+const STRIPE_SERVICE_FEE_EUR = 1
 
 function appBaseUrl(req: { headers: { origin?: string } }): string {
   if (env.publicAppUrl) return env.publicAppUrl.replace(/\/+$/, '')
@@ -50,6 +51,8 @@ stripeRouter.post(
       return
     }
 
+    const chargeAmountEur = amountEur + STRIPE_SERVICE_FEE_EUR
+
     const desc = (description ?? '').trim()
     if (!desc) {
       res.status(400).json({ error: 'description is required.' })
@@ -73,8 +76,16 @@ stripeRouter.post(
         {
           price_data: {
             currency: 'eur',
-            product_data: { name: desc.slice(0, 120) },
+            product_data: { name: desc.slice(0, 100) },
             unit_amount: Math.round(amountEur * 100),
+          },
+          quantity: 1,
+        },
+        {
+          price_data: {
+            currency: 'eur',
+            product_data: { name: 'Service charge (Stripe)' },
+            unit_amount: Math.round(STRIPE_SERVICE_FEE_EUR * 100),
           },
           quantity: 1,
         },
@@ -83,6 +94,9 @@ stripeRouter.post(
         paymentKind,
         referenceId: (referenceId ?? '').slice(0, 200),
         userId: req.user!.id,
+        baseAmountEur: String(amountEur),
+        serviceFeeEur: String(STRIPE_SERVICE_FEE_EUR),
+        chargeAmountEur: String(chargeAmountEur),
       },
       success_url: successUrl,
       cancel_url: cancelUrl,
