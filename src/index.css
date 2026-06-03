@@ -1,4 +1,6 @@
 :root {
+  color-scheme: light;
+
   --mu-red: #c8102e;
   --mu-red-hover: #a30d25;
   --text: #3d3d45;
@@ -24,20 +26,8 @@
   -moz-osx-font-smoothing: grayscale;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --text: #b4b4bd;
-    --text-h: #f4f4f6;
-    --text-muted: #8e8e9a;
-    --text-placeholder: #6a6a75;
-    --bg: #121214;
-    --surface: #1c1c21;
-    --surface-2: #25252c;
-    --border: #35353f;
-    --border-strong: #4a4a56;
-    --success-text: #7dd98a;
-    --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.35);
-  }
+html {
+  color-scheme: light;
 }
 
 * {

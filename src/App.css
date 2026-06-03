@@ -30,6 +30,8 @@
   margin: 0 auto;
   padding: clamp(1.5rem, 5vw, 2.5rem) 1.25rem 2rem;
   text-align: left;
+  color: #3d3d45;
+  color-scheme: light;
   background: rgba(255, 255, 255, 0.92);
   border-radius: 14px;
   box-shadow: 0 10px 28px rgba(0, 0, 0, 0.22);
@@ -2304,7 +2306,7 @@
 }
 
 .membership-input-date {
-  color-scheme: light dark;
+  color-scheme: light;
 }
 
 .membership-payment-card {
@@ -2493,13 +2495,13 @@
   letter-spacing: -0.02em;
   line-height: 1.25;
   margin: 0 0 0.5rem;
-  color: var(--text-h);
+  color: #0f0f12;
 }
 
 .auth-subtitle {
   margin: 0;
   font-size: 0.95rem;
-  color: var(--text-muted);
+  color: #6b6b76;
 }
 
 .auth-panel {
@@ -2560,8 +2562,10 @@
   padding: 0.7rem 0.85rem;
   border-radius: 10px;
   border: 1px solid var(--border);
-  background: var(--surface);
-  color: var(--text-h);
+  color-scheme: light;
+  background: #ffffff;
+  color: #0f0f12;
+  -webkit-text-fill-color: #0f0f12;
   transition: border-color 0.2s, box-shadow 0.2s;
 }
 
@@ -2628,12 +2632,12 @@
   margin: 1.5rem 0 0;
   font-size: 0.8rem;
   line-height: 1.5;
-  color: var(--text-muted);
+  color: #6b6b76;
   text-align: center;
 }
 
 .auth-footnote strong {
-  color: var(--text-h);
+  color: #0f0f12;
   font-weight: 600;
 }
 
