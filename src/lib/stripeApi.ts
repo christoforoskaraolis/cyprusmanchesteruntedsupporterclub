@@ -1,4 +1,4 @@
-import { apiGet, apiSend, asError } from './apiClient'
+import { apiSend, asError } from './apiClient'
 
 export type StripePaymentKind = 'membership' | 'renewal' | 'ticket' | 'merchandise' | 'official_membership'
 
@@ -12,7 +12,12 @@ export type StripeCheckoutPayload = {
 
 export async function fetchStripeConfig() {
   try {
-    const data = await apiGet<{ enabled: boolean }>('/api/stripe/config')
+    const response = await fetch('/api/stripe/config')
+    if (!response.ok) {
+      const body = (await response.json().catch(() => ({}))) as { error?: string }
+      throw new Error(body.error ?? response.statusText)
+    }
+    const data = (await response.json()) as { enabled: boolean }
     return { enabled: data.enabled, error: undefined }
   } catch (error) {
     return { enabled: false, error: asError(error) }

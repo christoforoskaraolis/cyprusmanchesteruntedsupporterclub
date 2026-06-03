@@ -22,7 +22,6 @@ function getStripeClient(): Stripe | null {
 
 stripeRouter.get(
   '/config',
-  requireUser,
   asyncHandler(async (_req, res) => {
     res.json({ enabled: Boolean(env.stripeSecretKey) })
   }),

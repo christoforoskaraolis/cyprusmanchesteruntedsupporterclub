@@ -23,21 +23,24 @@ export type StripePaymentOption = {
 }
 
 function StripePaySection({ stripe }: { stripe: StripePaymentOption }) {
-  const [enabled, setEnabled] = useState(false)
+  const [status, setStatus] = useState<'loading' | 'ready' | 'unavailable'>('loading')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     let cancelled = false
-    void fetchStripeConfig().then(({ enabled: isEnabled }) => {
-      if (!cancelled) setEnabled(isEnabled)
+    void fetchStripeConfig().then(({ enabled, error: configError }) => {
+      if (cancelled) return
+      if (configError) {
+        setStatus('unavailable')
+        return
+      }
+      setStatus(enabled ? 'ready' : 'unavailable')
     })
     return () => {
       cancelled = true
     }
   }, [])
-
-  if (!enabled) return null
 
   async function handlePay() {
     setBusy(true)
@@ -65,10 +68,26 @@ function StripePaySection({ stripe }: { stripe: StripePaymentOption }) {
         Pay securely online with card. You will be redirected to Stripe to complete payment of{' '}
         <strong>€{stripe.amountEur.toFixed(2)}</strong>.
       </p>
-      {error && <p className="auth-message is-error">{error}</p>}
-      <button type="button" className="membership-payment-stripe-btn" disabled={busy} onClick={() => void handlePay()}>
-        {busy ? 'Redirecting…' : `Pay €${stripe.amountEur.toFixed(2)} with Stripe`}
-      </button>
+      {status === 'loading' && <p className="membership-payment-intro">Loading card payment option…</p>}
+      {status === 'unavailable' && (
+        <p className="membership-payment-stripe-unavailable" role="note">
+          Card payment is not available on the server yet. Please use bank transfer or Revolut above, or try again
+          later after the club enables Stripe.
+        </p>
+      )}
+      {status === 'ready' && (
+        <>
+          {error && <p className="auth-message is-error">{error}</p>}
+          <button
+            type="button"
+            className="membership-payment-stripe-btn"
+            disabled={busy}
+            onClick={() => void handlePay()}
+          >
+            {busy ? 'Redirecting to Stripe…' : `Pay €${stripe.amountEur.toFixed(2)} with Stripe`}
+          </button>
+        </>
+      )}
     </div>
   )
 }
@@ -101,7 +120,7 @@ export function ClubPaymentMethodFields({ stripe }: { stripe?: StripePaymentOpti
           <p className="membership-payment-revolut-text">{CMUSC_PAYMENT_REVOLUT}</p>
         )}
       </div>
-      {stripe && <StripePaySection stripe={stripe} />}
+      {stripe ? <StripePaySection stripe={stripe} /> : null}
     </>
   )
 }

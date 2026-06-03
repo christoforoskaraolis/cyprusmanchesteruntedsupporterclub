@@ -2426,6 +2426,13 @@
   cursor: not-allowed;
 }
 
+.membership-payment-stripe-unavailable {
+  margin: 0.35rem 0 0;
+  font-size: 0.85rem;
+  line-height: 1.45;
+  color: #6b6b76;
+}
+
 .membership-payment-revolut-text {
   margin: 0;
   font-size: 0.875rem;
