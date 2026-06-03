@@ -15,6 +15,7 @@ import { membershipRouter } from './routes/membership.ts'
 import { adminUsersRouter } from './routes/adminUsers.ts'
 import { officialMembershipsRouter } from './routes/officialMemberships.ts'
 import { authRouter } from './routes/auth.ts'
+import { stripeRouter } from './routes/stripe.ts'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
@@ -36,6 +37,7 @@ app.use('/api/merchandise', merchandiseRouter)
 app.use('/api/membership', membershipRouter)
 app.use('/api/admin/users', adminUsersRouter)
 app.use('/api/official-memberships', officialMembershipsRouter)
+app.use('/api/stripe', stripeRouter)
 
 // In production we serve the built SPA from Vite dist/.
 if (existsSync(distIndexPath)) {

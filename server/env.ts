@@ -28,5 +28,6 @@ export const env = {
   smtpUser: read('SMTP_USER'),
   smtpPass: read('SMTP_PASS'),
   smtpFrom: read('SMTP_FROM'),
+  stripeSecretKey: read('STRIPE_SECRET_KEY'),
   isProduction: read('NODE_ENV') === 'production',
 }

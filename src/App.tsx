@@ -80,61 +80,10 @@ import {
   nextSeasonPeriodLabels,
   nextSeasonValidUntilIso,
 } from './lib/membershipSeason.ts'
+import { ClubPaymentMethodFields, ClubPaymentMethodsBlock } from './components/ClubPaymentMethods.tsx'
 
-/** Membership fee and payment details — replace IBAN / Revolut with your club’s real information. */
 const MEMBERSHIP_FEE_EUR = 15
-const CMUSC_PAYMENT_ACCOUNT_NAME = 'Charalambos Loizou & Demetris Nathanael'
-const CMUSC_PAYMENT_IBAN = 'LT70 3250 0300 6556 3775'
-const CMUSC_PAYMENT_SWIFT = 'REVOLT21'
-const CMUSC_PAYMENT_BANK_NAME = 'Revolut Bank UAB'
-const CMUSC_PAYMENT_BANK_ADDRESS = 'Konstitucijos ave. 21B, 08130, Vilnius, Lithuania'
-const CMUSC_PAYMENT_REVOLUT = 'https://revolut.me/clmanutd'
 const TICKET_RESERVATION_FEE_EUR = 20
-
-function ClubPaymentMethodFields() {
-  return (
-    <>
-      <div className="membership-payment-method">
-        <span className="membership-payment-method-label">Bank transfer (IBAN)</span>
-        <p className="membership-payment-beneficiary">{CMUSC_PAYMENT_ACCOUNT_NAME}</p>
-        <code className="membership-payment-iban" tabIndex={0}>
-          {CMUSC_PAYMENT_IBAN}
-        </code>
-        <p className="membership-payment-beneficiary">BIC / SWIFT: {CMUSC_PAYMENT_SWIFT}</p>
-        <p className="membership-payment-beneficiary">Bank: {CMUSC_PAYMENT_BANK_NAME}</p>
-        <p className="membership-payment-beneficiary">Address: {CMUSC_PAYMENT_BANK_ADDRESS}</p>
-      </div>
-      <div className="membership-payment-method">
-        <span className="membership-payment-method-label">Revolut</span>
-        {CMUSC_PAYMENT_REVOLUT.startsWith('http://') || CMUSC_PAYMENT_REVOLUT.startsWith('https://') ? (
-          <a
-            className="membership-payment-revolut-link"
-            href={CMUSC_PAYMENT_REVOLUT}
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            {CMUSC_PAYMENT_REVOLUT}
-          </a>
-        ) : (
-          <p className="membership-payment-revolut-text">{CMUSC_PAYMENT_REVOLUT}</p>
-        )}
-      </div>
-    </>
-  )
-}
-
-function ClubPaymentMethodsBlock({ heading, headingId }: { heading?: string; headingId?: string }) {
-  const id = headingId ?? 'club-payment-methods-heading'
-  return (
-    <div className="membership-payment-card merch-payment-card" role="region" aria-labelledby={id}>
-      <h3 id={id} className="membership-payment-title">
-        {heading ?? 'Payment'}
-      </h3>
-      <ClubPaymentMethodFields />
-    </div>
-  )
-}
-
 
 function formatLongDate(day: number, monthIndex: number, year: number): string {
   return new Date(year, monthIndex, day).toLocaleDateString('en-GB', {
@@ -437,6 +386,7 @@ type RenewMembershipModalProps = {
   currentSeasonEndLabel: string
   nextSeasonStartLabel: string
   nextSeasonEndLabel: string
+  applicationId: string
 }
 
 function RenewMembershipModal({
@@ -448,6 +398,7 @@ function RenewMembershipModal({
   currentSeasonEndLabel,
   nextSeasonStartLabel,
   nextSeasonEndLabel,
+  applicationId,
 }: RenewMembershipModalProps) {
   const [confirmedPayment, setConfirmedPayment] = useState(false)
 
@@ -496,10 +447,18 @@ function RenewMembershipModal({
             {nextSeasonStartLabel} – {nextSeasonEndLabel}).
           </p>
           <p className="membership-payment-intro">
-            Use one of the options below. Include your <strong>full name</strong> and{' '}
-            <strong>membership number</strong> in the payment reference so we can match your transfer.
+            Use bank transfer, Revolut, or Stripe below. For manual transfers, include your <strong>full name</strong> and{' '}
+            <strong>membership number</strong> in the payment reference.
           </p>
-          <ClubPaymentMethodFields />
+          <ClubPaymentMethodFields
+            stripe={{
+              amountEur: MEMBERSHIP_FEE_EUR,
+              description: 'Cyprus MU Supporters Club — membership renewal',
+              paymentKind: 'renewal',
+              referenceId: applicationId,
+              returnPath: '/mycmusc',
+            }}
+          />
         </div>
 
         <label className="membership-checkbox-row renewal-modal-checkbox">
@@ -509,7 +468,7 @@ function RenewMembershipModal({
             onChange={(ev) => setConfirmedPayment(ev.target.checked)}
           />
           <span>
-            I have paid or will pay the renewal fee using the details above and understand my renewal stays{' '}
+            I have paid or will pay the renewal fee (bank, Revolut, or Stripe) and understand my renewal stays{' '}
             <strong>pending</strong> until the committee confirms payment.
           </span>
         </label>
@@ -599,6 +558,7 @@ type TicketCompletionModalProps = {
   email: string
   membershipNumber: string
   officialMuMembershipId: string
+  ticketReference: string
 }
 
 function TicketCompletionModal({
@@ -612,6 +572,7 @@ function TicketCompletionModal({
   email,
   membershipNumber,
   officialMuMembershipId,
+  ticketReference,
 }: TicketCompletionModalProps) {
   const [confirmedPayment, setConfirmedPayment] = useState(false)
 
@@ -683,10 +644,18 @@ function TicketCompletionModal({
             <strong>Amount to reserve ticket:</strong> €{TICKET_RESERVATION_FEE_EUR}
           </p>
           <p className="membership-payment-intro">
-            Use one of the options below. Include your <strong>full name</strong> and <strong>membership number</strong>{' '}
-            in the payment reference so we can match your transfer.
+            Use bank transfer, Revolut, or Stripe below. For manual transfers, include your <strong>full name</strong> and{' '}
+            <strong>membership number</strong> in the payment reference.
           </p>
-          <ClubPaymentMethodFields />
+          <ClubPaymentMethodFields
+            stripe={{
+              amountEur: TICKET_RESERVATION_FEE_EUR,
+              description: `Match ticket reservation — ${ticketReference}`,
+              paymentKind: 'ticket',
+              referenceId: ticketReference,
+              returnPath: '/',
+            }}
+          />
         </div>
 
         <label className="membership-checkbox-row renewal-modal-checkbox">
@@ -695,7 +664,7 @@ function TicketCompletionModal({
             checked={confirmedPayment}
             onChange={(ev) => setConfirmedPayment(ev.target.checked)}
           />
-          <span>I confirm I will pay the ticket reservation amount with the details above.</span>
+          <span>I confirm I will pay the ticket reservation amount (bank, Revolut, or Stripe).</span>
         </label>
 
         <div className="renewal-modal-actions">
@@ -4377,6 +4346,9 @@ function App() {
           email={myProfile?.email ?? user?.email ?? '—'}
           membershipNumber={formatMembershipNumber(membershipRecord?.membershipNumber)}
           officialMuMembershipId={membershipRecord?.officialMuMembershipId?.trim() ?? ''}
+          ticketReference={
+            ticketFormFixture ? fixtureMatchKey(ticketFormFixture) : 'match-ticket'
+          }
         />
         <NewsDetailModal
           post={newsDetailPost}
@@ -4686,18 +4658,27 @@ function App() {
                     </label>
 
                     <p className="membership-payment-intro merch-checkout-pay-intro">
-                      Pay the <strong>items total</strong> using one of the options below. Include your{' '}
-                      <strong>full name</strong>
+                      Pay the <strong>items total</strong> using bank transfer, Revolut, or Stripe below. For manual
+                      transfers, include your <strong>full name</strong>
                       {membershipRecord?.membershipNumber ? (
                         <>
                           {' '}
                           and <strong>membership number {formatMembershipNumber(membershipRecord.membershipNumber)}</strong>
                         </>
                       ) : null}{' '}
-                      in the payment reference so we can match your transfer to this order.
+                      in the payment reference.
                     </p>
 
-                    <ClubPaymentMethodsBlock heading="Payment methods" headingId="merch-checkout-payment-heading" />
+                    <ClubPaymentMethodsBlock
+                      heading="Payment methods"
+                      headingId="merch-checkout-payment-heading"
+                      stripe={{
+                        amountEur: merchCartTotal,
+                        description: 'Cyprus MU Supporters Club — merchandise order',
+                        paymentKind: 'merchandise',
+                        returnPath: '/merchandise',
+                      }}
+                    />
 
                     {merchOrderMessage && (
                       <p className="auth-message is-error" role="status">
@@ -5077,6 +5058,7 @@ function App() {
                   currentSeasonEndLabel={formatValidUntilLabel(validUntilIso)}
                   nextSeasonStartLabel={nextLabels.start}
                   nextSeasonEndLabel={nextLabels.end}
+                  applicationId={membershipRecord.applicationId}
                 />
               </>
                 )
@@ -5110,12 +5092,19 @@ function App() {
                     {formatLongDate(31, 4, MEMBERSHIP_DISPLAY_END_YEAR)}).
                   </p>
                   <p className="membership-payment-intro">
-                    Pay using one of the options below while your application is reviewed. Include your{' '}
-                    <strong>full name</strong> and your <strong>application reference</strong> (
-                    <code className="mycmusc-inline-ref">{membershipRecord.applicationId}</code>) in the payment
-                    reference so we can match your transfer.
+                    Pay using bank transfer, Revolut, or Stripe below while your application is reviewed. For manual
+                    transfers, include your <strong>full name</strong> and application reference{' '}
+                    <code className="mycmusc-inline-ref">{membershipRecord.applicationId}</code>.
                   </p>
-                  <ClubPaymentMethodFields />
+                  <ClubPaymentMethodFields
+                    stripe={{
+                      amountEur: MEMBERSHIP_FEE_EUR,
+                      description: 'Cyprus MU Supporters Club — membership fee',
+                      paymentKind: 'membership',
+                      referenceId: membershipRecord.applicationId,
+                      returnPath: '/mycmusc',
+                    }}
+                  />
                 </div>
 
                 <p className="mycmusc-reg-hint membership-pending-footnote" role="note">
@@ -5243,12 +5232,19 @@ function App() {
                         <>
                           <h2 className="mycmusc-profile-card-title">Payment details</h2>
                           <p className="membership-payment-intro">
-                            Your request is submitted. To proceed, pay <strong>€{price.toFixed(2)}</strong> with the details
-                            below and include your full name in payment reference.
+                            Your request is submitted. Pay <strong>€{price.toFixed(2)}</strong> via bank transfer, Revolut,
+                            or Stripe below. For manual transfers, include your full name in the payment reference.
                           </p>
                           <ClubPaymentMethodsBlock
                             heading="Official membership payment methods"
                             headingId="official-membership-payment-heading"
+                            stripe={{
+                              amountEur: price,
+                              description: offer ? `Official MU membership — ${offer.title}` : 'Official MU membership',
+                              paymentKind: 'official_membership',
+                              referenceId: officialPaymentOfferId ?? undefined,
+                              returnPath: '/official-memberships',
+                            }}
                           />
                         </>
                       )

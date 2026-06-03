@@ -2393,6 +2393,39 @@
   color: var(--mu-red-hover);
 }
 
+.membership-payment-method--stripe {
+  margin-top: 0.25rem;
+  padding-top: 0.85rem;
+  border-top: 1px dashed var(--border);
+}
+
+.membership-payment-stripe-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  margin-top: 0.35rem;
+  padding: 0.7rem 1rem;
+  border: none;
+  border-radius: 10px;
+  font: inherit;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #fff;
+  background: #635bff;
+  cursor: pointer;
+  transition: background 0.2s ease, opacity 0.2s ease;
+}
+
+.membership-payment-stripe-btn:hover:not(:disabled) {
+  background: #4f46e5;
+}
+
+.membership-payment-stripe-btn:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
 .membership-payment-revolut-text {
   margin: 0;
   font-size: 0.875rem;
