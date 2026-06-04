@@ -2715,7 +2715,6 @@ type ActivePage =
   | 'mycmusc'
   | 'tickets'
   | 'merchandise'
-  | 'official-memberships'
 
 function pageFromPath(pathname: string): ActivePage {
   const clean = pathname.replace(/\/+$/, '') || '/'
@@ -2726,7 +2725,7 @@ function pageFromPath(pathname: string): ActivePage {
   if (clean === '/mycmusc') return 'mycmusc'
   if (clean === '/tickets') return 'tickets'
   if (clean === '/merchandise') return 'merchandise'
-  if (clean === '/official-memberships') return 'official-memberships'
+  if (clean === '/official-memberships') return 'mycmusc'
   return 'home'
 }
 
@@ -2738,7 +2737,6 @@ function pathFromPage(page: ActivePage): string {
   if (page === 'mycmusc') return '/mycmusc'
   if (page === 'tickets') return '/tickets'
   if (page === 'merchandise') return '/merchandise'
-  if (page === 'official-memberships') return '/official-memberships'
   return '/'
 }
 
@@ -2986,10 +2984,6 @@ function App() {
   const [adminOfficialRequests, setAdminOfficialRequests] = useState<AdminOfficialMembershipRequest[]>([])
   const [adminOfficialRequestsLoading, setAdminOfficialRequestsLoading] = useState(false)
   const [myOfficialRequests, setMyOfficialRequests] = useState<OfficialMembershipRequest[]>([])
-  const [selectedOfficialOfferId, setSelectedOfficialOfferId] = useState<string>('')
-  const [officialRequestSubmitting, setOfficialRequestSubmitting] = useState(false)
-  const [officialRequestMessage, setOfficialRequestMessage] = useState<string | null>(null)
-  const [officialPaymentOfferId, setOfficialPaymentOfferId] = useState<string | null>(null)
   const [newsPosts, setNewsPosts] = useState<NewsPost[]>([])
   const [newsLoading, setNewsLoading] = useState(false)
   const [newsDetailPost, setNewsDetailPost] = useState<NewsPost | null>(null)
@@ -5272,31 +5266,6 @@ function App() {
                   )}
                 </div>
 
-                <p className="section-lead mycmusc-active-footnote">
-                  Your Cyprus membership is active. Get or renew your official Manchester United membership from
-                  here.
-                </p>
-                {officialOffersLoading ? (
-                  <p className="section-lead merch-shelf-msg merch-shelf-msg--loading">Loading official memberships…</p>
-                ) : officialOffers.length === 0 ? (
-                  <p className="section-lead merch-shelf-msg merch-shelf-msg--empty">
-                    No official membership options available yet. Please check again soon.
-                  </p>
-                ) : (
-                  <div className="mycmusc-reg-actions mycmusc-reg-actions--after-cyprus">
-                    <button
-                      type="button"
-                      className="mycmusc-reg-btn mycmusc-reg-btn--secondary"
-                      onClick={() => {
-                        setOfficialRequestMessage(null)
-                        openPage('official-memberships')
-                      }}
-                    >
-                      Get or Renew your Official Manchester United Membership from here
-                    </button>
-                  </div>
-                )}
-
                 <RenewMembershipModal
                   open={renewalModalOpen}
                   onClose={() => {
@@ -5357,16 +5326,7 @@ function App() {
                 />
 
                 <p className="mycmusc-reg-hint membership-pending-footnote" role="note">
-                  Once the committee activates your Cyprus club membership, you will <strong>unlock</strong>{' '}
-                  {pendingOfficialRequest ? (
-                    <>
-                      processing of your official Manchester United membership request,{' '}
-                    </>
-                  ) : (
-                    <>
-                      official Manchester United membership registration,{' '}
-                    </>
-                  )}
+                  Once the committee activates your Cyprus club membership, you will unlock the benefits for{' '}
                   <strong>match ticket requests</strong>, <strong>Merchandise</strong>, and other member-only areas of
                   the app.
                 </p>
@@ -5401,137 +5361,7 @@ function App() {
                   >
                     Cyprus MU Supporters Club Membership Registration
                   </button>
-                  <button
-                    type="button"
-                    className="mycmusc-reg-btn mycmusc-reg-btn--secondary"
-                    disabled
-                    title="Complete Cyprus MU Supporters Club membership first"
-                  >
-                    Register for Official Man Utd Membership Registration
-                  </button>
                 </div>
-              </>
-            )}
-          </div>
-        )}
-        {activePage === 'official-memberships' && (
-          <div className="section-page mycmusc-page">
-            <h1 className="section-title">Official Manchester United Membership</h1>
-            <p className="section-lead">Select a membership option, then request it with the button below.</p>
-            {officialOffersLoading ? (
-              <p className="section-lead merch-shelf-msg merch-shelf-msg--loading">Loading official memberships…</p>
-            ) : officialOffers.length === 0 ? (
-              <p className="section-lead merch-shelf-msg merch-shelf-msg--empty">No official membership options yet.</p>
-            ) : (
-              <>
-                <ul className="merch-grid">
-                  {officialOffers.map((offer) => {
-                    const selected = selectedOfficialOfferId === offer.id
-                    return (
-                      <li key={offer.id} className="merch-card">
-                        <div className="merch-card-visual">
-                          {offer.imageUrl ? (
-                            <img src={offer.imageUrl} alt="" className="merch-card-img" />
-                          ) : (
-                            <div className="merch-card-placeholder" aria-hidden>
-                              No photo
-                            </div>
-                          )}
-                        </div>
-                        <div className="merch-card-body">
-                          <h2 className="merch-card-title">{offer.title}</h2>
-                          <p className="merch-card-price">€{offer.priceEur.toFixed(2)}</p>
-                          <button
-                            type="button"
-                            className={`mycmusc-reg-btn ${selected ? 'mycmusc-reg-btn--primary' : 'mycmusc-reg-btn--secondary'}`}
-                            onClick={() => setSelectedOfficialOfferId(offer.id)}
-                          >
-                            {selected ? 'Selected' : 'Select option'}
-                          </button>
-                        </div>
-                      </li>
-                    )
-                  })}
-                </ul>
-
-                {officialRequestMessage && (
-                  <p
-                    className={`auth-message ${officialRequestMessage.startsWith('Request submitted') ? 'is-success' : 'is-error'}`}
-                    role="status"
-                  >
-                    {officialRequestMessage}
-                  </p>
-                )}
-
-                <button
-                  type="button"
-                  className="mycmusc-reg-btn mycmusc-reg-btn--primary"
-                  disabled={!selectedOfficialOfferId || officialRequestSubmitting}
-                  onClick={async () => {
-                    if (!selectedOfficialOfferId) return
-                    setOfficialRequestSubmitting(true)
-                    setOfficialRequestMessage(null)
-                    const { error } = await createOfficialMembershipRequest(selectedOfficialOfferId)
-                    setOfficialRequestSubmitting(false)
-                    if (error) {
-                      setOfficialRequestMessage(error.message)
-                      return
-                    }
-                    await loadMyOfficialRequests()
-                    setOfficialRequestMessage('Request submitted successfully. Admin will review it.')
-                    setOfficialPaymentOfferId(selectedOfficialOfferId)
-                  }}
-                >
-                  {officialRequestSubmitting ? 'Submitting…' : 'Request selected membership'}
-                </button>
-
-                {officialPaymentOfferId && (
-                  <div className="mycmusc-profile-card" style={{ marginTop: '1rem' }}>
-                    {(() => {
-                      const offer = officialOffers.find((o) => o.id === officialPaymentOfferId)
-                      const price = offer?.priceEur ?? MEMBERSHIP_FEE_EUR
-                      return (
-                        <>
-                          <h2 className="mycmusc-profile-card-title">Payment details</h2>
-                          <p className="membership-payment-intro">
-                            Your request is submitted. Pay <strong>€{price.toFixed(2)}</strong> via bank transfer, Revolut,
-                            or Stripe below. For manual transfers, include your full name in the payment reference.
-                          </p>
-                          <ClubPaymentMethodsBlock
-                            heading="Official membership payment methods"
-                            headingId="official-membership-payment-heading"
-                            stripe={{
-                              amountEur: price,
-                              description: offer ? `Official MU membership — ${offer.title}` : 'Official MU membership',
-                              paymentKind: 'official_membership',
-                              referenceId: officialPaymentOfferId ?? undefined,
-                              returnPath: '/official-memberships',
-                            }}
-                          />
-                        </>
-                      )
-                    })()}
-                  </div>
-                )}
-
-                {myOfficialRequests.length > 0 && (
-                  <section className="merch-orders" aria-labelledby="official-requests-heading">
-                    <h2 id="official-requests-heading" className="merch-orders-title">
-                      Your membership requests
-                    </h2>
-                    <ul className="merch-orders-list">
-                      {myOfficialRequests.map((row) => (
-                        <li key={row.id} className="merch-order-card">
-                          <div className="merch-order-head">
-                            <strong>Request {row.id.slice(0, 8).toUpperCase()}</strong>
-                            <span className={`fixtures-ticket-pill fixtures-ticket-pill--${row.status}`}>{row.status}</span>
-                          </div>
-                          <p className="merch-order-meta">Submitted: {new Date(row.requestedAt).toLocaleString('en-GB')}</p>
-                        </li>
-                      ))}
-                    </ul>
-                  </section>
-                )}
               </>
             )}
           </div>
