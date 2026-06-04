@@ -19,6 +19,7 @@ import {
   fetchPendingRenewalRequests,
   formatMembershipNumber,
   formatFamilyRelationship,
+  formatOfficialMuMembershipId,
   formatOfficialMuMembershipStatus,
   FAMILY_RELATIONSHIP_OPTIONS,
   generateApplicationId,
@@ -5433,9 +5434,7 @@ function App() {
                       <span
                         className={`mycmusc-summary-value ${membershipRecord.officialMuMembershipId?.trim() ? 'mycmusc-summary-value--mono' : ''}`}
                       >
-                        {membershipRecord.officialMuMembershipId?.trim()
-                          ? membershipRecord.officialMuMembershipId.trim()
-                          : 'Not on file — use Edit details to add your number'}
+                        {formatOfficialMuMembershipId(membershipRecord.officialMuMembershipId)}
                       </span>
                     </div>
                     <div className="mycmusc-summary-row">
@@ -5601,10 +5600,34 @@ function App() {
                               {formatFamilyRelationship(fm.familyRelationship, fm.familyRelationshipOther)}
                               {' · '}
                               Ref <code className="mycmusc-inline-ref">{fm.applicationId}</code>
-                              {fm.status === 'active' && fm.membershipNumber != null
-                                ? ` · No. ${formatMembershipNumber(fm.membershipNumber)}`
-                                : ''}
                             </small>
+                            {fm.status === 'active' && fm.membershipNumber != null && (
+                              <p className="mycmusc-family-member-number">
+                                <span className="mycmusc-member-number-label">Membership ID</span>{' '}
+                                <strong className="mycmusc-member-number-value">
+                                  {formatMembershipNumber(fm.membershipNumber)}
+                                </strong>
+                              </p>
+                            )}
+                            <div
+                              className="mycmusc-membership-summary mycmusc-family-official-summary"
+                              aria-label={`Official membership for ${fm.firstName} ${fm.lastName}`}
+                            >
+                              <div className="mycmusc-summary-row">
+                                <span className="mycmusc-summary-label">Official Man Utd ID number</span>
+                                <span
+                                  className={`mycmusc-summary-value ${fm.officialMuMembershipId?.trim() ? 'mycmusc-summary-value--mono' : ''}`}
+                                >
+                                  {formatOfficialMuMembershipId(fm.officialMuMembershipId)}
+                                </span>
+                              </div>
+                              <div className="mycmusc-summary-row">
+                                <span className="mycmusc-summary-label">Official MU status</span>
+                                <span className="mycmusc-summary-value">
+                                  {formatOfficialMuMembershipStatus(fm.officialMuMembershipStatus)}
+                                </span>
+                              </div>
+                            </div>
                             <div className="mycmusc-family-list-actions">
                               <button
                                 type="button"
@@ -5778,22 +5801,6 @@ function App() {
                                   </div>
                                 ) : (
                                   <>
-                                    <div className="mycmusc-membership-summary" aria-label="Official membership ID">
-                                      <div className="mycmusc-summary-row">
-                                        <span className="mycmusc-summary-label">Official Man Utd ID</span>
-                                        <span
-                                          className={`mycmusc-summary-value ${fm.officialMuMembershipId?.trim() ? 'mycmusc-summary-value--mono' : ''}`}
-                                        >
-                                          {fm.officialMuMembershipId?.trim() || 'Not on file'}
-                                        </span>
-                                      </div>
-                                      <div className="mycmusc-summary-row">
-                                        <span className="mycmusc-summary-label">Official MU status</span>
-                                        <span className="mycmusc-summary-value">
-                                          {formatOfficialMuMembershipStatus(fm.officialMuMembershipStatus)}
-                                        </span>
-                                      </div>
-                                    </div>
                                     <dl className="mycmusc-profile-dl">
                                       <div>
                                         <dt>Relationship</dt>
@@ -5827,11 +5834,15 @@ function App() {
                                       </div>
                                       {fm.status === 'active' && (
                                         <div>
-                                          <dt>Membership no.</dt>
+                                          <dt>Membership ID</dt>
                                           <dd>
-                                            {fm.membershipNumber != null
-                                              ? formatMembershipNumber(fm.membershipNumber)
-                                              : 'Pending assignment'}
+                                            {fm.membershipNumber != null ? (
+                                              <strong className="mycmusc-member-number-value">
+                                                {formatMembershipNumber(fm.membershipNumber)}
+                                              </strong>
+                                            ) : (
+                                              'Pending assignment'
+                                            )}
                                           </dd>
                                         </div>
                                       )}

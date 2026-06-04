@@ -2636,6 +2636,17 @@
   margin-bottom: 0.25rem;
 }
 
+.mycmusc-family-member-number {
+  margin: 0.35rem 0 0;
+  font-size: 0.9375rem;
+  line-height: 1.35;
+}
+
+.mycmusc-family-official-summary {
+  margin: 0.5rem 0 0;
+  padding: 0.65rem 0.75rem;
+}
+
 .mycmusc-family-list-actions {
   display: flex;
   flex-wrap: wrap;

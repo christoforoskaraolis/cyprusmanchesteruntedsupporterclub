@@ -37,6 +37,11 @@ export function formatOfficialMuMembershipStatus(
   return '—'
 }
 
+export function formatOfficialMuMembershipId(id: string | null | undefined): string {
+  const trimmed = (id ?? '').trim()
+  return trimmed || '—'
+}
+
 export type OfficialMuMembershipFormStatus = OfficialMuMembershipStatus | ''
 
 export function parseOfficialMuMembershipFields(
