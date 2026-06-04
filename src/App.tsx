@@ -30,6 +30,7 @@ import {
   setApplicationStatus,
   updateApplicationMemberId,
   updateApplicationMembershipNumber,
+  updateFamilyMemberDetails,
   updateMyProfileDetails,
 } from './lib/membershipApi.ts'
 import { fetchCachedFixtures, syncFixturesFromManutd, type UpcomingFixture } from './lib/fixturesApi.ts'
@@ -2995,6 +2996,21 @@ function formatDateOfBirthDisplay(raw: string): string {
   return `${dd}-${month}-${yyyy}`
 }
 
+/** Normalise stored DOB to yyyy-mm-dd for date inputs. */
+function dateOfBirthToDateInputValue(raw: string): string {
+  const trimmed = raw.trim()
+  if (!trimmed) return ''
+  const parsed = parseDateOfBirthInput(trimmed)
+  if (parsed) {
+    const y = parsed.getFullYear()
+    const m = String(parsed.getMonth() + 1).padStart(2, '0')
+    const d = String(parsed.getDate()).padStart(2, '0')
+    return `${y}-${m}-${d}`
+  }
+  const iso = /^(\d{4}-\d{2}-\d{2})/.exec(trimmed)
+  return iso ? iso[1] : ''
+}
+
 function isOldTraffordHomeFixture(f: UpcomingFixture): boolean {
   if (!f.home) return false
   const venue = f.venue.toLowerCase()
@@ -3079,6 +3095,23 @@ function App() {
   const [showFamilyMemberForm, setShowFamilyMemberForm] = useState(false)
   const [familyMembers, setFamilyMembers] = useState<MemberRegistryEntry[]>([])
   const [familyPendingRecord, setFamilyPendingRecord] = useState<MemberRegistryEntry | null>(null)
+  const [familyDetailApplicationId, setFamilyDetailApplicationId] = useState<string | null>(null)
+  const [familyEditApplicationId, setFamilyEditApplicationId] = useState<string | null>(null)
+  const [familyEditSaving, setFamilyEditSaving] = useState(false)
+  const [familyEditError, setFamilyEditError] = useState<string | null>(null)
+  const [familyEditFirstName, setFamilyEditFirstName] = useState('')
+  const [familyEditLastName, setFamilyEditLastName] = useState('')
+  const [familyEditMobilePhone, setFamilyEditMobilePhone] = useState('')
+  const [familyEditDateOfBirth, setFamilyEditDateOfBirth] = useState('')
+  const [familyEditAddress, setFamilyEditAddress] = useState('')
+  const [familyEditArea, setFamilyEditArea] = useState('')
+  const [familyEditPostalCode, setFamilyEditPostalCode] = useState('')
+  const [familyEditCity, setFamilyEditCity] = useState('')
+  const [familyEditCountry, setFamilyEditCountry] = useState('')
+  const [familyEditRelationship, setFamilyEditRelationship] = useState('')
+  const [familyEditRelationshipOther, setFamilyEditRelationshipOther] = useState('')
+  const [familyEditOfficialMuId, setFamilyEditOfficialMuId] = useState('')
+  const [familyEditOfficialMuStatus, setFamilyEditOfficialMuStatus] = useState<OfficialMuMembershipFormStatus>('')
   const [ticketFormOpen, setTicketFormOpen] = useState(false)
   const [ticketFormFixture, setTicketFormFixture] = useState<UpcomingFixture | null>(null)
   const [ticketFormSubmitting, setTicketFormSubmitting] = useState(false)
@@ -3795,6 +3828,9 @@ function App() {
       setShowCyprusMembershipForm(false)
       setShowFamilyMemberForm(false)
       setFamilyPendingRecord(null)
+      setFamilyDetailApplicationId(null)
+      setFamilyEditApplicationId(null)
+      setFamilyEditError(null)
     }
   }, [activePage])
 
@@ -3990,6 +4026,107 @@ function App() {
     if (error) return setDetailsError(error.message)
     setDetailsEditOpen(false)
     await refreshMyMembership()
+  }
+
+  function populateFamilyEditFromRecord(fm: MemberRegistryEntry) {
+    setFamilyEditFirstName(fm.firstName)
+    setFamilyEditLastName(fm.lastName)
+    setFamilyEditMobilePhone(fm.mobilePhone)
+    setFamilyEditDateOfBirth(dateOfBirthToDateInputValue(fm.dateOfBirth))
+    setFamilyEditAddress(fm.address)
+    setFamilyEditArea(fm.area)
+    setFamilyEditPostalCode(fm.postalCode)
+    setFamilyEditCity(fm.city)
+    setFamilyEditCountry(fm.country)
+    setFamilyEditRelationship(fm.familyRelationship ?? '')
+    setFamilyEditRelationshipOther(fm.familyRelationshipOther ?? '')
+    setFamilyEditOfficialMuId(fm.officialMuMembershipId ?? '')
+    setFamilyEditOfficialMuStatus(
+      fm.officialMuMembershipStatus === 'activated' || fm.officialMuMembershipStatus === 'pending'
+        ? fm.officialMuMembershipStatus
+        : '',
+    )
+  }
+
+  function toggleFamilyDetail(fm: MemberRegistryEntry) {
+    if (familyDetailApplicationId === fm.applicationId) {
+      setFamilyDetailApplicationId(null)
+      setFamilyEditApplicationId(null)
+      setFamilyEditError(null)
+      return
+    }
+    setFamilyDetailApplicationId(fm.applicationId)
+    setFamilyEditApplicationId(null)
+    setFamilyEditError(null)
+  }
+
+  function openFamilyEdit(fm: MemberRegistryEntry) {
+    setFamilyDetailApplicationId(fm.applicationId)
+    setFamilyEditApplicationId(fm.applicationId)
+    setFamilyEditError(null)
+    populateFamilyEditFromRecord(fm)
+  }
+
+  async function saveFamilyMemberDetails() {
+    const applicationId = familyEditApplicationId
+    if (!applicationId || !membershipRecord) return
+    setFamilyEditError(null)
+    if (!familyEditFirstName.trim() || !familyEditLastName.trim()) {
+      return setFamilyEditError('First and last name are required.')
+    }
+    if (!familyEditRelationship) {
+      return setFamilyEditError('Please select the family relationship.')
+    }
+    if (familyEditRelationship === 'other' && !familyEditRelationshipOther.trim()) {
+      return setFamilyEditError('Please describe the relationship when you select Other.')
+    }
+    if (
+      !familyEditMobilePhone.trim() ||
+      !familyEditDateOfBirth ||
+      !familyEditAddress.trim() ||
+      !familyEditArea.trim() ||
+      !familyEditPostalCode.trim() ||
+      !familyEditCity.trim() ||
+      !familyEditCountry.trim()
+    ) {
+      return setFamilyEditError('Please complete all required contact and address fields.')
+    }
+    const dob = parseDateOfBirthInput(familyEditDateOfBirth)
+    if (!dob) return setFamilyEditError('Please enter a valid date of birth.')
+    const parsedMu = parseOfficialMuMembershipFields(familyEditOfficialMuId, familyEditOfficialMuStatus)
+    if ('error' in parsedMu) return setFamilyEditError(parsedMu.error)
+
+    setFamilyEditSaving(true)
+    const { error } = await updateFamilyMemberDetails(applicationId, {
+      firstName: familyEditFirstName.trim(),
+      lastName: familyEditLastName.trim(),
+      mobilePhone: familyEditMobilePhone.trim(),
+      dateOfBirth: familyEditDateOfBirth,
+      address: familyEditAddress.trim(),
+      area: familyEditArea.trim(),
+      postalCode: familyEditPostalCode.trim(),
+      city: familyEditCity.trim(),
+      country: familyEditCountry.trim(),
+      familyRelationship: familyEditRelationship,
+      familyRelationshipOther:
+        familyEditRelationship === 'other' ? familyEditRelationshipOther.trim() : null,
+      officialMuMembershipId: parsedMu.officialMuMembershipId,
+      officialMuMembershipStatus: parsedMu.officialMuMembershipStatus,
+    })
+    setFamilyEditSaving(false)
+    if (error) return setFamilyEditError(error.message)
+
+    setFamilyEditApplicationId(null)
+    const { rows, error: reloadErr } = await fetchMyFamilyMembers(membershipRecord.applicationId)
+    if (!reloadErr) {
+      setFamilyMembers(rows)
+      if (familyPendingRecord) {
+        const updated = rows.find((r) => r.applicationId === familyPendingRecord.applicationId)
+        if (updated) setFamilyPendingRecord(updated)
+      }
+    } else {
+      await refreshMyMembership()
+    }
   }
 
   function resetForm() {
@@ -5427,6 +5564,9 @@ function App() {
                       className="mycmusc-family-add-btn"
                       onClick={() => {
                         setFamilyPendingRecord(null)
+                        setFamilyDetailApplicationId(null)
+                        setFamilyEditApplicationId(null)
+                        setFamilyEditError(null)
                         setShowFamilyMemberForm(true)
                       }}
                     >
@@ -5444,36 +5584,284 @@ function App() {
                     <p className="section-lead merch-shelf-msg merch-shelf-msg--empty">No family members added yet.</p>
                   ) : (
                     <ul className="mycmusc-family-list">
-                      {familyMembers.map((fm) => (
-                        <li key={fm.applicationId} className="mycmusc-family-list-item">
-                          <div>
-                            <strong>
-                              {fm.firstName} {fm.lastName}
-                            </strong>
-                            <span className={`fixtures-ticket-pill fixtures-ticket-pill--${fm.status}`}>
-                              {fm.status}
-                            </span>
-                          </div>
-                          <small>
-                            {formatFamilyRelationship(fm.familyRelationship, fm.familyRelationshipOther)}
-                            {' · '}
-                            Ref <code className="mycmusc-inline-ref">{fm.applicationId}</code>
-                            {fm.status === 'active' && fm.membershipNumber != null
-                              ? ` · No. ${formatMembershipNumber(fm.membershipNumber)}`
-                              : ''}
-                          </small>
-                          {fm.status === 'pending' && (
-                            <button
-                              type="button"
-                              className="mycmusc-reg-btn mycmusc-reg-btn--secondary"
-                              style={{ marginTop: '0.5rem' }}
-                              onClick={() => setFamilyPendingRecord(fm)}
-                            >
-                              View payment details
-                            </button>
-                          )}
-                        </li>
-                      ))}
+                      {familyMembers.map((fm) => {
+                        const detailOpen = familyDetailApplicationId === fm.applicationId
+                        const editing = familyEditApplicationId === fm.applicationId
+                        return (
+                          <li key={fm.applicationId} className="mycmusc-family-list-item">
+                            <div>
+                              <strong>
+                                {fm.firstName} {fm.lastName}
+                              </strong>
+                              <span className={`fixtures-ticket-pill fixtures-ticket-pill--${fm.status}`}>
+                                {fm.status}
+                              </span>
+                            </div>
+                            <small>
+                              {formatFamilyRelationship(fm.familyRelationship, fm.familyRelationshipOther)}
+                              {' · '}
+                              Ref <code className="mycmusc-inline-ref">{fm.applicationId}</code>
+                              {fm.status === 'active' && fm.membershipNumber != null
+                                ? ` · No. ${formatMembershipNumber(fm.membershipNumber)}`
+                                : ''}
+                            </small>
+                            <div className="mycmusc-family-list-actions">
+                              <button
+                                type="button"
+                                className="mycmusc-family-action-btn"
+                                aria-expanded={detailOpen}
+                                onClick={() => toggleFamilyDetail(fm)}
+                              >
+                                {detailOpen ? 'Hide details' : 'More info'}
+                              </button>
+                              <button
+                                type="button"
+                                className="mycmusc-family-action-btn mycmusc-family-action-btn--primary"
+                                onClick={() => openFamilyEdit(fm)}
+                              >
+                                Edit
+                              </button>
+                              {fm.status === 'pending' && (
+                                <button
+                                  type="button"
+                                  className="mycmusc-family-action-btn"
+                                  onClick={() => setFamilyPendingRecord(fm)}
+                                >
+                                  View payment
+                                </button>
+                              )}
+                            </div>
+                            {detailOpen && (
+                              <div className="mycmusc-family-detail" aria-label={`Details for ${fm.firstName} ${fm.lastName}`}>
+                                {editing ? (
+                                  <div className="mycmusc-reg-form">
+                                    {familyEditError && <p className="auth-message is-error">{familyEditError}</p>}
+                                    <div className="merch-admin-grid">
+                                      <label className="auth-field membership-field">
+                                        <span className="auth-label">First name</span>
+                                        <input
+                                          className="auth-input"
+                                          value={familyEditFirstName}
+                                          onChange={(e) => setFamilyEditFirstName(e.target.value)}
+                                        />
+                                      </label>
+                                      <label className="auth-field membership-field">
+                                        <span className="auth-label">Last name</span>
+                                        <input
+                                          className="auth-input"
+                                          value={familyEditLastName}
+                                          onChange={(e) => setFamilyEditLastName(e.target.value)}
+                                        />
+                                      </label>
+                                    </div>
+                                    <label className="auth-field membership-field">
+                                      <span className="auth-label">Relationship to you</span>
+                                      <select
+                                        className="auth-input"
+                                        value={familyEditRelationship}
+                                        onChange={(e) => {
+                                          setFamilyEditRelationship(e.target.value)
+                                          if (e.target.value !== 'other') setFamilyEditRelationshipOther('')
+                                        }}
+                                      >
+                                        <option value="">Select relationship…</option>
+                                        {FAMILY_RELATIONSHIP_OPTIONS.map((opt) => (
+                                          <option key={opt.value} value={opt.value}>
+                                            {opt.label}
+                                          </option>
+                                        ))}
+                                      </select>
+                                    </label>
+                                    {familyEditRelationship === 'other' && (
+                                      <label className="auth-field membership-field">
+                                        <span className="auth-label">Please specify</span>
+                                        <input
+                                          className="auth-input"
+                                          value={familyEditRelationshipOther}
+                                          onChange={(e) => setFamilyEditRelationshipOther(e.target.value)}
+                                        />
+                                      </label>
+                                    )}
+                                    <label className="auth-field membership-field">
+                                      <span className="auth-label">Mobile</span>
+                                      <input
+                                        className="auth-input"
+                                        type="tel"
+                                        value={familyEditMobilePhone}
+                                        onChange={(e) => setFamilyEditMobilePhone(e.target.value)}
+                                      />
+                                    </label>
+                                    <label className="auth-field membership-field">
+                                      <span className="auth-label">Date of birth</span>
+                                      <input
+                                        className="auth-input membership-input-date"
+                                        type="date"
+                                        max={new Date().toISOString().slice(0, 10)}
+                                        value={familyEditDateOfBirth}
+                                        onChange={(e) => setFamilyEditDateOfBirth(e.target.value)}
+                                      />
+                                    </label>
+                                    <label className="auth-field membership-field">
+                                      <span className="auth-label">Address</span>
+                                      <input
+                                        className="auth-input"
+                                        value={familyEditAddress}
+                                        onChange={(e) => setFamilyEditAddress(e.target.value)}
+                                      />
+                                    </label>
+                                    <div className="merch-admin-grid">
+                                      <label className="auth-field membership-field">
+                                        <span className="auth-label">Area</span>
+                                        <input
+                                          className="auth-input"
+                                          value={familyEditArea}
+                                          onChange={(e) => setFamilyEditArea(e.target.value)}
+                                        />
+                                      </label>
+                                      <label className="auth-field membership-field">
+                                        <span className="auth-label">Postal code</span>
+                                        <input
+                                          className="auth-input"
+                                          value={familyEditPostalCode}
+                                          onChange={(e) => setFamilyEditPostalCode(e.target.value)}
+                                        />
+                                      </label>
+                                    </div>
+                                    <div className="merch-admin-grid">
+                                      <label className="auth-field membership-field">
+                                        <span className="auth-label">City</span>
+                                        <input
+                                          className="auth-input"
+                                          value={familyEditCity}
+                                          onChange={(e) => setFamilyEditCity(e.target.value)}
+                                        />
+                                      </label>
+                                      <label className="auth-field membership-field">
+                                        <span className="auth-label">Country</span>
+                                        <input
+                                          className="auth-input"
+                                          value={familyEditCountry}
+                                          onChange={(e) => setFamilyEditCountry(e.target.value)}
+                                        />
+                                      </label>
+                                    </div>
+                                    <OfficialMuMembershipFields
+                                      membershipId={familyEditOfficialMuId}
+                                      onMembershipIdChange={setFamilyEditOfficialMuId}
+                                      status={familyEditOfficialMuStatus}
+                                      onStatusChange={setFamilyEditOfficialMuStatus}
+                                      idInputName={`family-official-mu-id-${fm.applicationId}`}
+                                      statusHint="Optional official MU membership for this family member."
+                                    />
+                                    <div className="renewal-modal-actions">
+                                      <button
+                                        type="button"
+                                        className="mycmusc-reg-btn mycmusc-reg-btn--secondary"
+                                        onClick={() => {
+                                          setFamilyEditApplicationId(null)
+                                          setFamilyEditError(null)
+                                          populateFamilyEditFromRecord(fm)
+                                        }}
+                                        disabled={familyEditSaving}
+                                      >
+                                        Cancel
+                                      </button>
+                                      <button
+                                        type="button"
+                                        className="mycmusc-reg-btn mycmusc-reg-btn--primary"
+                                        onClick={() => void saveFamilyMemberDetails()}
+                                        disabled={familyEditSaving}
+                                      >
+                                        {familyEditSaving ? 'Saving…' : 'Save details'}
+                                      </button>
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <>
+                                    <div className="mycmusc-membership-summary" aria-label="Official membership ID">
+                                      <div className="mycmusc-summary-row">
+                                        <span className="mycmusc-summary-label">Official Man Utd ID</span>
+                                        <span
+                                          className={`mycmusc-summary-value ${fm.officialMuMembershipId?.trim() ? 'mycmusc-summary-value--mono' : ''}`}
+                                        >
+                                          {fm.officialMuMembershipId?.trim() || 'Not on file'}
+                                        </span>
+                                      </div>
+                                      <div className="mycmusc-summary-row">
+                                        <span className="mycmusc-summary-label">Official MU status</span>
+                                        <span className="mycmusc-summary-value">
+                                          {formatOfficialMuMembershipStatus(fm.officialMuMembershipStatus)}
+                                        </span>
+                                      </div>
+                                    </div>
+                                    <dl className="mycmusc-profile-dl">
+                                      <div>
+                                        <dt>Relationship</dt>
+                                        <dd>
+                                          {formatFamilyRelationship(fm.familyRelationship, fm.familyRelationshipOther)}
+                                        </dd>
+                                      </div>
+                                      <div>
+                                        <dt>Mobile</dt>
+                                        <dd>{fm.mobilePhone}</dd>
+                                      </div>
+                                      <div>
+                                        <dt>Date of birth</dt>
+                                        <dd>{formatDateOfBirthDisplay(fm.dateOfBirth) || '—'}</dd>
+                                      </div>
+                                      <div>
+                                        <dt>Address</dt>
+                                        <dd>
+                                          {fm.address}
+                                          <br />
+                                          {fm.area}, {fm.postalCode}
+                                          <br />
+                                          {fm.city}, {fm.country}
+                                        </dd>
+                                      </div>
+                                      <div>
+                                        <dt>Application reference</dt>
+                                        <dd>
+                                          <code className="mycmusc-inline-ref">{fm.applicationId}</code>
+                                        </dd>
+                                      </div>
+                                      {fm.status === 'active' && (
+                                        <div>
+                                          <dt>Membership no.</dt>
+                                          <dd>
+                                            {fm.membershipNumber != null
+                                              ? formatMembershipNumber(fm.membershipNumber)
+                                              : 'Pending assignment'}
+                                          </dd>
+                                        </div>
+                                      )}
+                                      {fm.status === 'active' && fm.activatedAt && (
+                                        <div>
+                                          <dt>Activated on</dt>
+                                          <dd>{new Date(fm.activatedAt).toLocaleString('en-GB')}</dd>
+                                        </div>
+                                      )}
+                                      {fm.validUntil && (
+                                        <div>
+                                          <dt>Activated until</dt>
+                                          <dd>{formatValidUntilLabel(fm.validUntil)}</dd>
+                                        </div>
+                                      )}
+                                    </dl>
+                                    <button
+                                      type="button"
+                                      className="mycmusc-reg-btn mycmusc-reg-btn--secondary"
+                                      onClick={() => openFamilyEdit(fm)}
+                                    >
+                                      Edit details
+                                    </button>
+                                  </>
+                                )}
+                              </div>
+                            )}
+                          </li>
+                        )
+                      })}
                     </ul>
                   )}
                 </section>

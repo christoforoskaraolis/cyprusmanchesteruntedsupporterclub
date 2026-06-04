@@ -54,6 +54,143 @@ membershipRouter.get(
   }),
 )
 
+const FAMILY_RELATIONSHIPS = new Set([
+  'spouse',
+  'child',
+  'parent',
+  'sibling',
+  'grandparent',
+  'grandchild',
+  'other',
+])
+
+membershipRouter.put(
+  '/family-members/:applicationId',
+  requireUser,
+  asyncHandler(async (req, res) => {
+    const applicationId = String(req.params.applicationId ?? '').trim()
+    if (!applicationId) throw badRequest('Application ID is required')
+
+    const p = req.body as {
+      firstName?: string
+      lastName?: string
+      mobilePhone?: string
+      dateOfBirth?: string
+      address?: string
+      area?: string
+      postalCode?: string
+      city?: string
+      country?: string
+      familyRelationship?: string
+      familyRelationshipOther?: string
+      officialMuMembershipId?: string
+      officialMuMembershipStatus?: string
+    }
+
+    const firstName = (p.firstName ?? '').trim()
+    const lastName = (p.lastName ?? '').trim()
+    const mobilePhone = (p.mobilePhone ?? '').trim()
+    const dateOfBirth = (p.dateOfBirth ?? '').trim()
+    const address = (p.address ?? '').trim()
+    const area = (p.area ?? '').trim()
+    const postalCode = (p.postalCode ?? '').trim()
+    const city = (p.city ?? '').trim()
+    const country = (p.country ?? '').trim()
+
+    if (!firstName || !lastName) throw badRequest('First and last name are required.')
+    if (!mobilePhone || !dateOfBirth || !address || !area || !postalCode || !city || !country) {
+      throw badRequest('Please complete all required contact and address fields.')
+    }
+
+    const rel = (p.familyRelationship ?? '').trim()
+    if (!rel || !FAMILY_RELATIONSHIPS.has(rel)) {
+      throw badRequest('Please select your relationship to this family member.')
+    }
+    let familyRelationshipOther = (p.familyRelationshipOther ?? '').trim() || null
+    if (rel === 'other' && !familyRelationshipOther) {
+      throw badRequest('Please describe the family relationship when you select Other.')
+    }
+    if (rel !== 'other') familyRelationshipOther = null
+
+    const { rows: familyRows } = await query<{
+      id: string
+      status: string
+      sponsor_application_id: string
+      sponsor_status: string
+    }>(
+      `select ma.id, ma.status, ma.sponsor_application_id, sponsor.status as sponsor_status
+       from public.membership_applications ma
+       inner join public.membership_applications sponsor
+         on sponsor.application_id = ma.sponsor_application_id
+        and sponsor.user_id = ma.user_id
+        and sponsor.sponsor_application_id is null
+       where ma.user_id = $1
+         and ma.application_id = $2
+         and ma.sponsor_application_id is not null`,
+      [req.user!.id, applicationId],
+    )
+    const family = familyRows[0]
+    if (!family) throw notFound('Family member not found')
+    if (family.sponsor_status !== 'active') {
+      throw badRequest('Your Cyprus membership must be active before you can update family members.')
+    }
+
+    const { officialMuId, officialMuStatus } = parseOfficialMuMembershipFields(
+      p.officialMuMembershipId,
+      p.officialMuMembershipStatus,
+    )
+
+    if (officialMuId) {
+      const { rows: duplicateRows } = await query<{ application_id: string }>(
+        `select application_id
+         from public.membership_applications
+         where official_mu_membership_id = $1
+           and application_id <> $2
+         limit 1`,
+        [officialMuId, applicationId],
+      )
+      if (duplicateRows.length > 0) {
+        throw new HttpError(409, 'This official Manchester United membership number is already on file for another member')
+      }
+    }
+
+    await query(
+      `update public.membership_applications
+       set first_name = $2,
+           last_name = $3,
+           mobile_phone = $4,
+           date_of_birth = $5,
+           address = $6,
+           area = $7,
+           postal_code = $8,
+           city = $9,
+           country = $10,
+           family_relationship = $11,
+           family_relationship_other = $12,
+           official_mu_membership_id = $13,
+           official_mu_membership_status = $14
+       where id = $1`,
+      [
+        family.id,
+        firstName,
+        lastName,
+        mobilePhone,
+        dateOfBirth,
+        address,
+        area,
+        postalCode,
+        city,
+        country,
+        rel,
+        familyRelationshipOther,
+        officialMuId || null,
+        officialMuStatus,
+      ],
+    )
+    res.json({ ok: true })
+  }),
+)
+
 membershipRouter.post(
   '/applications',
   requireUser,
@@ -81,15 +218,6 @@ membershipRouter.post(
     )
 
     const sponsorApplicationId = (p.sponsorApplicationId ?? '').trim() || null
-    const allowedRelationships = new Set([
-      'spouse',
-      'child',
-      'parent',
-      'sibling',
-      'grandparent',
-      'grandchild',
-      'other',
-    ])
     let familyRelationship: string | null = null
     let familyRelationshipOther: string | null = null
 
@@ -105,7 +233,7 @@ membershipRouter.post(
         throw badRequest('Your Cyprus membership must be active before adding a family member.')
       }
       const rel = (p.familyRelationship ?? '').trim()
-      if (!rel || !allowedRelationships.has(rel)) {
+      if (!rel || !FAMILY_RELATIONSHIPS.has(rel)) {
         throw badRequest('Please select your relationship to this family member.')
       }
       familyRelationship = rel

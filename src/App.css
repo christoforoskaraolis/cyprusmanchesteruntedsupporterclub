@@ -2636,6 +2636,59 @@
   margin-bottom: 0.25rem;
 }
 
+.mycmusc-family-list-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  margin-top: 0.55rem;
+}
+
+.mycmusc-family-action-btn {
+  margin: 0;
+  padding: 0.4rem 0.75rem;
+  font: inherit;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  line-height: 1.3;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text-h);
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.mycmusc-family-action-btn:hover {
+  border-color: var(--mu-red);
+  color: var(--mu-red);
+}
+
+.mycmusc-family-action-btn--primary {
+  border-color: var(--mu-red);
+  color: var(--mu-red);
+  background: transparent;
+}
+
+.mycmusc-family-action-btn--primary:hover {
+  background: var(--mu-red);
+  color: #fff;
+}
+
+.mycmusc-family-detail {
+  margin-top: 0.85rem;
+  padding-top: 0.85rem;
+  border-top: 1px solid var(--border);
+}
+
+.mycmusc-family-detail .mycmusc-profile-dl {
+  margin-top: 0.65rem;
+  margin-bottom: 0.75rem;
+}
+
+.mycmusc-family-detail .mycmusc-reg-form {
+  margin-top: 0.25rem;
+}
+
 .admin-member-family-badge {
   font-size: 0.8125rem;
   font-weight: 600;

@@ -201,6 +201,31 @@ export async function fetchMyFamilyMembers(sponsorApplicationId: string) {
   }
 }
 
+export type FamilyMemberUpdatePayload = {
+  firstName: string
+  lastName: string
+  mobilePhone: string
+  dateOfBirth: string
+  address: string
+  area: string
+  postalCode: string
+  city: string
+  country: string
+  familyRelationship: string
+  familyRelationshipOther: string | null
+  officialMuMembershipId: string
+  officialMuMembershipStatus: OfficialMuMembershipStatus | null
+}
+
+export async function updateFamilyMemberDetails(applicationId: string, payload: FamilyMemberUpdatePayload) {
+  try {
+    await apiSend(`/api/membership/family-members/${encodeURIComponent(applicationId)}`, 'PUT', payload)
+    return { error: undefined }
+  } catch (error) {
+    return { error: asError(error) }
+  }
+}
+
 export async function fetchMyLatestApplication(userId: string) {
   void userId
   try {
