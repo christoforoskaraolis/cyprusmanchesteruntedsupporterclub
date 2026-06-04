@@ -2452,6 +2452,38 @@
   align-self: flex-start;
 }
 
+.membership-payment-breakdown {
+  margin: 0 0 0.75rem;
+  padding: 0;
+  list-style: none;
+}
+
+.membership-payment-breakdown li {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.4rem 0;
+  font-size: 0.9375rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.membership-payment-breakdown-total {
+  margin-top: 0.15rem;
+  padding-top: 0.55rem;
+  font-weight: 600;
+  color: var(--text-h);
+  border-bottom: none;
+}
+
+.membership-optional-official-total {
+  color: var(--text-muted);
+  font-weight: 400;
+}
+
+.membership-optional-official-fieldset {
+  margin-top: 0.25rem;
+}
+
 .membership-mu-status-fieldset {
   margin: 0;
   padding: 0.85rem 1rem;

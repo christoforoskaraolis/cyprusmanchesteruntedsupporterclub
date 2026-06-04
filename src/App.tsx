@@ -85,6 +85,10 @@ import {
   nextSeasonValidUntilIso,
 } from './lib/membershipSeason.ts'
 import { ClubPaymentMethodFields, ClubPaymentMethodsBlock } from './components/ClubPaymentMethods.tsx'
+import {
+  computeMembershipPaymentBreakdown,
+  MembershipRegistrationPaymentCard,
+} from './components/MembershipRegistrationPayment.tsx'
 
 const MEMBERSHIP_FEE_EUR = 15
 const TICKET_RESERVATION_FEE_EUR = 20
@@ -172,10 +176,20 @@ function OfficialMuMembershipFields({
 
 type CyprusMembershipFormProps = {
   onBack: () => void
-  onSubmitApplication: (payload: MemberApplicationPayload) => Promise<void>
+  officialOffers: OfficialMembershipOffer[]
+  officialOffersLoading: boolean
+  onSubmitApplication: (
+    payload: MemberApplicationPayload,
+    optionalOfficialOfferId: string | null,
+  ) => Promise<void>
 }
 
-function CyprusMembershipForm({ onBack, onSubmitApplication }: CyprusMembershipFormProps) {
+function CyprusMembershipForm({
+  onBack,
+  officialOffers,
+  officialOffersLoading,
+  onSubmitApplication,
+}: CyprusMembershipFormProps) {
   const periodStart = formatLongDate(1, 5, MEMBERSHIP_DISPLAY_START_YEAR)
   const periodEnd = formatLongDate(31, 4, MEMBERSHIP_DISPLAY_END_YEAR)
 
@@ -192,9 +206,16 @@ function CyprusMembershipForm({ onBack, onSubmitApplication }: CyprusMembershipF
   const [officialMuMembershipStatus, setOfficialMuMembershipStatus] = useState<
     'activated' | 'pending' | ''
   >('')
+  const [optionalOfficialOfferId, setOptionalOfficialOfferId] = useState<string | null>(null)
   const [agreed, setAgreed] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
+
+  const paymentBreakdown = computeMembershipPaymentBreakdown(
+    MEMBERSHIP_FEE_EUR,
+    optionalOfficialOfferId,
+    officialOffers,
+  )
 
   async function handleMembershipSubmit(e: FormEvent) {
     e.preventDefault()
@@ -285,7 +306,7 @@ function CyprusMembershipForm({ onBack, onSubmitApplication }: CyprusMembershipF
 
     setSubmitting(true)
     try {
-      await onSubmitApplication(payload)
+      await onSubmitApplication(payload, optionalOfficialOfferId)
     } catch (err) {
       setFormError(err instanceof Error ? err.message : 'Could not submit application. Please try again.')
     } finally {
@@ -435,6 +456,55 @@ function CyprusMembershipForm({ onBack, onSubmitApplication }: CyprusMembershipF
           status={officialMuMembershipStatus}
           onStatusChange={setOfficialMuMembershipStatus}
           idInputName="membership-official-mu-id"
+        />
+
+        <fieldset className="membership-mu-status-fieldset membership-optional-official-fieldset">
+          <legend className="membership-mu-status-legend">Official Manchester United membership (optional)</legend>
+          <p className="membership-mu-status-hint">
+            You can register for an official Manchester United membership package through the club at the same time as
+            your Cyprus membership. Leave unchecked if you only want Cyprus membership for now.
+          </p>
+          {officialOffersLoading ? (
+            <p className="membership-mu-status-hint">Loading official membership options…</p>
+          ) : officialOffers.length === 0 ? (
+            <p className="membership-mu-status-hint">No official membership packages are available at the moment.</p>
+          ) : (
+            <>
+              <label className="membership-mu-status-option">
+                <input
+                  type="radio"
+                  name="registration-official-offer"
+                  checked={optionalOfficialOfferId === null}
+                  onChange={() => setOptionalOfficialOfferId(null)}
+                />
+                <span>Cyprus membership only — €{MEMBERSHIP_FEE_EUR.toFixed(2)}</span>
+              </label>
+              {officialOffers.map((offer) => (
+                <label key={offer.id} className="membership-mu-status-option">
+                  <input
+                    type="radio"
+                    name="registration-official-offer"
+                    checked={optionalOfficialOfferId === offer.id}
+                    onChange={() => setOptionalOfficialOfferId(offer.id)}
+                  />
+                  <span>
+                    {offer.title} — €{offer.priceEur.toFixed(2)}{' '}
+                    <span className="membership-optional-official-total">
+                      (Cyprus + official total €
+                      {(MEMBERSHIP_FEE_EUR + offer.priceEur).toFixed(2)})
+                    </span>
+                  </span>
+                </label>
+              ))}
+            </>
+          )}
+        </fieldset>
+
+        <MembershipRegistrationPaymentCard
+          breakdown={paymentBreakdown}
+          seasonStartLabel={periodStart}
+          seasonEndLabel={periodEnd}
+          headingId="membership-form-payment-heading"
         />
 
         <label className="membership-checkbox-row">
@@ -3703,11 +3773,19 @@ function App() {
     if (isMembershipPending) setShowCyprusMembershipForm(false)
   }, [isMembershipPending])
 
-  async function submitPendingMembershipApplication(payload: MemberApplicationPayload) {
+  async function submitPendingMembershipApplication(
+    payload: MemberApplicationPayload,
+    optionalOfficialOfferId: string | null,
+  ) {
     if (!user?.id) throw new Error('You must be signed in to apply.')
     const applicationId = generateApplicationId()
     const { error } = await insertMembershipApplication(user.id, applicationId, payload)
     if (error) throw new Error(error.message)
+    if (optionalOfficialOfferId) {
+      const { error: officialError } = await createOfficialMembershipRequest(optionalOfficialOfferId)
+      if (officialError) throw new Error(officialError.message)
+      await loadMyOfficialRequests()
+    }
     setShowCyprusMembershipForm(false)
     await refreshMyMembership()
   }
@@ -5284,6 +5362,16 @@ function App() {
                 )
               })()
             ) : isMembershipPending && membershipRecord ? (
+              (() => {
+                const pendingOfficialRequest = myOfficialRequests.find((r) => r.status === 'pending')
+                const pendingPaymentBreakdown = computeMembershipPaymentBreakdown(
+                  MEMBERSHIP_FEE_EUR,
+                  pendingOfficialRequest?.offerId ?? null,
+                  officialOffers,
+                )
+                const seasonStart = formatLongDate(1, 5, MEMBERSHIP_DISPLAY_START_YEAR)
+                const seasonEnd = formatLongDate(31, 4, MEMBERSHIP_DISPLAY_END_YEAR)
+                return (
               <div className="membership-pending-card">
                 <p className="membership-pending-title">Application received</p>
                 <p className="section-lead membership-pending-lead">
@@ -5298,44 +5386,37 @@ function App() {
                   Submitted: {new Date(membershipRecord.submittedAt).toLocaleString('en-GB')}
                 </p>
 
-                <div
-                  className="membership-payment-card membership-pending-payment"
-                  role="region"
-                  aria-labelledby="membership-pending-payment-heading"
-                >
-                  <h3 id="membership-pending-payment-heading" className="membership-payment-title">
-                    Payment — membership fee
-                  </h3>
-                  <p className="membership-payment-fee">
-                    <strong>Membership fee:</strong> €{MEMBERSHIP_FEE_EUR} for the membership season (
-                    {formatLongDate(1, 5, MEMBERSHIP_DISPLAY_START_YEAR)} –{' '}
-                    {formatLongDate(31, 4, MEMBERSHIP_DISPLAY_END_YEAR)}).
-                  </p>
-                  <p className="membership-payment-intro">
-                    Pay using bank transfer, Revolut, or Stripe below while your application is reviewed. For manual
-                    transfers, include your <strong>full name</strong> and application reference{' '}
-                    <code className="mycmusc-inline-ref">{membershipRecord.applicationId}</code>.
-                  </p>
-                  <ClubPaymentMethodFields
-                    stripe={{
-                      amountEur: MEMBERSHIP_FEE_EUR,
-                      description: 'Cyprus MU Supporters Club — membership fee',
-                      paymentKind: 'membership',
-                      referenceId: membershipRecord.applicationId,
-                      returnPath: '/mycmusc',
-                    }}
-                  />
-                </div>
+                <MembershipRegistrationPaymentCard
+                  breakdown={pendingPaymentBreakdown}
+                  seasonStartLabel={seasonStart}
+                  seasonEndLabel={seasonEnd}
+                  applicationId={membershipRecord.applicationId}
+                  showPaymentMethods
+                  headingId="membership-pending-payment-heading"
+                />
 
                 <p className="mycmusc-reg-hint membership-pending-footnote" role="note">
-                  Once the committee activates your Cyprus club membership, you will <strong>unlock</strong> official
-                  Manchester United membership registration, <strong>match ticket requests</strong>,{' '}
-                  <strong>Merchandise</strong>, and other member-only areas of the app.
+                  Once the committee activates your Cyprus club membership, you will <strong>unlock</strong>{' '}
+                  {pendingOfficialRequest ? (
+                    <>
+                      processing of your official Manchester United membership request,{' '}
+                    </>
+                  ) : (
+                    <>
+                      official Manchester United membership registration,{' '}
+                    </>
+                  )}
+                  <strong>match ticket requests</strong>, <strong>Merchandise</strong>, and other member-only areas of
+                  the app.
                 </p>
               </div>
+                )
+              })()
             ) : showCyprusMembershipForm ? (
               <CyprusMembershipForm
                 onBack={() => setShowCyprusMembershipForm(false)}
+                officialOffers={officialOffers}
+                officialOffersLoading={officialOffersLoading}
                 onSubmitApplication={submitPendingMembershipApplication}
               />
             ) : (
