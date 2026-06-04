@@ -1,6 +1,81 @@
 import { ClubPaymentMethodFields } from './ClubPaymentMethods.tsx'
 import type { OfficialMembershipOffer } from '../lib/officialMembershipsApi.ts'
 
+type OptionalOfficialMembershipPickerProps = {
+  offers: OfficialMembershipOffer[]
+  loading: boolean
+  cyprusFeeEur: number
+  selectedOfferId: string | null
+  onSelectOfferId: (offerId: string | null) => void
+}
+
+/** Optional official MU packages on Cyprus registration (payment total shown after submit). */
+export function OptionalOfficialMembershipPicker({
+  offers,
+  loading,
+  cyprusFeeEur,
+  selectedOfferId,
+  onSelectOfferId,
+}: OptionalOfficialMembershipPickerProps) {
+  return (
+    <section className="membership-optional-official-section" aria-labelledby="membership-optional-official-heading">
+      <h3 id="membership-optional-official-heading" className="membership-form-section-title">
+        Official Manchester United membership (optional)
+      </h3>
+      <p className="membership-mu-status-hint">
+        Choose one package to add to your Cyprus membership, or skip this step. After you submit your application, the
+        payment screen will show the combined total (Cyprus fee plus any package you select here).
+      </p>
+      {loading ? (
+        <p className="membership-mu-status-hint">Loading membership packages…</p>
+      ) : offers.length === 0 ? (
+        <p className="membership-mu-status-hint">No official membership packages are available at the moment.</p>
+      ) : (
+        <ul className="membership-package-grid">
+          <li>
+            <button
+              type="button"
+              className={`membership-package-card ${selectedOfferId === null ? 'is-selected' : ''}`}
+              onClick={() => onSelectOfferId(null)}
+            >
+              <span className="membership-package-card-title">Cyprus membership only</span>
+              <span className="membership-package-card-price">€{cyprusFeeEur.toFixed(2)}</span>
+              <span className="membership-package-card-note">No official package</span>
+            </button>
+          </li>
+          {offers.map((offer) => {
+            const selected = selectedOfferId === offer.id
+            return (
+              <li key={offer.id}>
+                <button
+                  type="button"
+                  className={`membership-package-card ${selected ? 'is-selected' : ''}`}
+                  onClick={() => onSelectOfferId(offer.id)}
+                >
+                  <div className="membership-package-card-visual">
+                    {offer.imageUrl ? (
+                      <img src={offer.imageUrl} alt="" className="membership-package-card-img" />
+                    ) : (
+                      <div className="membership-package-card-placeholder" aria-hidden>
+                        No image
+                      </div>
+                    )}
+                  </div>
+                  <span className="membership-package-card-title">{offer.title}</span>
+                  <span className="membership-package-card-price">+ €{offer.priceEur.toFixed(2)}</span>
+                  <span className="membership-package-card-note">
+                    Total after submit €{(cyprusFeeEur + offer.priceEur).toFixed(2)}
+                  </span>
+                </button>
+              </li>
+            )
+          })}
+        </ul>
+      )}
+    </section>
+  )
+}
+
 export type MembershipPaymentBreakdown = {
   cyprusFeeEur: number
   officialOffer: OfficialMembershipOffer | null

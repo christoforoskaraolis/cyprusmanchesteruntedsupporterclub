@@ -88,6 +88,7 @@ import { ClubPaymentMethodFields, ClubPaymentMethodsBlock } from './components/C
 import {
   computeMembershipPaymentBreakdown,
   MembershipRegistrationPaymentCard,
+  OptionalOfficialMembershipPicker,
 } from './components/MembershipRegistrationPayment.tsx'
 
 const MEMBERSHIP_FEE_EUR = 15
@@ -210,12 +211,6 @@ function CyprusMembershipForm({
   const [agreed, setAgreed] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
-
-  const paymentBreakdown = computeMembershipPaymentBreakdown(
-    MEMBERSHIP_FEE_EUR,
-    optionalOfficialOfferId,
-    officialOffers,
-  )
 
   async function handleMembershipSubmit(e: FormEvent) {
     e.preventDefault()
@@ -458,53 +453,12 @@ function CyprusMembershipForm({
           idInputName="membership-official-mu-id"
         />
 
-        <fieldset className="membership-mu-status-fieldset membership-optional-official-fieldset">
-          <legend className="membership-mu-status-legend">Official Manchester United membership (optional)</legend>
-          <p className="membership-mu-status-hint">
-            You can register for an official Manchester United membership package through the club at the same time as
-            your Cyprus membership. Leave unchecked if you only want Cyprus membership for now.
-          </p>
-          {officialOffersLoading ? (
-            <p className="membership-mu-status-hint">Loading official membership options…</p>
-          ) : officialOffers.length === 0 ? (
-            <p className="membership-mu-status-hint">No official membership packages are available at the moment.</p>
-          ) : (
-            <>
-              <label className="membership-mu-status-option">
-                <input
-                  type="radio"
-                  name="registration-official-offer"
-                  checked={optionalOfficialOfferId === null}
-                  onChange={() => setOptionalOfficialOfferId(null)}
-                />
-                <span>Cyprus membership only — €{MEMBERSHIP_FEE_EUR.toFixed(2)}</span>
-              </label>
-              {officialOffers.map((offer) => (
-                <label key={offer.id} className="membership-mu-status-option">
-                  <input
-                    type="radio"
-                    name="registration-official-offer"
-                    checked={optionalOfficialOfferId === offer.id}
-                    onChange={() => setOptionalOfficialOfferId(offer.id)}
-                  />
-                  <span>
-                    {offer.title} — €{offer.priceEur.toFixed(2)}{' '}
-                    <span className="membership-optional-official-total">
-                      (Cyprus + official total €
-                      {(MEMBERSHIP_FEE_EUR + offer.priceEur).toFixed(2)})
-                    </span>
-                  </span>
-                </label>
-              ))}
-            </>
-          )}
-        </fieldset>
-
-        <MembershipRegistrationPaymentCard
-          breakdown={paymentBreakdown}
-          seasonStartLabel={periodStart}
-          seasonEndLabel={periodEnd}
-          headingId="membership-form-payment-heading"
+        <OptionalOfficialMembershipPicker
+          offers={officialOffers}
+          loading={officialOffersLoading}
+          cyprusFeeEur={MEMBERSHIP_FEE_EUR}
+          selectedOfferId={optionalOfficialOfferId}
+          onSelectOfferId={setOptionalOfficialOfferId}
         />
 
         <label className="membership-checkbox-row">
@@ -3788,6 +3742,7 @@ function App() {
     }
     setShowCyprusMembershipForm(false)
     await refreshMyMembership()
+    await loadMyOfficialRequests()
   }
 
   async function applyActivateMembership(applicationId: string) {
@@ -5385,6 +5340,12 @@ function App() {
                 <p className="membership-pending-meta">
                   Submitted: {new Date(membershipRecord.submittedAt).toLocaleString('en-GB')}
                 </p>
+                {pendingPaymentBreakdown.officialOffer && (
+                  <p className="section-lead membership-pending-lead">
+                    You selected <strong>{pendingPaymentBreakdown.officialOffer.title}</strong> as well as Cyprus
+                    membership. Pay the combined total below.
+                  </p>
+                )}
 
                 <MembershipRegistrationPaymentCard
                   breakdown={pendingPaymentBreakdown}
