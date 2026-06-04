@@ -42,6 +42,12 @@ export function formatOfficialMuMembershipId(id: string | null | undefined): str
   return trimmed || '—'
 }
 
+/** Admin members list: optional official MU package chosen at registration. */
+export function formatOfficialMembershipRequestLabel(offerTitle: string | null | undefined): string {
+  const title = (offerTitle ?? '').trim()
+  return `Request for MU Official : ${title || 'No'}`
+}
+
 export type OfficialMuMembershipFormStatus = OfficialMuMembershipStatus | ''
 
 export function parseOfficialMuMembershipFields(
@@ -92,6 +98,8 @@ export type MemberRegistryEntry = {
   sponsorApplicationId: string | null
   familyRelationship: string | null
   familyRelationshipOther: string | null
+  /** Offer title when member selected an official MU package at registration; null if none. */
+  officialMembershipOfferTitle: string | null
 }
 
 export type MemberApplicationPayload = Omit<
@@ -104,6 +112,7 @@ export type MemberApplicationPayload = Omit<
   | 'validUntil'
   | 'membershipNumber'
   | 'sponsorApplicationId'
+  | 'officialMembershipOfferTitle'
 >
 
 export type DbMembershipApplication = {
@@ -130,6 +139,7 @@ export type DbMembershipApplication = {
   sponsor_application_id?: string | null
   family_relationship?: string | null
   family_relationship_other?: string | null
+  official_membership_offer_title?: string | null
 }
 
 export type DbRenewalRequest = {
@@ -192,6 +202,7 @@ export function dbRowToMemberEntry(row: DbMembershipApplication): MemberRegistry
     sponsorApplicationId: row.sponsor_application_id ?? null,
     familyRelationship: row.family_relationship ?? null,
     familyRelationshipOther: row.family_relationship_other ?? null,
+    officialMembershipOfferTitle: row.official_membership_offer_title?.trim() || null,
   }
 }
 

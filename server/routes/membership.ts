@@ -382,7 +382,15 @@ membershipRouter.get(
   requireAdmin,
   asyncHandler(async (_req, res) => {
     const { rows } = await query<any>(
-      `select ma.*, p.email as profile_email
+      `select ma.*, p.email as profile_email,
+              (
+                select o.title
+                from public.official_membership_requests r
+                join public.official_membership_offers o on o.id = r.offer_id
+                where r.membership_application_id = ma.application_id
+                order by r.requested_at desc
+                limit 1
+              ) as official_membership_offer_title
        from public.membership_applications ma
        left join public.profiles p on p.id = ma.user_id
        order by ma.submitted_at desc`,

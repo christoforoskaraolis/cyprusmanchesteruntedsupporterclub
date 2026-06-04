@@ -1825,6 +1825,12 @@
   color: var(--text-muted);
 }
 
+.admin-member-official-request {
+  margin-top: 0.2rem;
+  font-weight: 600;
+  color: var(--text-h);
+}
+
 .admin-member-submitted {
   margin: 0.65rem 0 0.75rem;
   font-size: 0.75rem;

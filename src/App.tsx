@@ -19,6 +19,7 @@ import {
   fetchPendingRenewalRequests,
   formatMembershipNumber,
   formatFamilyRelationship,
+  formatOfficialMembershipRequestLabel,
   formatOfficialMuMembershipId,
   formatOfficialMuMembershipStatus,
   FAMILY_RELATIONSHIP_OPTIONS,
@@ -66,17 +67,13 @@ import {
 import { resizeImageFileToJpegDataUrl } from './lib/resizeImage.ts'
 import { createAdminUser, deleteAdminUser, fetchAdminUsers, type AdminUserRow } from './lib/adminUsersApi.ts'
 import {
-  fetchAdminOfficialMembershipRequests,
   createOfficialMembershipRequest,
   createOfficialMembershipOffer,
-  deleteAdminOfficialMembershipRequest,
   deleteOfficialMembershipOffer,
   fetchOfficialMembershipOffers,
   fetchMyOfficialMembershipRequests,
   reorderOfficialMembershipOffers,
-  setAdminOfficialMembershipRequestStatus,
   updateOfficialMembershipOffer,
-  type AdminOfficialMembershipRequest,
   type OfficialMembershipOffer,
   type OfficialMembershipRequest,
 } from './lib/officialMembershipsApi.ts'
@@ -905,21 +902,10 @@ type AdminConsoleProps = {
   onDeleteAdminUser: (email: string) => Promise<void>
   officialOffers: OfficialMembershipOffer[]
   officialOffersLoading: boolean
-  officialRequests: AdminOfficialMembershipRequest[]
-  officialRequestsLoading: boolean
   onCreateOfficialOffer: (payload: { title: string; priceEur: number; imageUrl: string }) => Promise<void>
   onUpdateOfficialOffer: (id: string, payload: { title: string; priceEur: number; imageUrl?: string }) => Promise<void>
   onDeleteOfficialOffer: (id: string) => Promise<void>
   onReorderOfficialOffers: (ids: string[]) => Promise<void>
-  onSetOfficialRequestStatus: (
-    requestId: string,
-    status: 'pending' | 'completed' | 'rejected' | 'cancelled',
-    options?: {
-      officialMuMembershipId?: string
-      officialMuMembershipStatus?: OfficialMuMembershipStatus
-    },
-  ) => Promise<void>
-  onDeleteOfficialRequest: (requestId: string) => Promise<void>
 }
 
 function AdminConsole({
@@ -959,14 +945,10 @@ function AdminConsole({
   onDeleteAdminUser,
   officialOffers,
   officialOffersLoading,
-  officialRequests,
-  officialRequestsLoading,
   onCreateOfficialOffer,
   onUpdateOfficialOffer,
   onDeleteOfficialOffer,
   onReorderOfficialOffers,
-  onSetOfficialRequestStatus,
-  onDeleteOfficialRequest,
 }: AdminConsoleProps) {
   const [adminTab, setAdminTab] = useState<AdminTab>('members')
   const [filter, setFilter] = useState<AdminFilter>('all')
@@ -1001,12 +983,6 @@ function AdminConsole({
   const [officialBusy, setOfficialBusy] = useState(false)
   const [officialError, setOfficialError] = useState<string | null>(null)
   const [editingOfficialById, setEditingOfficialById] = useState<Record<string, { title: string; price: string }>>({})
-  const [officialRequestBusyId, setOfficialRequestBusyId] = useState<string | null>(null)
-  const [expandedOfficialRequestId, setExpandedOfficialRequestId] = useState<string | null>(null)
-  const [officialMuIdDraftByRequestId, setOfficialMuIdDraftByRequestId] = useState<Record<string, string>>({})
-  const [officialMuStatusDraftByRequestId, setOfficialMuStatusDraftByRequestId] = useState<
-    Record<string, OfficialMuMembershipStatus>
-  >({})
   const [memberIdDraftByApplicationId, setMemberIdDraftByApplicationId] = useState<Record<string, string>>({})
   const [memberMuStatusDraftByApplicationId, setMemberMuStatusDraftByApplicationId] = useState<
     Record<string, OfficialMuMembershipFormStatus>
@@ -1065,6 +1041,7 @@ function AdminConsole({
       'Membership Number',
       'Official MU ID',
       'Official MU status',
+      'Official MU package request',
       'First Name',
       'Last Name',
       'Mobile',
@@ -1085,9 +1062,9 @@ function AdminConsole({
       m.membershipNumber ?? '',
       m.officialMuMembershipId,
       formatOfficialMuMembershipStatus(m.officialMuMembershipStatus),
+      formatOfficialMembershipRequestLabel(m.officialMembershipOfferTitle),
       m.firstName,
       m.lastName,
-      formatFamilyRelationship(m.familyRelationship, m.familyRelationshipOther),
       m.mobilePhone,
       formatDateOfBirthDisplay(m.dateOfBirth),
       m.address,
@@ -1120,50 +1097,6 @@ function AdminConsole({
       o.lines.map((line) => `${line.title} x${line.quantity} (€${line.unitPriceEur.toFixed(2)})`).join(' | '),
     ])
     downloadCsv(`merchandise-report-${reportStamp()}.csv`, headers, rows)
-  }
-
-  function exportOfficialMembershipsReport() {
-    const headers = [
-      'Request ID',
-      'Status',
-      'Requested At',
-      'Offer',
-      'Offer Price EUR',
-      'User ID',
-      'Name',
-      'Email',
-      'Mobile',
-      'Date of Birth',
-      'Address',
-      'Area',
-      'Postal Code',
-      'City',
-      'Country',
-      'Official MU ID',
-      'Official MU status',
-      'Application Reference',
-    ]
-    const rows = officialRequests.map((r) => [
-      r.id,
-      r.status,
-      r.requestedAt,
-      r.offerTitle,
-      r.offerPriceEur.toFixed(2),
-      r.userId,
-      r.user.fullName ?? '',
-      r.user.email ?? '',
-      r.user.mobilePhone ?? '',
-      formatDateOfBirthDisplay(r.user.dateOfBirth ?? ''),
-      r.user.address ?? '',
-      r.user.area ?? '',
-      r.user.postalCode ?? '',
-      r.user.city ?? '',
-      r.user.country ?? '',
-      r.user.officialMuMembershipId ?? '',
-      formatOfficialMuMembershipStatus(r.user.officialMuMembershipStatus),
-      r.user.applicationId ?? '',
-    ])
-    downloadCsv(`official-memberships-report-${reportStamp()}.csv`, headers, rows)
   }
 
   function moveItem(ids: string[], from: number, to: number) {
@@ -1462,6 +1395,9 @@ function AdminConsole({
                       <> · Member #{formatMembershipNumber(m.membershipNumber)}</>
                     )}
                   </p>
+                  <p className="admin-member-meta admin-member-official-request">
+                    {formatOfficialMembershipRequestLabel(m.officialMembershipOfferTitle)}
+                  </p>
                 </div>
                 <span
                   className={`board-admin-status board-admin-status--${m.status === 'pending' ? 'pending' : 'active'}`}
@@ -1635,6 +1571,10 @@ function AdminConsole({
                   <div>
                     <dt>Postal code</dt>
                     <dd>{m.postalCode}</dd>
+                  </div>
+                  <div>
+                    <dt>Official MU package request</dt>
+                    <dd>{formatOfficialMembershipRequestLabel(m.officialMembershipOfferTitle)}</dd>
                   </div>
                   <div>
                     <dt>Official MU membership</dt>
@@ -2386,180 +2326,11 @@ function AdminConsole({
         <section className="admin-panel-block" aria-label="Official Manchester United memberships">
           <div className="admin-block-head">
             <h2 className="admin-block-title">Official Manchester United memberships</h2>
-            <p className="admin-block-lead">Add, edit, delete, and reorder offers with title, picture, and price.</p>
+            <p className="admin-block-lead">
+              Manage optional official MU package offers shown on Cyprus and family member registration. Set each
+              member&apos;s official MU ID and status under <strong>Members → Full details</strong>.
+            </p>
           </div>
-          <section className="admin-panel-block" aria-label="Official membership requests">
-            <div className="admin-block-head">
-              <h3 className="admin-block-title">Official membership requests</h3>
-              <p className="admin-block-lead">Requests submitted by users are listed here for admin processing.</p>
-              <button type="button" className="admin-merch-create-btn" onClick={exportOfficialMembershipsReport}>
-                Export Excel
-              </button>
-            </div>
-            {officialRequestsLoading ? (
-              <p className="admin-empty">Loading requests…</p>
-            ) : officialRequests.length === 0 ? (
-              <p className="admin-empty">No requests yet.</p>
-            ) : (
-              <ul className="admin-ticket-request-list">
-                {officialRequests.map((row) => {
-                  const expanded = expandedOfficialRequestId === row.id
-                  const displayName = row.user.fullName?.trim() || row.userId
-                  return (
-                    <li key={row.id} className="admin-ticket-request-card">
-                      <div className="admin-ticket-request-main">
-                        <strong>{displayName}</strong>
-                        <small>
-                          {row.offerTitle} · €{row.offerPriceEur.toFixed(2)} · {new Date(row.requestedAt).toLocaleString('en-GB')}
-                        </small>
-                      </div>
-                      <div className="admin-ticket-request-actions">
-                        <span className={`fixtures-ticket-pill fixtures-ticket-pill--${row.status}`}>{row.status}</span>
-                        <button
-                          type="button"
-                          className="admin-main-tab"
-                          onClick={() => {
-                            if (!expanded && officialMuIdDraftByRequestId[row.id] === undefined) {
-                              setOfficialMuIdDraftByRequestId((prev) => ({
-                                ...prev,
-                                [row.id]: row.user.officialMuMembershipId ?? '',
-                              }))
-                              setOfficialMuStatusDraftByRequestId((prev) => ({
-                                ...prev,
-                                [row.id]: row.user.officialMuMembershipStatus ?? 'activated',
-                              }))
-                            }
-                            setExpandedOfficialRequestId(expanded ? null : row.id)
-                          }}
-                        >
-                          {expanded ? 'Hide info' : 'More info'}
-                        </button>
-                        <button
-                          type="button"
-                          className="admin-news-delete-btn"
-                          disabled={officialRequestBusyId !== null}
-                          onClick={async () => {
-                            setOfficialRequestBusyId(row.id)
-                            try {
-                              const memberId = (
-                                officialMuIdDraftByRequestId[row.id] ?? row.user.officialMuMembershipId ?? ''
-                              ).trim()
-                              const muStatus =
-                                officialMuStatusDraftByRequestId[row.id] ??
-                                row.user.officialMuMembershipStatus ??
-                                'activated'
-                              const parsed = parseOfficialMuMembershipFields(memberId, muStatus)
-                              if ('error' in parsed) {
-                                throw new Error(parsed.error)
-                              }
-                              await onSetOfficialRequestStatus(row.id, 'completed', {
-                                officialMuMembershipId: parsed.officialMuMembershipId,
-                                officialMuMembershipStatus: parsed.officialMuMembershipStatus ?? 'activated',
-                              })
-                            } catch (error) {
-                              window.alert(
-                                error instanceof Error
-                                  ? error.message
-                                  : 'Could not complete official membership request.',
-                              )
-                            } finally {
-                              setOfficialRequestBusyId(null)
-                            }
-                          }}
-                        >
-                          Accept &amp; save ID
-                        </button>
-                        <button
-                          type="button"
-                          className="admin-news-delete-btn"
-                          disabled={officialRequestBusyId !== null}
-                          onClick={async () => {
-                            setOfficialRequestBusyId(row.id)
-                            try {
-                              await onSetOfficialRequestStatus(row.id, 'rejected')
-                            } finally {
-                              setOfficialRequestBusyId(null)
-                            }
-                          }}
-                        >
-                          Reject
-                        </button>
-                        <button
-                          type="button"
-                          className="admin-news-delete-btn"
-                          disabled={officialRequestBusyId !== null}
-                          onClick={async () => {
-                            const yes = window.confirm('Delete this official membership request?')
-                            if (!yes) return
-                            setOfficialRequestBusyId(row.id)
-                            try {
-                              await onDeleteOfficialRequest(row.id)
-                            } finally {
-                              setOfficialRequestBusyId(null)
-                            }
-                          }}
-                        >
-                          Delete
-                        </button>
-                      </div>
-                      {expanded && (
-                        <div className="admin-ticket-request-main" style={{ marginTop: '0.6rem' }}>
-                          <small>Name: {row.user.fullName ?? '—'}</small>
-                          <small>Email: {row.user.email ?? '—'}</small>
-                          <small>Mobile: {row.user.mobilePhone ?? '—'}</small>
-                          <small>Date of birth: {formatDateOfBirthDisplay(row.user.dateOfBirth ?? '') || '—'}</small>
-                          <small>Address: {row.user.address ?? '—'}</small>
-                          <small>
-                            Area/Post code: {row.user.area ?? '—'} / {row.user.postalCode ?? '—'}
-                          </small>
-                          <small>City/Country: {row.user.city ?? '—'} / {row.user.country ?? '—'}</small>
-                          <label className="auth-field membership-field">
-                            <span className="auth-label">Official MU ID (required to accept)</span>
-                            <input
-                              className="auth-input"
-                              type="text"
-                              value={officialMuIdDraftByRequestId[row.id] ?? row.user.officialMuMembershipId ?? ''}
-                              onChange={(e) =>
-                                setOfficialMuIdDraftByRequestId((prev) => ({
-                                  ...prev,
-                                  [row.id]: e.target.value,
-                                }))
-                              }
-                            />
-                          </label>
-                          <label className="auth-field membership-field">
-                            <span className="auth-label">Official MU status on accept</span>
-                            <select
-                              className="auth-input"
-                              value={
-                                officialMuStatusDraftByRequestId[row.id] ??
-                                row.user.officialMuMembershipStatus ??
-                                'activated'
-                              }
-                              onChange={(e) =>
-                                setOfficialMuStatusDraftByRequestId((prev) => ({
-                                  ...prev,
-                                  [row.id]: e.target.value as OfficialMuMembershipStatus,
-                                }))
-                              }
-                            >
-                              <option value="activated">Activated</option>
-                              <option value="pending">Pending</option>
-                            </select>
-                          </label>
-                          <small>
-                            Current on file: ID {row.user.officialMuMembershipId?.trim() || '—'} · status{' '}
-                            {formatOfficialMuMembershipStatus(row.user.officialMuMembershipStatus)}
-                          </small>
-                          <small>Application reference: {row.user.applicationId ?? '—'}</small>
-                        </div>
-                      )}
-                    </li>
-                  )
-                })}
-              </ul>
-            )}
-          </section>
           {officialError && <p className="auth-message is-error">{officialError}</p>}
           <div className="merch-admin-grid">
             <label className="auth-field membership-field">
@@ -3086,8 +2857,6 @@ function App() {
   const [adminUsersLoading, setAdminUsersLoading] = useState(false)
   const [officialOffers, setOfficialOffers] = useState<OfficialMembershipOffer[]>([])
   const [officialOffersLoading, setOfficialOffersLoading] = useState(false)
-  const [adminOfficialRequests, setAdminOfficialRequests] = useState<AdminOfficialMembershipRequest[]>([])
-  const [adminOfficialRequestsLoading, setAdminOfficialRequestsLoading] = useState(false)
   const [myOfficialRequests, setMyOfficialRequests] = useState<OfficialMembershipRequest[]>([])
   const [newsPosts, setNewsPosts] = useState<NewsPost[]>([])
   const [newsLoading, setNewsLoading] = useState(false)
@@ -3472,22 +3241,6 @@ function App() {
     setMyOfficialRequests(rows)
   }, [session?.user?.id])
 
-  const loadAdminOfficialRequests = useCallback(async () => {
-    if (!isAdmin) {
-      setAdminOfficialRequests([])
-      return
-    }
-    setAdminOfficialRequestsLoading(true)
-    const { rows, error } = await fetchAdminOfficialMembershipRequests()
-    setAdminOfficialRequestsLoading(false)
-    if (error) {
-      console.error(error)
-      setAdminOfficialRequests([])
-      return
-    }
-    setAdminOfficialRequests(rows)
-  }, [isAdmin])
-
   async function applyCreateMerchandiseProductFromAdmin(payload: {
     title: string
     priceEur: number
@@ -3577,20 +3330,6 @@ function App() {
     if (error) throw error
     const refreshed = await fetchOfficialMembershipOffers()
     if (!refreshed.error) setOfficialOffers(refreshed.rows)
-  }
-
-  async function applySetOfficialRequestStatus(
-    requestId: string,
-    status: 'pending' | 'completed' | 'rejected' | 'cancelled',
-    options?: {
-      officialMuMembershipId?: string
-      officialMuMembershipStatus?: OfficialMuMembershipStatus
-    },
-  ) {
-    const { error } = await setAdminOfficialMembershipRequestStatus(requestId, status, options)
-    if (error) throw error
-    await loadAdminOfficialRequests()
-    await refreshMyMembership()
   }
 
   const merchCartLines = useMemo(() => {
@@ -3689,10 +3428,6 @@ function App() {
   useEffect(() => {
     void loadMyOfficialRequests()
   }, [loadMyOfficialRequests])
-
-  useEffect(() => {
-    void loadAdminOfficialRequests()
-  }, [loadAdminOfficialRequests])
 
   useEffect(() => {
     if (activePage !== 'merchandise') {
@@ -3898,6 +3633,9 @@ function App() {
     }
     setShowFamilyMemberForm(false)
     const submittedAt = new Date().toISOString()
+    const officialMembershipOfferTitle = optionalOfficialOfferId
+      ? (officialOffers.find((o) => o.id === optionalOfficialOfferId)?.title ?? null)
+      : null
     setFamilyPendingRecord({
       applicationId,
       email: membershipRecord.email,
@@ -3906,6 +3644,7 @@ function App() {
       validUntil: null,
       membershipNumber: null,
       sponsorApplicationId: membershipRecord.applicationId,
+      officialMembershipOfferTitle,
       ...payload,
     })
     await refreshMyMembership()
@@ -3914,13 +3653,6 @@ function App() {
 
   async function applyActivateMembership(applicationId: string) {
     const { error } = await setApplicationStatus(applicationId, 'active')
-    if (error) throw new Error(error.message)
-    await loadAdminRegistry()
-    await refreshMyMembership()
-  }
-
-  async function applyDeleteOfficialRequest(requestId: string) {
-    const { error } = await deleteAdminOfficialMembershipRequest(requestId)
     if (error) throw new Error(error.message)
     await loadAdminRegistry()
     await refreshMyMembership()
@@ -4587,14 +4319,10 @@ function App() {
               onDeleteAdminUser={applyDeleteAdminUser}
               officialOffers={officialOffers}
               officialOffersLoading={officialOffersLoading}
-              officialRequests={adminOfficialRequests}
-              officialRequestsLoading={adminOfficialRequestsLoading}
               onCreateOfficialOffer={applyCreateOfficialOffer}
               onUpdateOfficialOffer={applyUpdateOfficialOffer}
               onDeleteOfficialOffer={applyDeleteOfficialOffer}
               onReorderOfficialOffers={applyReorderOfficialOffers}
-              onSetOfficialRequestStatus={applySetOfficialRequestStatus}
-              onDeleteOfficialRequest={applyDeleteOfficialRequest}
             />
           ) : (
             <div className="section-page admin-page">
@@ -5444,10 +5172,6 @@ function App() {
                       </span>
                     </div>
                   </div>
-                  <p className="mycmusc-migration-hint" role="note">
-                    After your Cyprus membership is active, you can update your official Manchester United membership
-                    number and mark it as pending or activated under Edit details.
-                  </p>
                   {detailsEditOpen ? (
                     <div className="mycmusc-reg-form">
                       {detailsError && <p className="auth-message is-error">{detailsError}</p>}
@@ -5575,10 +5299,6 @@ function App() {
                       Family member
                     </button>
                   </div>
-                  <p className="mycmusc-migration-hint" role="note">
-                    Add a family member on your account. They get their own application, membership number when
-                    activated, and optional official MU package at registration.
-                  </p>
                   {familyMembers.length === 0 ? (
                     <p className="section-lead merch-shelf-msg merch-shelf-msg--empty">No family members added yet.</p>
                   ) : (
