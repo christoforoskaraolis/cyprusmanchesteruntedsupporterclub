@@ -12,10 +12,45 @@ membershipRouter.get(
   requireUser,
   asyncHandler(async (req, res) => {
     const { rows } = await query<any>(
-      `select * from public.membership_applications where user_id = $1 order by submitted_at desc limit 1`,
+      `select ma.*, p.email as profile_email
+       from public.membership_applications ma
+       left join public.profiles p on p.id = ma.user_id
+       where ma.user_id = $1 and ma.sponsor_application_id is null
+       order by case ma.status when 'active' then 0 when 'pending' then 1 else 2 end, ma.submitted_at desc
+       limit 1`,
       [req.user!.id],
     )
     res.json({ row: rows[0] ?? null })
+  }),
+)
+
+membershipRouter.get(
+  '/family-members',
+  requireUser,
+  asyncHandler(async (req, res) => {
+    const sponsorApplicationId = String(req.query.sponsorApplicationId ?? '').trim()
+    if (!sponsorApplicationId) throw badRequest('sponsorApplicationId is required')
+
+    const { rows: sponsorRows } = await query<{ application_id: string; status: string }>(
+      `select application_id, status
+       from public.membership_applications
+       where user_id = $1 and application_id = $2 and sponsor_application_id is null`,
+      [req.user!.id, sponsorApplicationId],
+    )
+    if (sponsorRows.length === 0) throw notFound('Account membership not found')
+    if (sponsorRows[0].status !== 'active') {
+      throw badRequest('Your Cyprus membership must be active before you can view family members.')
+    }
+
+    const { rows } = await query<any>(
+      `select ma.*, p.email as profile_email
+       from public.membership_applications ma
+       left join public.profiles p on p.id = ma.user_id
+       where ma.user_id = $1 and ma.sponsor_application_id = $2
+       order by ma.submitted_at desc`,
+      [req.user!.id, sponsorApplicationId],
+    )
+    res.json({ rows })
   }),
 )
 
@@ -36,15 +71,71 @@ membershipRouter.post(
       country: string
       officialMuMembershipId?: string
       officialMuMembershipStatus?: string
+      sponsorApplicationId?: string
+      familyRelationship?: string
+      familyRelationshipOther?: string
     }
     const { officialMuId, officialMuStatus } = parseOfficialMuMembershipFields(
       p.officialMuMembershipId,
       p.officialMuMembershipStatus,
     )
+
+    const sponsorApplicationId = (p.sponsorApplicationId ?? '').trim() || null
+    const allowedRelationships = new Set([
+      'spouse',
+      'child',
+      'parent',
+      'sibling',
+      'grandparent',
+      'grandchild',
+      'other',
+    ])
+    let familyRelationship: string | null = null
+    let familyRelationshipOther: string | null = null
+
+    if (sponsorApplicationId) {
+      const { rows: sponsorRows } = await query<{ application_id: string; status: string }>(
+        `select application_id, status
+         from public.membership_applications
+         where user_id = $1 and application_id = $2 and sponsor_application_id is null`,
+        [req.user!.id, sponsorApplicationId],
+      )
+      if (sponsorRows.length === 0) throw notFound('Account membership not found')
+      if (sponsorRows[0].status !== 'active') {
+        throw badRequest('Your Cyprus membership must be active before adding a family member.')
+      }
+      const rel = (p.familyRelationship ?? '').trim()
+      if (!rel || !allowedRelationships.has(rel)) {
+        throw badRequest('Please select your relationship to this family member.')
+      }
+      familyRelationship = rel
+      familyRelationshipOther = (p.familyRelationshipOther ?? '').trim() || null
+      if (rel === 'other' && !familyRelationshipOther) {
+        throw badRequest('Please describe the family relationship when you select Other.')
+      }
+      if (rel !== 'other') familyRelationshipOther = null
+    } else {
+      const { rows: existingPrimary } = await query<{ application_id: string; status: string }>(
+        `select application_id, status
+         from public.membership_applications
+         where user_id = $1 and sponsor_application_id is null
+         order by submitted_at desc
+         limit 1`,
+        [req.user!.id],
+      )
+      const primary = existingPrimary[0]
+      if (primary?.status === 'pending') {
+        throw badRequest('You already have a pending Cyprus membership application.')
+      }
+      if (primary?.status === 'active') {
+        throw badRequest('Use Add family member to register another person on your account.')
+      }
+    }
+
     await query(
       `insert into public.membership_applications
-      (user_id, application_id, status, first_name, last_name, mobile_phone, date_of_birth, address, area, postal_code, city, country, official_mu_membership_id, official_mu_membership_status)
-      values ($1,$2,'pending',$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
+      (user_id, application_id, status, first_name, last_name, mobile_phone, date_of_birth, address, area, postal_code, city, country, official_mu_membership_id, official_mu_membership_status, sponsor_application_id, family_relationship, family_relationship_other)
+      values ($1,$2,'pending',$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)`,
       [
         req.user!.id,
         p.applicationId,
@@ -59,9 +150,12 @@ membershipRouter.post(
         p.country,
         officialMuId || null,
         officialMuStatus,
+        sponsorApplicationId,
+        familyRelationship,
+        familyRelationshipOther,
       ],
     )
-    res.status(201).json({ ok: true })
+    res.status(201).json({ ok: true, applicationId: p.applicationId })
   }),
 )
 
@@ -100,8 +194,8 @@ membershipRouter.put(
     const { rows: appRows } = await query<{ id: string; application_id: string; status: string }>(
       `select id, application_id, status
        from public.membership_applications
-       where user_id = $1
-       order by submitted_at desc
+       where user_id = $1 and sponsor_application_id is null
+       order by case status when 'active' then 0 when 'pending' then 1 else 2 end, submitted_at desc
        limit 1`,
       [req.user!.id],
     )

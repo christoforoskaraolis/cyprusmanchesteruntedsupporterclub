@@ -201,14 +201,19 @@ officialMembershipsRouter.put(
         `update public.membership_applications
          set official_mu_membership_id = $2,
              official_mu_membership_status = $3
-         where id = (
-           select ma.id
-           from public.membership_applications ma
-           where ma.user_id = (
-             select r.user_id from public.official_membership_requests r where r.id = $1
+         where application_id = (
+           select coalesce(
+             r.membership_application_id,
+             (
+               select ma.application_id
+               from public.membership_applications ma
+               where ma.user_id = r.user_id and ma.sponsor_application_id is null
+               order by ma.submitted_at desc
+               limit 1
+             )
            )
-           order by ma.submitted_at desc
-           limit 1
+           from public.official_membership_requests r
+           where r.id = $1
          )`,
         [req.params.id, officialMuId, officialMuStatus],
       )
@@ -245,8 +250,9 @@ officialMembershipsRouter.get(
       offer_id: string
       status: 'pending' | 'completed' | 'rejected' | 'cancelled'
       requested_at: string
+      membership_application_id: string | null
     }>(
-      `select id, offer_id, status, requested_at
+      `select id, offer_id, status, requested_at, membership_application_id
        from public.official_membership_requests
        where user_id = $1
        order by requested_at desc`,
@@ -258,6 +264,7 @@ officialMembershipsRouter.get(
         offerId: r.offer_id,
         status: r.status,
         requestedAt: r.requested_at,
+        membershipApplicationId: r.membership_application_id,
       })),
     })
   }),
@@ -267,12 +274,25 @@ officialMembershipsRouter.post(
   '/requests',
   requireUser,
   asyncHandler(async (req, res) => {
-    const { offerId } = req.body as { offerId?: string }
+    const { offerId, membershipApplicationId } = req.body as {
+      offerId?: string
+      membershipApplicationId?: string
+    }
     if (!offerId) return res.status(400).json({ error: 'offerId is required' })
+    const linkedApplicationId = (membershipApplicationId ?? '').trim() || null
+    if (linkedApplicationId) {
+      const { rows: appRows } = await query<{ application_id: string }>(
+        `select application_id
+         from public.membership_applications
+         where user_id = $1 and application_id = $2`,
+        [req.user!.id, linkedApplicationId],
+      )
+      if (appRows.length === 0) throw badRequest('Membership application not found for this account.')
+    }
     await query(
-      `insert into public.official_membership_requests (user_id, offer_id, status)
-       values ($1, $2, 'pending')`,
-      [req.user!.id, offerId],
+      `insert into public.official_membership_requests (user_id, offer_id, status, membership_application_id)
+       values ($1, $2, 'pending', $3)`,
+      [req.user!.id, offerId, linkedApplicationId],
     )
     res.status(201).json({ ok: true })
   }),

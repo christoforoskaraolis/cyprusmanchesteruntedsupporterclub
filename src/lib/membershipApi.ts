@@ -4,6 +4,31 @@ import { apiGet, apiSend, asError } from './apiClient'
 /** User-reported status of official Manchester United membership at application time. */
 export type OfficialMuMembershipStatus = 'activated' | 'pending'
 
+export const FAMILY_RELATIONSHIP_OPTIONS = [
+  { value: 'spouse', label: 'Spouse / Partner' },
+  { value: 'child', label: 'Child' },
+  { value: 'parent', label: 'Parent' },
+  { value: 'sibling', label: 'Sibling' },
+  { value: 'grandparent', label: 'Grandparent' },
+  { value: 'grandchild', label: 'Grandchild' },
+  { value: 'other', label: 'Other' },
+] as const
+
+export type FamilyRelationshipValue = (typeof FAMILY_RELATIONSHIP_OPTIONS)[number]['value']
+
+export function formatFamilyRelationship(
+  relationship: string | null | undefined,
+  otherDetail?: string | null,
+): string {
+  if (!relationship?.trim()) return '—'
+  const match = FAMILY_RELATIONSHIP_OPTIONS.find((o) => o.value === relationship)
+  if (relationship === 'other') {
+    const detail = (otherDetail ?? '').trim()
+    return detail ? `Other — ${detail}` : 'Other'
+  }
+  return match?.label ?? relationship
+}
+
 export function formatOfficialMuMembershipStatus(
   status: OfficialMuMembershipStatus | null | undefined,
 ): string {
@@ -58,11 +83,22 @@ export type MemberRegistryEntry = {
   country: string
   officialMuMembershipId: string
   officialMuMembershipStatus: OfficialMuMembershipStatus | null
+  /** Set when this application is a family member under the account holder's membership. */
+  sponsorApplicationId: string | null
+  familyRelationship: string | null
+  familyRelationshipOther: string | null
 }
 
 export type MemberApplicationPayload = Omit<
   MemberRegistryEntry,
-  'applicationId' | 'email' | 'status' | 'submittedAt' | 'activatedAt' | 'validUntil' | 'membershipNumber'
+  | 'applicationId'
+  | 'email'
+  | 'status'
+  | 'submittedAt'
+  | 'activatedAt'
+  | 'validUntil'
+  | 'membershipNumber'
+  | 'sponsorApplicationId'
 >
 
 export type DbMembershipApplication = {
@@ -86,6 +122,9 @@ export type DbMembershipApplication = {
   membership_number?: number | null
   valid_until?: string | null
   profile_email?: string | null
+  sponsor_application_id?: string | null
+  family_relationship?: string | null
+  family_relationship_other?: string | null
 }
 
 export type DbRenewalRequest = {
@@ -145,6 +184,20 @@ export function dbRowToMemberEntry(row: DbMembershipApplication): MemberRegistry
       row.official_mu_membership_status === 'activated' || row.official_mu_membership_status === 'pending'
         ? row.official_mu_membership_status
         : null,
+    sponsorApplicationId: row.sponsor_application_id ?? null,
+    familyRelationship: row.family_relationship ?? null,
+    familyRelationshipOther: row.family_relationship_other ?? null,
+  }
+}
+
+export async function fetchMyFamilyMembers(sponsorApplicationId: string) {
+  try {
+    const data = await apiGet<{ rows: DbMembershipApplication[] }>(
+      `/api/membership/family-members?sponsorApplicationId=${encodeURIComponent(sponsorApplicationId)}`,
+    )
+    return { rows: data.rows.map(dbRowToMemberEntry), error: undefined }
+  } catch (error) {
+    return { rows: [] as MemberRegistryEntry[], error: asError(error) }
   }
 }
 
@@ -162,13 +215,18 @@ export async function insertMembershipApplication(
   userId: string,
   applicationId: string,
   payload: MemberApplicationPayload,
+  options?: { sponsorApplicationId?: string | null },
 ) {
   void userId
   try {
-    await apiSend('/api/membership/applications', 'POST', { applicationId, ...payload })
-    return { error: undefined }
+    const data = await apiSend<{ ok: boolean; applicationId: string }>('/api/membership/applications', 'POST', {
+      applicationId,
+      ...payload,
+      sponsorApplicationId: options?.sponsorApplicationId ?? null,
+    })
+    return { applicationId: data.applicationId, error: undefined }
   } catch (error) {
-    return { error: asError(error) }
+    return { applicationId: undefined as string | undefined, error: asError(error) }
   }
 }
 

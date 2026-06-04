@@ -15,6 +15,7 @@ export type OfficialMembershipRequest = {
   offerId: string
   status: 'pending' | 'completed' | 'rejected' | 'cancelled'
   requestedAt: string
+  membershipApplicationId: string | null
 }
 
 export type AdminOfficialMembershipRequest = OfficialMembershipRequest & {
@@ -94,9 +95,12 @@ export async function fetchMyOfficialMembershipRequests() {
   }
 }
 
-export async function createOfficialMembershipRequest(offerId: string) {
+export async function createOfficialMembershipRequest(
+  offerId: string,
+  membershipApplicationId?: string,
+) {
   try {
-    await apiSend('/api/official-memberships/requests', 'POST', { offerId })
+    await apiSend('/api/official-memberships/requests', 'POST', { offerId, membershipApplicationId })
     return { error: undefined }
   } catch (error) {
     return { error: asError(error) }

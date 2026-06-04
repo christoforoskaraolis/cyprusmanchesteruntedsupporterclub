@@ -1,5 +1,20 @@
 import { ClubPaymentMethodFields } from './ClubPaymentMethods.tsx'
-import type { OfficialMembershipOffer } from '../lib/officialMembershipsApi.ts'
+import { formatFamilyRelationship, type MemberRegistryEntry } from '../lib/membershipApi.ts'
+import {
+  MEMBERSHIP_DISPLAY_END_YEAR,
+  MEMBERSHIP_DISPLAY_START_YEAR,
+} from '../lib/membershipSeason.ts'
+import type { OfficialMembershipOffer, OfficialMembershipRequest } from '../lib/officialMembershipsApi.ts'
+
+const MEMBERSHIP_FEE_EUR = 15
+
+function formatLongDate(day: number, monthIndex: number, year: number): string {
+  return new Date(year, monthIndex, day).toLocaleDateString('en-GB', {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  })
+}
 
 type OptionalOfficialMembershipPickerProps = {
   offers: OfficialMembershipOffer[]
@@ -173,6 +188,95 @@ export function MembershipRegistrationPaymentCard({
           what you should pay{officialOffer ? ' for both memberships combined' : ''}.
         </p>
       )}
+    </div>
+  )
+}
+
+type MembershipPendingViewProps = {
+  record: MemberRegistryEntry
+  officialOffers: OfficialMembershipOffer[]
+  myOfficialRequests: OfficialMembershipRequest[]
+  isFamilyMember?: boolean
+  onBack?: () => void
+}
+
+/** Shown after submitting a primary or family membership application. */
+export function MembershipPendingView({
+  record,
+  officialOffers,
+  myOfficialRequests,
+  isFamilyMember = false,
+  onBack,
+}: MembershipPendingViewProps) {
+  const pendingOfficialRequest = myOfficialRequests.find(
+    (r) => r.status === 'pending' && r.membershipApplicationId === record.applicationId,
+  )
+  const breakdown = computeMembershipPaymentBreakdown(
+    MEMBERSHIP_FEE_EUR,
+    pendingOfficialRequest?.offerId ?? null,
+    officialOffers,
+  )
+  const seasonStart = formatLongDate(1, 5, MEMBERSHIP_DISPLAY_START_YEAR)
+  const seasonEnd = formatLongDate(31, 4, MEMBERSHIP_DISPLAY_END_YEAR)
+
+  return (
+    <div className="membership-pending-card">
+      {onBack && (
+        <button type="button" className="membership-back" onClick={onBack}>
+          ← Back to MY MUCY
+        </button>
+      )}
+      <p className="membership-pending-title">
+        {isFamilyMember ? 'Family member application received' : 'Application received'}
+      </p>
+      <p className="section-lead membership-pending-lead">
+        {isFamilyMember ? (
+          <>
+            Thank you. The application for <strong>{record.firstName} {record.lastName}</strong>
+            {record.familyRelationship && (
+              <>
+                {' '}
+                (<strong>
+                  {formatFamilyRelationship(record.familyRelationship, record.familyRelationshipOther)}
+                </strong>
+                )
+              </>
+            )}{' '}
+            is <strong>pending</strong>. The committee will check the details and payment, then activate membership.
+          </>
+        ) : (
+          <>
+            Thank you. Your membership application is <strong>pending</strong>. The committee will check your details
+            and payment, then activate your membership.
+          </>
+        )}
+      </p>
+      <p className="membership-pending-ref-label">Application reference (save this):</p>
+      <code className="membership-pending-ref" tabIndex={0}>
+        {record.applicationId}
+      </code>
+      <p className="membership-pending-meta">Submitted: {new Date(record.submittedAt).toLocaleString('en-GB')}</p>
+      {breakdown.officialOffer && (
+        <p className="section-lead membership-pending-lead">
+          You selected <strong>{breakdown.officialOffer.title}</strong>
+          {isFamilyMember ? ' for this family member' : ''}. Pay the combined total below.
+        </p>
+      )}
+
+      <MembershipRegistrationPaymentCard
+        breakdown={breakdown}
+        seasonStartLabel={seasonStart}
+        seasonEndLabel={seasonEnd}
+        applicationId={record.applicationId}
+        showPaymentMethods
+        headingId="membership-pending-payment-heading"
+      />
+
+      <p className="mycmusc-reg-hint membership-pending-footnote" role="note">
+        Once the committee activates the Cyprus club membership,{' '}
+        {isFamilyMember ? 'this family member will' : 'you will'} unlock the benefits for{' '}
+        <strong>match ticket requests</strong>, <strong>Merchandise</strong>, and other member-only areas of the app.
+      </p>
     </div>
   )
 }

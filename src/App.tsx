@@ -12,12 +12,15 @@ import {
   dbRowToMemberEntry,
   deleteMembershipApplication,
   fetchAllMembershipApplications,
+  fetchMyFamilyMembers,
   fetchMyLatestApplication,
   fetchMyPendingRenewal,
   fetchMyProfile,
   fetchPendingRenewalRequests,
   formatMembershipNumber,
+  formatFamilyRelationship,
   formatOfficialMuMembershipStatus,
+  FAMILY_RELATIONSHIP_OPTIONS,
   generateApplicationId,
   parseOfficialMuMembershipFields,
   type OfficialMuMembershipFormStatus,
@@ -86,8 +89,7 @@ import {
 } from './lib/membershipSeason.ts'
 import { ClubPaymentMethodFields, ClubPaymentMethodsBlock } from './components/ClubPaymentMethods.tsx'
 import {
-  computeMembershipPaymentBreakdown,
-  MembershipRegistrationPaymentCard,
+  MembershipPendingView,
   OptionalOfficialMembershipPicker,
 } from './components/MembershipRegistrationPayment.tsx'
 
@@ -176,6 +178,7 @@ function OfficialMuMembershipFields({
 }
 
 type CyprusMembershipFormProps = {
+  variant?: 'registration' | 'family'
   onBack: () => void
   officialOffers: OfficialMembershipOffer[]
   officialOffersLoading: boolean
@@ -186,11 +189,13 @@ type CyprusMembershipFormProps = {
 }
 
 function CyprusMembershipForm({
+  variant = 'registration',
   onBack,
   officialOffers,
   officialOffersLoading,
   onSubmitApplication,
 }: CyprusMembershipFormProps) {
+  const isFamily = variant === 'family'
   const periodStart = formatLongDate(1, 5, MEMBERSHIP_DISPLAY_START_YEAR)
   const periodEnd = formatLongDate(31, 4, MEMBERSHIP_DISPLAY_END_YEAR)
 
@@ -208,6 +213,8 @@ function CyprusMembershipForm({
     'activated' | 'pending' | ''
   >('')
   const [optionalOfficialOfferId, setOptionalOfficialOfferId] = useState<string | null>(null)
+  const [familyRelationship, setFamilyRelationship] = useState('')
+  const [familyRelationshipOther, setFamilyRelationshipOther] = useState('')
   const [agreed, setAgreed] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
@@ -223,6 +230,16 @@ function CyprusMembershipForm({
     if (!lastName.trim()) {
       setFormError('Please enter your last name.')
       return
+    }
+    if (isFamily) {
+      if (!familyRelationship) {
+        setFormError('Please select your relationship to this family member.')
+        return
+      }
+      if (familyRelationship === 'other' && !familyRelationshipOther.trim()) {
+        setFormError('Please describe the family relationship.')
+        return
+      }
     }
     if (!mobilePhone.trim()) {
       setFormError('Please enter your mobile phone number.')
@@ -297,6 +314,9 @@ function CyprusMembershipForm({
       country: country.trim(),
       officialMuMembershipId: parsedMu.officialMuMembershipId,
       officialMuMembershipStatus: parsedMu.officialMuMembershipStatus,
+      familyRelationship: isFamily ? familyRelationship : null,
+      familyRelationshipOther:
+        isFamily && familyRelationship === 'other' ? familyRelationshipOther.trim() : null,
     }
 
     setSubmitting(true)
@@ -315,7 +335,9 @@ function CyprusMembershipForm({
         ← Back
       </button>
 
-      <h2 className="membership-form-title">Cyprus MU Supporters Club — membership</h2>
+      <h2 className="membership-form-title">
+        {isFamily ? 'Family member — Cyprus MU Supporters Club' : 'Cyprus MU Supporters Club — membership'}
+      </h2>
 
       <div className="membership-info-card">
         <p className="membership-info-period">
@@ -326,13 +348,18 @@ function CyprusMembershipForm({
           The current season runs from <strong>{periodStart}</strong> to <strong>{periodEnd}</strong>.
         </p>
         <p className="membership-info-benefits">
-          By becoming a member of Cyprus Manchester United Supporters Club, you are eligible for the members
-          benefits.
+          {isFamily
+            ? 'Register a family member on your account using the same process as your own membership. Each person receives their own membership number once approved.'
+            : 'By becoming a member of Cyprus Manchester United Supporters Club, you are eligible for the members benefits.'}
         </p>
       </div>
 
       <form className="membership-form" onSubmit={handleMembershipSubmit} noValidate>
-        <p className="membership-form-intro">Complete the form below to apply for membership.</p>
+        <p className="membership-form-intro">
+          {isFamily
+            ? 'Enter the family member’s details below. Payment will be shown after you submit.'
+            : 'Complete the form below to apply for membership.'}
+        </p>
 
         <label className="auth-field membership-field">
           <span className="auth-label">First name</span>
@@ -356,6 +383,45 @@ function CyprusMembershipForm({
             onChange={(ev) => setLastName(ev.target.value)}
           />
         </label>
+
+        {isFamily && (
+          <>
+            <p className="membership-form-section-title">Family relationship</p>
+            <label className="auth-field membership-field">
+              <span className="auth-label">Relationship to you</span>
+              <select
+                className="auth-input"
+                name="membership-family-relationship"
+                value={familyRelationship}
+                onChange={(ev) => {
+                  setFamilyRelationship(ev.target.value)
+                  if (ev.target.value !== 'other') setFamilyRelationshipOther('')
+                }}
+              >
+                <option value="">Select relationship…</option>
+                {FAMILY_RELATIONSHIP_OPTIONS.map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            {familyRelationship === 'other' && (
+              <label className="auth-field membership-field">
+                <span className="auth-label">Please specify</span>
+                <input
+                  className="auth-input"
+                  type="text"
+                  name="membership-family-relationship-other"
+                  placeholder="e.g. Cousin, in-law"
+                  value={familyRelationshipOther}
+                  onChange={(ev) => setFamilyRelationshipOther(ev.target.value)}
+                />
+              </label>
+            )}
+          </>
+        )}
+
         <label className="auth-field membership-field">
           <span className="auth-label">Mobile phone number</span>
           <input
@@ -468,15 +534,20 @@ function CyprusMembershipForm({
             onChange={(ev) => setAgreed(ev.target.checked)}
           />
           <span>
-            I understand that membership runs from 1 June to 31 May and I wish to apply for Cyprus
-            Manchester United Supporters Club membership.
+            {isFamily
+              ? 'I confirm this application is for a family member on my account and that the details provided are correct.'
+              : 'I understand that membership runs from 1 June to 31 May and I wish to apply for Cyprus Manchester United Supporters Club membership.'}
           </span>
         </label>
 
         {formError && <p className="auth-message is-error">{formError}</p>}
 
         <button type="submit" className="auth-submit membership-submit" disabled={submitting}>
-          {submitting ? 'Submitting…' : 'Submit membership application'}
+          {submitting
+            ? 'Submitting…'
+            : isFamily
+              ? 'Submit family member application'
+              : 'Submit membership application'}
         </button>
       </form>
     </div>
@@ -1014,6 +1085,7 @@ function AdminConsole({
       formatOfficialMuMembershipStatus(m.officialMuMembershipStatus),
       m.firstName,
       m.lastName,
+      formatFamilyRelationship(m.familyRelationship, m.familyRelationshipOther),
       m.mobilePhone,
       formatDateOfBirthDisplay(m.dateOfBirth),
       m.address,
@@ -1371,7 +1443,17 @@ function AdminConsole({
                   <code className="admin-member-ref">{m.applicationId}</code>
                   <p className="admin-member-name">
                     {m.firstName} {m.lastName}
+                    {m.sponsorApplicationId && (
+                      <span className="admin-member-family-badge"> · Family member</span>
+                    )}
                   </p>
+                  {m.sponsorApplicationId && (
+                    <p className="admin-member-meta">
+                      {formatFamilyRelationship(m.familyRelationship, m.familyRelationshipOther)}
+                      {' · '}
+                      Sponsor ref: <code className="admin-inline-code">{m.sponsorApplicationId}</code>
+                    </p>
+                  )}
                   <p className="admin-member-meta">
                     {m.city}, {m.country} · {m.mobilePhone}
                     {m.status === 'active' && m.membershipNumber != null && (
@@ -1525,6 +1607,12 @@ function AdminConsole({
                         </dd>
                       </div>
                     </>
+                  )}
+                  {m.sponsorApplicationId && (
+                    <div>
+                      <dt>Family relationship</dt>
+                      <dd>{formatFamilyRelationship(m.familyRelationship, m.familyRelationshipOther)}</dd>
+                    </div>
                   )}
                   <div>
                     <dt>Date of birth</dt>
@@ -2988,6 +3076,9 @@ function App() {
   const [newsLoading, setNewsLoading] = useState(false)
   const [newsDetailPost, setNewsDetailPost] = useState<NewsPost | null>(null)
   const [showCyprusMembershipForm, setShowCyprusMembershipForm] = useState(false)
+  const [showFamilyMemberForm, setShowFamilyMemberForm] = useState(false)
+  const [familyMembers, setFamilyMembers] = useState<MemberRegistryEntry[]>([])
+  const [familyPendingRecord, setFamilyPendingRecord] = useState<MemberRegistryEntry | null>(null)
   const [ticketFormOpen, setTicketFormOpen] = useState(false)
   const [ticketFormFixture, setTicketFormFixture] = useState<UpcomingFixture | null>(null)
   const [ticketFormSubmitting, setTicketFormSubmitting] = useState(false)
@@ -3262,8 +3353,12 @@ function App() {
       const { row: pendingRow, error: pErr } = await fetchMyPendingRenewal(row.application_id)
       if (pErr) console.error(pErr)
       setMyPendingRenewal(pendingRow)
+      const { rows: familyRows, error: familyErr } = await fetchMyFamilyMembers(row.application_id)
+      if (familyErr) console.error(familyErr)
+      setFamilyMembers(familyRows)
     } else {
       setMyPendingRenewal(null)
+      setFamilyMembers([])
     }
     setMembershipLoading(false)
   }, [user?.id])
@@ -3696,7 +3791,11 @@ function App() {
   }, [isAdminRoute])
 
   useEffect(() => {
-    if (activePage !== 'mycmusc') setShowCyprusMembershipForm(false)
+    if (activePage !== 'mycmusc') {
+      setShowCyprusMembershipForm(false)
+      setShowFamilyMemberForm(false)
+      setFamilyPendingRecord(null)
+    }
   }, [activePage])
 
   useEffect(() => {
@@ -3730,11 +3829,48 @@ function App() {
     const { error } = await insertMembershipApplication(user.id, applicationId, payload)
     if (error) throw new Error(error.message)
     if (optionalOfficialOfferId) {
-      const { error: officialError } = await createOfficialMembershipRequest(optionalOfficialOfferId)
+      const { error: officialError } = await createOfficialMembershipRequest(
+        optionalOfficialOfferId,
+        applicationId,
+      )
       if (officialError) throw new Error(officialError.message)
       await loadMyOfficialRequests()
     }
     setShowCyprusMembershipForm(false)
+    await refreshMyMembership()
+    await loadMyOfficialRequests()
+  }
+
+  async function submitFamilyMemberApplication(
+    payload: MemberApplicationPayload,
+    optionalOfficialOfferId: string | null,
+  ) {
+    if (!user?.id || !membershipRecord?.applicationId) throw new Error('You must be signed in with active membership.')
+    const applicationId = generateApplicationId()
+    const { error } = await insertMembershipApplication(user.id, applicationId, payload, {
+      sponsorApplicationId: membershipRecord.applicationId,
+    })
+    if (error) throw new Error(error.message)
+    if (optionalOfficialOfferId) {
+      const { error: officialError } = await createOfficialMembershipRequest(
+        optionalOfficialOfferId,
+        applicationId,
+      )
+      if (officialError) throw new Error(officialError.message)
+      await loadMyOfficialRequests()
+    }
+    setShowFamilyMemberForm(false)
+    const submittedAt = new Date().toISOString()
+    setFamilyPendingRecord({
+      applicationId,
+      email: membershipRecord.email,
+      status: 'pending',
+      submittedAt,
+      validUntil: null,
+      membershipNumber: null,
+      sponsorApplicationId: membershipRecord.applicationId,
+      ...payload,
+    })
     await refreshMyMembership()
     await loadMyOfficialRequests()
   }
@@ -5070,6 +5206,23 @@ function App() {
             {membershipLoading ? (
               <p className="section-lead">Loading membership…</p>
             ) : isMembershipActive && membershipRecord ? (
+              showFamilyMemberForm ? (
+                <CyprusMembershipForm
+                  variant="family"
+                  onBack={() => setShowFamilyMemberForm(false)}
+                  officialOffers={officialOffers}
+                  officialOffersLoading={officialOffersLoading}
+                  onSubmitApplication={submitFamilyMemberApplication}
+                />
+              ) : familyPendingRecord ? (
+                <MembershipPendingView
+                  record={familyPendingRecord}
+                  officialOffers={officialOffers}
+                  myOfficialRequests={myOfficialRequests}
+                  isFamilyMember
+                  onBack={() => setFamilyPendingRecord(null)}
+                />
+              ) : (
               (() => {
                 const validUntilIso =
                   membershipRecord.validUntil?.trim() || defaultMembershipValidUntilIso()
@@ -5266,6 +5419,65 @@ function App() {
                   )}
                 </div>
 
+                <section className="mycmusc-profile-card" aria-label="Family members">
+                  <div className="mycmusc-family-head">
+                    <h2 className="mycmusc-profile-card-title">Family members</h2>
+                    <button
+                      type="button"
+                      className="mycmusc-family-add-btn"
+                      onClick={() => {
+                        setFamilyPendingRecord(null)
+                        setShowFamilyMemberForm(true)
+                      }}
+                    >
+                      <span className="mycmusc-family-add-icon" aria-hidden>
+                        +
+                      </span>
+                      Family member
+                    </button>
+                  </div>
+                  <p className="mycmusc-migration-hint" role="note">
+                    Add a family member on your account. They get their own application, membership number when
+                    activated, and optional official MU package at registration.
+                  </p>
+                  {familyMembers.length === 0 ? (
+                    <p className="section-lead merch-shelf-msg merch-shelf-msg--empty">No family members added yet.</p>
+                  ) : (
+                    <ul className="mycmusc-family-list">
+                      {familyMembers.map((fm) => (
+                        <li key={fm.applicationId} className="mycmusc-family-list-item">
+                          <div>
+                            <strong>
+                              {fm.firstName} {fm.lastName}
+                            </strong>
+                            <span className={`fixtures-ticket-pill fixtures-ticket-pill--${fm.status}`}>
+                              {fm.status}
+                            </span>
+                          </div>
+                          <small>
+                            {formatFamilyRelationship(fm.familyRelationship, fm.familyRelationshipOther)}
+                            {' · '}
+                            Ref <code className="mycmusc-inline-ref">{fm.applicationId}</code>
+                            {fm.status === 'active' && fm.membershipNumber != null
+                              ? ` · No. ${formatMembershipNumber(fm.membershipNumber)}`
+                              : ''}
+                          </small>
+                          {fm.status === 'pending' && (
+                            <button
+                              type="button"
+                              className="mycmusc-reg-btn mycmusc-reg-btn--secondary"
+                              style={{ marginTop: '0.5rem' }}
+                              onClick={() => setFamilyPendingRecord(fm)}
+                            >
+                              View payment details
+                            </button>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </section>
+
                 <RenewMembershipModal
                   open={renewalModalOpen}
                   onClose={() => {
@@ -5285,54 +5497,13 @@ function App() {
               </>
                 )
               })()
+              )
             ) : isMembershipPending && membershipRecord ? (
-              (() => {
-                const pendingOfficialRequest = myOfficialRequests.find((r) => r.status === 'pending')
-                const pendingPaymentBreakdown = computeMembershipPaymentBreakdown(
-                  MEMBERSHIP_FEE_EUR,
-                  pendingOfficialRequest?.offerId ?? null,
-                  officialOffers,
-                )
-                const seasonStart = formatLongDate(1, 5, MEMBERSHIP_DISPLAY_START_YEAR)
-                const seasonEnd = formatLongDate(31, 4, MEMBERSHIP_DISPLAY_END_YEAR)
-                return (
-              <div className="membership-pending-card">
-                <p className="membership-pending-title">Application received</p>
-                <p className="section-lead membership-pending-lead">
-                  Thank you. Your membership application is <strong>pending</strong>. The committee will
-                  check your details and payment, then activate your membership.
-                </p>
-                <p className="membership-pending-ref-label">Your unique application reference (save this):</p>
-                <code className="membership-pending-ref" tabIndex={0}>
-                  {membershipRecord.applicationId}
-                </code>
-                <p className="membership-pending-meta">
-                  Submitted: {new Date(membershipRecord.submittedAt).toLocaleString('en-GB')}
-                </p>
-                {pendingPaymentBreakdown.officialOffer && (
-                  <p className="section-lead membership-pending-lead">
-                    You selected <strong>{pendingPaymentBreakdown.officialOffer.title}</strong> as well as Cyprus
-                    membership. Pay the combined total below.
-                  </p>
-                )}
-
-                <MembershipRegistrationPaymentCard
-                  breakdown={pendingPaymentBreakdown}
-                  seasonStartLabel={seasonStart}
-                  seasonEndLabel={seasonEnd}
-                  applicationId={membershipRecord.applicationId}
-                  showPaymentMethods
-                  headingId="membership-pending-payment-heading"
-                />
-
-                <p className="mycmusc-reg-hint membership-pending-footnote" role="note">
-                  Once the committee activates your Cyprus club membership, you will unlock the benefits for{' '}
-                  <strong>match ticket requests</strong>, <strong>Merchandise</strong>, and other member-only areas of
-                  the app.
-                </p>
-              </div>
-                )
-              })()
+              <MembershipPendingView
+                record={membershipRecord}
+                officialOffers={officialOffers}
+                myOfficialRequests={myOfficialRequests}
+              />
             ) : showCyprusMembershipForm ? (
               <CyprusMembershipForm
                 onBack={() => setShowCyprusMembershipForm(false)}
