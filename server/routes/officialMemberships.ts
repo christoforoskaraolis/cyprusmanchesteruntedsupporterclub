@@ -1,6 +1,8 @@
 import { Router } from 'express'
 import { query } from '../db.ts'
 import { asyncHandler } from '../lib/asyncHandler.ts'
+import { badRequest } from '../lib/errors.ts'
+import { parseOfficialMuMembershipFields } from '../lib/officialMuMembership.ts'
 import { requireAdmin, requireUser } from '../middleware/auth.ts'
 
 export const officialMembershipsRouter = Router()
@@ -120,19 +122,20 @@ officialMembershipsRouter.get(
       city: string | null
       country: string | null
       official_mu_membership_id: string | null
+      official_mu_membership_status: string | null
       application_id: string | null
     }>(
       `select r.id, r.user_id, r.offer_id, r.status, r.requested_at,
               o.title as offer_title, o.price_eur as offer_price_eur,
               p.full_name, p.email,
               m.mobile_phone, m.date_of_birth, m.address, m.area, m.postal_code, m.city, m.country,
-              m.official_mu_membership_id, m.application_id
+              m.official_mu_membership_id, m.official_mu_membership_status, m.application_id
        from public.official_membership_requests r
        join public.official_membership_offers o on o.id = r.offer_id
        left join public.profiles p on p.id = r.user_id
        left join lateral (
          select ma.mobile_phone, ma.date_of_birth, ma.address, ma.area, ma.postal_code, ma.city, ma.country,
-                ma.official_mu_membership_id, ma.application_id
+                ma.official_mu_membership_id, ma.official_mu_membership_status, ma.application_id
          from public.membership_applications ma
          where ma.user_id = r.user_id
          order by ma.submitted_at desc
@@ -160,6 +163,10 @@ officialMembershipsRouter.get(
           city: r.city,
           country: r.country,
           officialMuMembershipId: r.official_mu_membership_id,
+          officialMuMembershipStatus:
+            r.official_mu_membership_status === 'activated' || r.official_mu_membership_status === 'pending'
+              ? r.official_mu_membership_status
+              : null,
           applicationId: r.application_id,
         },
       })),
@@ -171,28 +178,40 @@ officialMembershipsRouter.put(
   '/requests/:id/status',
   requireAdmin,
   asyncHandler(async (req, res) => {
-    const { status, officialMuMembershipId } = req.body as {
+    const { status, officialMuMembershipId, officialMuMembershipStatus } = req.body as {
       status: 'pending' | 'completed' | 'rejected' | 'cancelled'
       officialMuMembershipId?: string
+      officialMuMembershipStatus?: string
     }
     if (status === 'completed') {
-      const normalizedMuId = (officialMuMembershipId ?? '').trim()
-      if (normalizedMuId) {
-        await query(
-          `update public.membership_applications
-           set official_mu_membership_id = $2
-           where id = (
-             select ma.id
-             from public.membership_applications ma
-             where ma.user_id = (
-               select r.user_id from public.official_membership_requests r where r.id = $1
-             )
-             order by ma.submitted_at desc
-             limit 1
-           )`,
-          [req.params.id, normalizedMuId],
+      const rawId = (officialMuMembershipId ?? '').trim()
+      const resolvedStatus =
+        officialMuMembershipStatus === 'activated' || officialMuMembershipStatus === 'pending'
+          ? officialMuMembershipStatus
+          : rawId
+            ? 'activated'
+            : undefined
+      if (!rawId) {
+        throw badRequest(
+          'Enter the official Manchester United membership number before completing this request.',
         )
       }
+      const { officialMuId, officialMuStatus } = parseOfficialMuMembershipFields(rawId, resolvedStatus)
+      await query(
+        `update public.membership_applications
+         set official_mu_membership_id = $2,
+             official_mu_membership_status = $3
+         where id = (
+           select ma.id
+           from public.membership_applications ma
+           where ma.user_id = (
+             select r.user_id from public.official_membership_requests r where r.id = $1
+           )
+           order by ma.submitted_at desc
+           limit 1
+         )`,
+        [req.params.id, officialMuId, officialMuStatus],
+      )
     }
     await query(`update public.official_membership_requests set status = $1 where id = $2`, [status, req.params.id])
     res.json({ ok: true })

@@ -2,6 +2,7 @@ import { Router } from 'express'
 import { query } from '../db.ts'
 import { asyncHandler } from '../lib/asyncHandler.ts'
 import { HttpError, badRequest, notFound } from '../lib/errors.ts'
+import { parseOfficialMuMembershipFields } from '../lib/officialMuMembership.ts'
 import { requireAdmin, requireUser } from '../middleware/auth.ts'
 
 export const membershipRouter = Router()
@@ -22,11 +23,28 @@ membershipRouter.post(
   '/applications',
   requireUser,
   asyncHandler(async (req, res) => {
-    const p = req.body as any
+    const p = req.body as {
+      applicationId: string
+      firstName: string
+      lastName: string
+      mobilePhone: string
+      dateOfBirth: string
+      address: string
+      area: string
+      postalCode: string
+      city: string
+      country: string
+      officialMuMembershipId?: string
+      officialMuMembershipStatus?: string
+    }
+    const { officialMuId, officialMuStatus } = parseOfficialMuMembershipFields(
+      p.officialMuMembershipId,
+      p.officialMuMembershipStatus,
+    )
     await query(
       `insert into public.membership_applications
-      (user_id, application_id, status, first_name, last_name, mobile_phone, date_of_birth, address, area, postal_code, city, country, official_mu_membership_id)
-      values ($1,$2,'pending',$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
+      (user_id, application_id, status, first_name, last_name, mobile_phone, date_of_birth, address, area, postal_code, city, country, official_mu_membership_id, official_mu_membership_status)
+      values ($1,$2,'pending',$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
       [
         req.user!.id,
         p.applicationId,
@@ -39,7 +57,8 @@ membershipRouter.post(
         p.postalCode,
         p.city,
         p.country,
-        p.officialMuMembershipId || null,
+        officialMuId || null,
+        officialMuStatus,
       ],
     )
     res.status(201).json({ ok: true })
@@ -71,7 +90,43 @@ membershipRouter.put(
       city?: string
       country?: string
       officialMuMembershipId?: string
+      officialMuMembershipStatus?: string
     }
+    const { officialMuId, officialMuStatus } = parseOfficialMuMembershipFields(
+      payload.officialMuMembershipId,
+      payload.officialMuMembershipStatus,
+    )
+
+    const { rows: appRows } = await query<{ id: string; application_id: string; status: string }>(
+      `select id, application_id, status
+       from public.membership_applications
+       where user_id = $1
+       order by submitted_at desc
+       limit 1`,
+      [req.user!.id],
+    )
+    const app = appRows[0]
+    if (!app) throw notFound('Membership record not found')
+    if (app.status !== 'active') {
+      throw badRequest(
+        'Official Manchester United membership details can only be updated after your Cyprus membership is active.',
+      )
+    }
+
+    if (officialMuId) {
+      const { rows: duplicateRows } = await query<{ application_id: string }>(
+        `select application_id
+         from public.membership_applications
+         where official_mu_membership_id = $1
+           and application_id <> $2
+         limit 1`,
+        [officialMuId, app.application_id],
+      )
+      if (duplicateRows.length > 0) {
+        throw new HttpError(409, 'This official Manchester United membership number is already on file for another member')
+      }
+    }
+
     await query(`update public.profiles set full_name = $2 where id = $1`, [req.user!.id, (payload.fullName ?? '').trim() || null])
     await query(
       `update public.membership_applications
@@ -81,23 +136,19 @@ membershipRouter.put(
            postal_code = $5,
            city = $6,
            country = $7,
-           official_mu_membership_id = $8
-       where id = (
-         select id
-         from public.membership_applications
-         where user_id = $1
-         order by submitted_at desc
-         limit 1
-       )`,
+           official_mu_membership_id = $8,
+           official_mu_membership_status = $9
+       where id = $10`,
       [
-        req.user!.id,
         (payload.mobilePhone ?? '').trim(),
         (payload.address ?? '').trim(),
         (payload.area ?? '').trim(),
         (payload.postalCode ?? '').trim(),
         (payload.city ?? '').trim(),
         (payload.country ?? '').trim(),
-        (payload.officialMuMembershipId ?? '').trim() || null,
+        officialMuId || null,
+        officialMuStatus,
+        app.id,
       ],
     )
     res.json({ ok: true })
@@ -138,17 +189,22 @@ membershipRouter.put(
   requireAdmin,
   asyncHandler(async (req, res) => {
     const applicationId = String(req.params.applicationId ?? '').trim()
-    const memberId = String((req.body as { memberId?: string })?.memberId ?? '').trim()
+    const body = req.body as { memberId?: string; officialMuMembershipStatus?: string }
     if (!applicationId) throw badRequest('Application ID is required')
 
-    if (memberId) {
+    const { officialMuId, officialMuStatus } = parseOfficialMuMembershipFields(
+      body.memberId,
+      body.officialMuMembershipStatus,
+    )
+
+    if (officialMuId) {
       const { rows: duplicateRows } = await query<{ application_id: string }>(
         `select application_id
          from public.membership_applications
          where official_mu_membership_id = $1
            and application_id <> $2
          limit 1`,
-        [memberId, applicationId],
+        [officialMuId, applicationId],
       )
       if (duplicateRows.length > 0) {
         throw new HttpError(409, 'This member ID is already used by another request')
@@ -157,10 +213,11 @@ membershipRouter.put(
 
     const { rows } = await query<{ application_id: string }>(
       `update public.membership_applications
-       set official_mu_membership_id = $1
-       where application_id = $2
+       set official_mu_membership_id = $1,
+           official_mu_membership_status = $2
+       where application_id = $3
        returning application_id`,
-      [memberId || null, applicationId],
+      [officialMuId || null, officialMuStatus, applicationId],
     )
     if (rows.length === 0) throw notFound('Membership request not found')
     res.json({ ok: true })

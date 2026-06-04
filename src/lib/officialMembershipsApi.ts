@@ -1,4 +1,5 @@
 import { apiGet, apiSend, asError } from './apiClient'
+import type { OfficialMuMembershipStatus } from './membershipApi.ts'
 
 export type OfficialMembershipOffer = {
   id: string
@@ -31,6 +32,7 @@ export type AdminOfficialMembershipRequest = OfficialMembershipRequest & {
     city: string | null
     country: string | null
     officialMuMembershipId: string | null
+    officialMuMembershipStatus: OfficialMuMembershipStatus | null
     applicationId: string | null
   }
 }
@@ -113,10 +115,17 @@ export async function fetchAdminOfficialMembershipRequests() {
 export async function setAdminOfficialMembershipRequestStatus(
   requestId: string,
   status: 'pending' | 'completed' | 'rejected' | 'cancelled',
-  officialMuMembershipId?: string,
+  options?: {
+    officialMuMembershipId?: string
+    officialMuMembershipStatus?: OfficialMuMembershipStatus
+  },
 ) {
   try {
-    await apiSend(`/api/official-memberships/requests/${requestId}/status`, 'PUT', { status, officialMuMembershipId })
+    await apiSend(`/api/official-memberships/requests/${requestId}/status`, 'PUT', {
+      status,
+      officialMuMembershipId: options?.officialMuMembershipId,
+      officialMuMembershipStatus: options?.officialMuMembershipStatus,
+    })
     return { error: undefined }
   } catch (error) {
     return { error: asError(error) }

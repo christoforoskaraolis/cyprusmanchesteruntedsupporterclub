@@ -1,6 +1,42 @@
 import { defaultMembershipValidUntilIso } from './membershipSeason.ts'
 import { apiGet, apiSend, asError } from './apiClient'
 
+/** User-reported status of official Manchester United membership at application time. */
+export type OfficialMuMembershipStatus = 'activated' | 'pending'
+
+export function formatOfficialMuMembershipStatus(
+  status: OfficialMuMembershipStatus | null | undefined,
+): string {
+  if (status === 'activated') return 'Activated'
+  if (status === 'pending') return 'Pending'
+  return '—'
+}
+
+export type OfficialMuMembershipFormStatus = OfficialMuMembershipStatus | ''
+
+export function parseOfficialMuMembershipFields(
+  officialMuMembershipId: string,
+  officialMuMembershipStatus: OfficialMuMembershipFormStatus,
+):
+  | { officialMuMembershipId: string; officialMuMembershipStatus: OfficialMuMembershipStatus | null }
+  | { error: string } {
+  const muId = officialMuMembershipId.trim()
+  const muStatus =
+    officialMuMembershipStatus === 'activated' || officialMuMembershipStatus === 'pending'
+      ? officialMuMembershipStatus
+      : null
+  if (muStatus && !muId) {
+    return { error: 'Please enter your official Manchester United membership number.' }
+  }
+  if (!muStatus && muId) {
+    return {
+      error:
+        'Choose Activated or Pending when you enter a membership number, or select Not applicable if you do not have official MU membership yet.',
+    }
+  }
+  return { officialMuMembershipId: muId, officialMuMembershipStatus: muStatus }
+}
+
 export type MemberRegistryEntry = {
   applicationId: string
   email: string | null
@@ -21,6 +57,7 @@ export type MemberRegistryEntry = {
   city: string
   country: string
   officialMuMembershipId: string
+  officialMuMembershipStatus: OfficialMuMembershipStatus | null
 }
 
 export type MemberApplicationPayload = Omit<
@@ -43,6 +80,7 @@ export type DbMembershipApplication = {
   city: string
   country: string
   official_mu_membership_id: string | null
+  official_mu_membership_status: OfficialMuMembershipStatus | null
   submitted_at: string
   activated_at: string | null
   membership_number?: number | null
@@ -103,6 +141,10 @@ export function dbRowToMemberEntry(row: DbMembershipApplication): MemberRegistry
     city: row.city,
     country: row.country,
     officialMuMembershipId: row.official_mu_membership_id ?? '',
+    officialMuMembershipStatus:
+      row.official_mu_membership_status === 'activated' || row.official_mu_membership_status === 'pending'
+        ? row.official_mu_membership_status
+        : null,
   }
 }
 
@@ -151,6 +193,7 @@ export async function updateMyProfileDetails(payload: {
   city: string
   country: string
   officialMuMembershipId: string
+  officialMuMembershipStatus: OfficialMuMembershipStatus | null
 }) {
   try {
     await apiSend('/api/membership/profile', 'PUT', payload)
@@ -179,9 +222,16 @@ export async function setApplicationStatus(applicationId: string, status: 'pendi
   }
 }
 
-export async function updateApplicationMemberId(applicationId: string, memberId: string) {
+export async function updateApplicationMemberId(
+  applicationId: string,
+  memberId: string,
+  officialMuMembershipStatus: OfficialMuMembershipStatus | null,
+) {
   try {
-    await apiSend(`/api/membership/applications/${applicationId}/member-id`, 'PUT', { memberId })
+    await apiSend(`/api/membership/applications/${applicationId}/member-id`, 'PUT', {
+      memberId,
+      officialMuMembershipStatus,
+    })
     return { error: undefined }
   } catch (error) {
     return { error: asError(error) }

@@ -17,7 +17,11 @@ import {
   fetchMyProfile,
   fetchPendingRenewalRequests,
   formatMembershipNumber,
+  formatOfficialMuMembershipStatus,
   generateApplicationId,
+  parseOfficialMuMembershipFields,
+  type OfficialMuMembershipFormStatus,
+  type OfficialMuMembershipStatus,
   insertMembershipApplication,
   insertRenewalRequest,
   setApplicationStatus,
@@ -93,6 +97,79 @@ function formatLongDate(day: number, monthIndex: number, year: number): string {
   })
 }
 
+type OfficialMuMembershipFieldsProps = {
+  membershipId: string
+  onMembershipIdChange: (value: string) => void
+  status: OfficialMuMembershipFormStatus
+  onStatusChange: (value: OfficialMuMembershipFormStatus) => void
+  idInputName?: string
+  statusHint?: string
+}
+
+function OfficialMuMembershipFields({
+  membershipId,
+  onMembershipIdChange,
+  status,
+  onStatusChange,
+  idInputName = 'official-mu-id',
+  statusHint = 'If you have or are waiting for official MU membership, tell us whether it is active or still pending.',
+}: OfficialMuMembershipFieldsProps) {
+  return (
+    <>
+      <p className="membership-form-section-title">Official Manchester United membership</p>
+      <label className="auth-field membership-field">
+        <span className="auth-label">Membership number</span>
+        <input
+          className="auth-input"
+          type="text"
+          name={idInputName}
+          autoComplete="off"
+          placeholder="Required when status is Activated or Pending"
+          value={membershipId}
+          onChange={(ev) => onMembershipIdChange(ev.target.value)}
+        />
+      </label>
+      <fieldset className="membership-mu-status-fieldset">
+        <legend className="membership-mu-status-legend">Membership status</legend>
+        <p className="membership-mu-status-hint">{statusHint}</p>
+        <label className="membership-mu-status-option">
+          <input
+            type="radio"
+            name={`${idInputName}-status`}
+            value="activated"
+            checked={status === 'activated'}
+            onChange={() => onStatusChange('activated')}
+          />
+          <span>Activated — my official membership is active</span>
+        </label>
+        <label className="membership-mu-status-option">
+          <input
+            type="radio"
+            name={`${idInputName}-status`}
+            value="pending"
+            checked={status === 'pending'}
+            onChange={() => onStatusChange('pending')}
+          />
+          <span>Pending — not yet active</span>
+        </label>
+        <label className="membership-mu-status-option">
+          <input
+            type="radio"
+            name={`${idInputName}-status`}
+            value=""
+            checked={status === ''}
+            onChange={() => {
+              onStatusChange('')
+              onMembershipIdChange('')
+            }}
+          />
+          <span>Not applicable — I do not have official MU membership yet</span>
+        </label>
+      </fieldset>
+    </>
+  )
+}
+
 type CyprusMembershipFormProps = {
   onBack: () => void
   onSubmitApplication: (payload: MemberApplicationPayload) => Promise<void>
@@ -112,6 +189,9 @@ function CyprusMembershipForm({ onBack, onSubmitApplication }: CyprusMembershipF
   const [city, setCity] = useState('')
   const [country, setCountry] = useState('')
   const [officialMuMembershipId, setOfficialMuMembershipId] = useState('')
+  const [officialMuMembershipStatus, setOfficialMuMembershipStatus] = useState<
+    'activated' | 'pending' | ''
+  >('')
   const [agreed, setAgreed] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
@@ -183,6 +263,12 @@ function CyprusMembershipForm({ onBack, onSubmitApplication }: CyprusMembershipF
       return
     }
 
+    const parsedMu = parseOfficialMuMembershipFields(officialMuMembershipId, officialMuMembershipStatus)
+    if ('error' in parsedMu) {
+      setFormError(parsedMu.error)
+      return
+    }
+
     const payload: MemberApplicationPayload = {
       firstName: firstName.trim(),
       lastName: lastName.trim(),
@@ -193,7 +279,8 @@ function CyprusMembershipForm({ onBack, onSubmitApplication }: CyprusMembershipF
       postalCode: postalCode.trim(),
       city: city.trim(),
       country: country.trim(),
-      officialMuMembershipId: officialMuMembershipId.trim(),
+      officialMuMembershipId: parsedMu.officialMuMembershipId,
+      officialMuMembershipStatus: parsedMu.officialMuMembershipStatus,
     }
 
     setSubmitting(true)
@@ -342,18 +429,13 @@ function CyprusMembershipForm({ onBack, onSubmitApplication }: CyprusMembershipF
           />
         </label>
 
-        <label className="auth-field membership-field">
-          <span className="auth-label">Official Man Utd membership ID</span>
-          <input
-            className="auth-input"
-            type="text"
-            name="membership-official-mu-id"
-            autoComplete="off"
-            placeholder="Optional — if you already have an official Manchester United membership number"
-            value={officialMuMembershipId}
-            onChange={(ev) => setOfficialMuMembershipId(ev.target.value)}
-          />
-        </label>
+        <OfficialMuMembershipFields
+          membershipId={officialMuMembershipId}
+          onMembershipIdChange={setOfficialMuMembershipId}
+          status={officialMuMembershipStatus}
+          onStatusChange={setOfficialMuMembershipStatus}
+          idInputName="membership-official-mu-id"
+        />
 
         <label className="membership-checkbox-row">
           <input
@@ -693,7 +775,11 @@ type AdminConsoleProps = {
   onActivate: (applicationId: string) => Promise<void>
   onSetPending: (applicationId: string) => Promise<void>
   onDeleteMemberRequest: (applicationId: string) => Promise<void>
-  onUpdateMemberId: (applicationId: string, memberId: string) => Promise<void>
+  onUpdateMemberId: (
+    applicationId: string,
+    memberId: string,
+    officialMuMembershipStatus: OfficialMuMembershipStatus | null,
+  ) => Promise<void>
   onUpdateMembershipNumber: (applicationId: string, membershipNumber: number | null) => Promise<void>
   onCompleteRenewal: (row: PendingRenewalListRow) => Promise<void>
   onApproveTicketRequest: (row: AdminFixtureTicketRequest) => Promise<void>
@@ -731,7 +817,10 @@ type AdminConsoleProps = {
   onSetOfficialRequestStatus: (
     requestId: string,
     status: 'pending' | 'completed' | 'rejected' | 'cancelled',
-    officialMuMembershipId?: string,
+    options?: {
+      officialMuMembershipId?: string
+      officialMuMembershipStatus?: OfficialMuMembershipStatus
+    },
   ) => Promise<void>
   onDeleteOfficialRequest: (requestId: string) => Promise<void>
 }
@@ -818,7 +907,13 @@ function AdminConsole({
   const [officialRequestBusyId, setOfficialRequestBusyId] = useState<string | null>(null)
   const [expandedOfficialRequestId, setExpandedOfficialRequestId] = useState<string | null>(null)
   const [officialMuIdDraftByRequestId, setOfficialMuIdDraftByRequestId] = useState<Record<string, string>>({})
+  const [officialMuStatusDraftByRequestId, setOfficialMuStatusDraftByRequestId] = useState<
+    Record<string, OfficialMuMembershipStatus>
+  >({})
   const [memberIdDraftByApplicationId, setMemberIdDraftByApplicationId] = useState<Record<string, string>>({})
+  const [memberMuStatusDraftByApplicationId, setMemberMuStatusDraftByApplicationId] = useState<
+    Record<string, OfficialMuMembershipFormStatus>
+  >({})
   const [membershipNumberDraftByApplicationId, setMembershipNumberDraftByApplicationId] = useState<Record<string, string>>({})
   const [memberActionError, setMemberActionError] = useState<string | null>(null)
   const pendingMembersCount = memberRegistry.filter((member) => member.status === 'pending').length
@@ -872,6 +967,7 @@ function AdminConsole({
       'Status',
       'Membership Number',
       'Official MU ID',
+      'Official MU status',
       'First Name',
       'Last Name',
       'Mobile',
@@ -891,10 +987,11 @@ function AdminConsole({
       m.status,
       m.membershipNumber ?? '',
       m.officialMuMembershipId,
+      formatOfficialMuMembershipStatus(m.officialMuMembershipStatus),
       m.firstName,
       m.lastName,
       m.mobilePhone,
-      m.dateOfBirth,
+      formatDateOfBirthDisplay(m.dateOfBirth),
       m.address,
       m.area,
       m.postalCode,
@@ -945,6 +1042,7 @@ function AdminConsole({
       'City',
       'Country',
       'Official MU ID',
+      'Official MU status',
       'Application Reference',
     ]
     const rows = officialRequests.map((r) => [
@@ -957,13 +1055,14 @@ function AdminConsole({
       r.user.fullName ?? '',
       r.user.email ?? '',
       r.user.mobilePhone ?? '',
-      r.user.dateOfBirth ?? '',
+      formatDateOfBirthDisplay(r.user.dateOfBirth ?? ''),
       r.user.address ?? '',
       r.user.area ?? '',
       r.user.postalCode ?? '',
       r.user.city ?? '',
       r.user.country ?? '',
       r.user.officialMuMembershipId ?? '',
+      formatOfficialMuMembershipStatus(r.user.officialMuMembershipStatus),
       r.user.applicationId ?? '',
     ])
     downloadCsv(`official-memberships-report-${reportStamp()}.csv`, headers, rows)
@@ -1405,7 +1504,7 @@ function AdminConsole({
                   )}
                   <div>
                     <dt>Date of birth</dt>
-                    <dd>{formatDateOfBirthDdMmYyyy(m.dateOfBirth)}</dd>
+                    <dd>{formatDateOfBirthDisplay(m.dateOfBirth) || '—'}</dd>
                   </div>
                   <div>
                     <dt>Email</dt>
@@ -1424,19 +1523,47 @@ function AdminConsole({
                     <dd>{m.postalCode}</dd>
                   </div>
                   <div>
-                    <dt>Official MU ID</dt>
+                    <dt>Official MU membership</dt>
                     <dd>
-                      <div className="admin-merch-create-row">
-                        <input
-                          className="admin-merch-create-input"
-                          type="text"
-                          placeholder="Official member ID"
-                          value={memberIdDraftByApplicationId[m.applicationId] ?? m.officialMuMembershipId ?? ''}
-                          onChange={(e) =>
-                            setMemberIdDraftByApplicationId((prev) => ({ ...prev, [m.applicationId]: e.target.value }))
-                          }
-                          disabled={busyId !== null}
-                        />
+                      <div className="admin-official-mu-edit">
+                        <label className="auth-field membership-field">
+                          <span className="auth-label">Membership number</span>
+                          <input
+                            className="admin-merch-create-input"
+                            type="text"
+                            placeholder="Official member ID"
+                            value={memberIdDraftByApplicationId[m.applicationId] ?? m.officialMuMembershipId ?? ''}
+                            onChange={(e) =>
+                              setMemberIdDraftByApplicationId((prev) => ({
+                                ...prev,
+                                [m.applicationId]: e.target.value,
+                              }))
+                            }
+                            disabled={busyId !== null}
+                          />
+                        </label>
+                        <label className="auth-field membership-field">
+                          <span className="auth-label">Status</span>
+                          <select
+                            className="auth-input"
+                            value={
+                              memberMuStatusDraftByApplicationId[m.applicationId] ??
+                              m.officialMuMembershipStatus ??
+                              ''
+                            }
+                            onChange={(e) =>
+                              setMemberMuStatusDraftByApplicationId((prev) => ({
+                                ...prev,
+                                [m.applicationId]: e.target.value as OfficialMuMembershipFormStatus,
+                              }))
+                            }
+                            disabled={busyId !== null}
+                          >
+                            <option value="">Not set</option>
+                            <option value="pending">Pending</option>
+                            <option value="activated">Activated</option>
+                          </select>
+                        </label>
                         <button
                           type="button"
                           className="admin-merch-create-btn"
@@ -1445,18 +1572,36 @@ function AdminConsole({
                             setMemberActionError(null)
                             setBusyId(m.applicationId)
                             try {
-                              const memberId = (memberIdDraftByApplicationId[m.applicationId] ?? m.officialMuMembershipId ?? '').trim()
-                              await onUpdateMemberId(m.applicationId, memberId)
+                              const memberId = (
+                                memberIdDraftByApplicationId[m.applicationId] ?? m.officialMuMembershipId ?? ''
+                              ).trim()
+                              const statusDraft = memberMuStatusDraftByApplicationId[m.applicationId]
+                              const muStatus: OfficialMuMembershipStatus | null =
+                                statusDraft === 'activated' || statusDraft === 'pending'
+                                  ? statusDraft
+                                  : statusDraft === ''
+                                    ? null
+                                    : m.officialMuMembershipStatus
+                              const parsed = parseOfficialMuMembershipFields(memberId, muStatus ?? '')
+                              if ('error' in parsed) {
+                                setMemberActionError(parsed.error)
+                                return
+                              }
+                              await onUpdateMemberId(
+                                m.applicationId,
+                                parsed.officialMuMembershipId,
+                                parsed.officialMuMembershipStatus,
+                              )
                             } catch (error) {
                               setMemberActionError(
-                                error instanceof Error ? error.message : 'Could not update member ID.',
+                                error instanceof Error ? error.message : 'Could not update official MU membership.',
                               )
                             } finally {
                               setBusyId(null)
                             }
                           }}
                         >
-                          {busyId === m.applicationId ? 'Saving…' : 'Save ID'}
+                          {busyId === m.applicationId ? 'Saving…' : 'Save official MU'}
                         </button>
                       </div>
                     </dd>
@@ -2165,6 +2310,10 @@ function AdminConsole({
                                 ...prev,
                                 [row.id]: row.user.officialMuMembershipId ?? '',
                               }))
+                              setOfficialMuStatusDraftByRequestId((prev) => ({
+                                ...prev,
+                                [row.id]: row.user.officialMuMembershipStatus ?? 'activated',
+                              }))
                             }
                             setExpandedOfficialRequestId(expanded ? null : row.id)
                           }}
@@ -2178,17 +2327,33 @@ function AdminConsole({
                           onClick={async () => {
                             setOfficialRequestBusyId(row.id)
                             try {
-                              await onSetOfficialRequestStatus(
-                                row.id,
-                                'completed',
-                                (officialMuIdDraftByRequestId[row.id] ?? row.user.officialMuMembershipId ?? '').trim(),
+                              const memberId = (
+                                officialMuIdDraftByRequestId[row.id] ?? row.user.officialMuMembershipId ?? ''
+                              ).trim()
+                              const muStatus =
+                                officialMuStatusDraftByRequestId[row.id] ??
+                                row.user.officialMuMembershipStatus ??
+                                'activated'
+                              const parsed = parseOfficialMuMembershipFields(memberId, muStatus)
+                              if ('error' in parsed) {
+                                throw new Error(parsed.error)
+                              }
+                              await onSetOfficialRequestStatus(row.id, 'completed', {
+                                officialMuMembershipId: parsed.officialMuMembershipId,
+                                officialMuMembershipStatus: parsed.officialMuMembershipStatus ?? 'activated',
+                              })
+                            } catch (error) {
+                              window.alert(
+                                error instanceof Error
+                                  ? error.message
+                                  : 'Could not complete official membership request.',
                               )
                             } finally {
                               setOfficialRequestBusyId(null)
                             }
                           }}
                         >
-                          Complete
+                          Accept &amp; save ID
                         </button>
                         <button
                           type="button"
@@ -2228,14 +2393,14 @@ function AdminConsole({
                           <small>Name: {row.user.fullName ?? '—'}</small>
                           <small>Email: {row.user.email ?? '—'}</small>
                           <small>Mobile: {row.user.mobilePhone ?? '—'}</small>
-                          <small>Date of birth: {row.user.dateOfBirth ?? '—'}</small>
+                          <small>Date of birth: {formatDateOfBirthDisplay(row.user.dateOfBirth ?? '') || '—'}</small>
                           <small>Address: {row.user.address ?? '—'}</small>
                           <small>
                             Area/Post code: {row.user.area ?? '—'} / {row.user.postalCode ?? '—'}
                           </small>
                           <small>City/Country: {row.user.city ?? '—'} / {row.user.country ?? '—'}</small>
                           <label className="auth-field membership-field">
-                            <span className="auth-label">Official MU ID (set before Complete)</span>
+                            <span className="auth-label">Official MU ID (required to accept)</span>
                             <input
                               className="auth-input"
                               type="text"
@@ -2248,6 +2413,30 @@ function AdminConsole({
                               }
                             />
                           </label>
+                          <label className="auth-field membership-field">
+                            <span className="auth-label">Official MU status on accept</span>
+                            <select
+                              className="auth-input"
+                              value={
+                                officialMuStatusDraftByRequestId[row.id] ??
+                                row.user.officialMuMembershipStatus ??
+                                'activated'
+                              }
+                              onChange={(e) =>
+                                setOfficialMuStatusDraftByRequestId((prev) => ({
+                                  ...prev,
+                                  [row.id]: e.target.value as OfficialMuMembershipStatus,
+                                }))
+                              }
+                            >
+                              <option value="activated">Activated</option>
+                              <option value="pending">Pending</option>
+                            </select>
+                          </label>
+                          <small>
+                            Current on file: ID {row.user.officialMuMembershipId?.trim() || '—'} · status{' '}
+                            {formatOfficialMuMembershipStatus(row.user.officialMuMembershipStatus)}
+                          </small>
                           <small>Application reference: {row.user.applicationId ?? '—'}</small>
                         </div>
                       )}
@@ -2660,43 +2849,40 @@ function parseDateOfBirthInput(input: string): Date | null {
   return null
 }
 
-function formatDateOfBirthLabel(raw: string): string {
+const DATE_OF_BIRTH_MONTH_SHORT = [
+  'Jan',
+  'Feb',
+  'Mar',
+  'Apr',
+  'May',
+  'Jun',
+  'Jul',
+  'Aug',
+  'Sep',
+  'Oct',
+  'Nov',
+  'Dec',
+] as const
+
+/** Display and export: DD-Mon-YYYY (e.g. 15-Jan-1990). Returns empty string when unknown/blank. */
+function formatDateOfBirthDisplay(raw: string): string {
   const value = raw.trim()
-  if (!value) return '—'
+  if (!value) return ''
 
-  // Preferred path for form-like values.
   const parsedFromInput = parseDateOfBirthInput(value)
-  if (parsedFromInput) {
-    return parsedFromInput.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })
-  }
+  const parsed =
+    parsedFromInput ??
+    (() => {
+      const parsedIso = new Date(value)
+      return Number.isNaN(parsedIso.getTime()) ? null : parsedIso
+    })()
 
-  // Handles values already stored as ISO datetime.
-  const parsedIso = new Date(value)
-  if (!Number.isNaN(parsedIso.getTime())) {
-    return parsedIso.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })
-  }
+  if (!parsed) return value
 
-  return value
-}
-
-function formatDateOfBirthDdMmYyyy(raw: string): string {
-  const value = raw.trim()
-  if (!value) return '—'
-  const parsedFromInput = parseDateOfBirthInput(value)
-  if (parsedFromInput) {
-    const dd = String(parsedFromInput.getDate()).padStart(2, '0')
-    const mm = String(parsedFromInput.getMonth() + 1).padStart(2, '0')
-    const yyyy = String(parsedFromInput.getFullYear())
-    return `${dd}-${mm}-${yyyy}`
-  }
-  const parsedIso = new Date(value)
-  if (!Number.isNaN(parsedIso.getTime())) {
-    const dd = String(parsedIso.getDate()).padStart(2, '0')
-    const mm = String(parsedIso.getMonth() + 1).padStart(2, '0')
-    const yyyy = String(parsedIso.getFullYear())
-    return `${dd}-${mm}-${yyyy}`
-  }
-  return value
+  const dd = String(parsed.getDate()).padStart(2, '0')
+  const month = DATE_OF_BIRTH_MONTH_SHORT[parsed.getMonth()]
+  const yyyy = String(parsed.getFullYear())
+  return `${dd}-${month}-${yyyy}`
 }
 
 function isOldTraffordHomeFixture(f: UpcomingFixture): boolean {
@@ -2820,6 +3006,7 @@ function App() {
   const [detailsCity, setDetailsCity] = useState('')
   const [detailsCountry, setDetailsCountry] = useState('')
   const [detailsOfficialMuId, setDetailsOfficialMuId] = useState('')
+  const [detailsOfficialMuStatus, setDetailsOfficialMuStatus] = useState<OfficialMuMembershipFormStatus>('')
 
   const openPage = useCallback(
     (page: ActivePage, opts?: { resetSearch?: boolean; resetFixtures?: boolean }) => {
@@ -3248,9 +3435,12 @@ function App() {
   async function applySetOfficialRequestStatus(
     requestId: string,
     status: 'pending' | 'completed' | 'rejected' | 'cancelled',
-    officialMuMembershipId?: string,
+    options?: {
+      officialMuMembershipId?: string
+      officialMuMembershipStatus?: OfficialMuMembershipStatus
+    },
   ) {
-    const { error } = await setAdminOfficialMembershipRequestStatus(requestId, status, officialMuMembershipId)
+    const { error } = await setAdminOfficialMembershipRequestStatus(requestId, status, options)
     if (error) throw error
     await loadAdminOfficialRequests()
     await refreshMyMembership()
@@ -3501,6 +3691,12 @@ function App() {
     setDetailsCity(membershipRecord.city)
     setDetailsCountry(membershipRecord.country)
     setDetailsOfficialMuId(membershipRecord.officialMuMembershipId ?? '')
+    setDetailsOfficialMuStatus(
+      membershipRecord.officialMuMembershipStatus === 'activated' ||
+        membershipRecord.officialMuMembershipStatus === 'pending'
+        ? membershipRecord.officialMuMembershipStatus
+        : '',
+    )
   }, [membershipRecord, myProfile?.fullName, detailsEditOpen])
 
   useEffect(() => {
@@ -3544,8 +3740,12 @@ function App() {
     await refreshMyMembership()
   }
 
-  async function applyUpdateMemberId(applicationId: string, memberId: string) {
-    const { error } = await updateApplicationMemberId(applicationId, memberId)
+  async function applyUpdateMemberId(
+    applicationId: string,
+    memberId: string,
+    officialMuMembershipStatus: OfficialMuMembershipStatus | null,
+  ) {
+    const { error } = await updateApplicationMemberId(applicationId, memberId, officialMuMembershipStatus)
     if (error) throw new Error(error.message)
     await loadAdminRegistry()
     await refreshMyMembership()
@@ -3606,6 +3806,11 @@ function App() {
     ) {
       return setDetailsError('Please complete all required contact/address fields.')
     }
+    const parsedMu = parseOfficialMuMembershipFields(detailsOfficialMuId, detailsOfficialMuStatus)
+    if ('error' in parsedMu) {
+      return setDetailsError(parsedMu.error)
+    }
+
     setDetailsSaving(true)
     const { error } = await updateMyProfileDetails({
       fullName: detailsFullName.trim(),
@@ -3615,7 +3820,8 @@ function App() {
       postalCode: detailsPostalCode.trim(),
       city: detailsCity.trim(),
       country: detailsCountry.trim(),
-      officialMuMembershipId: detailsOfficialMuId.trim(),
+      officialMuMembershipId: parsedMu.officialMuMembershipId,
+      officialMuMembershipStatus: parsedMu.officialMuMembershipStatus,
     })
     setDetailsSaving(false)
     if (error) return setDetailsError(error.message)
@@ -4904,15 +5110,7 @@ function App() {
 
                 <div className="mycmusc-profile-card">
                   <h2 className="mycmusc-profile-card-title">Your details</h2>
-                  <div className="mycmusc-membership-summary" aria-label="Activation and official membership ID">
-                    <div className="mycmusc-summary-row">
-                      <span className="mycmusc-summary-label">Activated on</span>
-                      <span className="mycmusc-summary-value">
-                        {membershipRecord.activatedAt
-                          ? new Date(membershipRecord.activatedAt).toLocaleString('en-GB')
-                          : 'Not recorded'}
-                      </span>
-                    </div>
+                  <div className="mycmusc-membership-summary" aria-label="Official membership ID">
                     <div className="mycmusc-summary-row">
                       <span className="mycmusc-summary-label">Official Man Utd ID number</span>
                       <span
@@ -4920,10 +5118,20 @@ function App() {
                       >
                         {membershipRecord.officialMuMembershipId?.trim()
                           ? membershipRecord.officialMuMembershipId.trim()
-                          : 'Not on file (optional — add when you have a number from Manchester United)'}
+                          : 'Not on file — use Edit details to add your number'}
+                      </span>
+                    </div>
+                    <div className="mycmusc-summary-row">
+                      <span className="mycmusc-summary-label">Official MU status</span>
+                      <span className="mycmusc-summary-value">
+                        {formatOfficialMuMembershipStatus(membershipRecord.officialMuMembershipStatus)}
                       </span>
                     </div>
                   </div>
+                  <p className="mycmusc-migration-hint" role="note">
+                    After your Cyprus membership is active, you can update your official Manchester United membership
+                    number and mark it as pending or activated under Edit details.
+                  </p>
                   {detailsEditOpen ? (
                     <div className="mycmusc-reg-form">
                       {detailsError && <p className="auth-message is-error">{detailsError}</p>}
@@ -4959,10 +5167,14 @@ function App() {
                           <input className="auth-input" value={detailsCountry} onChange={(e) => setDetailsCountry(e.target.value)} />
                         </label>
                       </div>
-                      <label className="auth-field membership-field">
-                        <span className="auth-label">Official Man Utd ID number (optional)</span>
-                        <input className="auth-input" value={detailsOfficialMuId} onChange={(e) => setDetailsOfficialMuId(e.target.value)} />
-                      </label>
+                      <OfficialMuMembershipFields
+                        membershipId={detailsOfficialMuId}
+                        onMembershipIdChange={setDetailsOfficialMuId}
+                        status={detailsOfficialMuStatus}
+                        onStatusChange={setDetailsOfficialMuStatus}
+                        idInputName="profile-official-mu-id"
+                        statusHint="Add or update your official MU membership. Choose Activated when your Manchester United membership is active, or Pending while you are waiting."
+                      />
                       <div className="renewal-modal-actions">
                         <button type="button" className="mycmusc-reg-btn mycmusc-reg-btn--secondary" onClick={() => setDetailsEditOpen(false)}>
                           Cancel
@@ -4993,7 +5205,7 @@ function App() {
                         </div>
                         <div>
                           <dt>Date of birth</dt>
-                      <dd>{formatDateOfBirthLabel(membershipRecord.dateOfBirth)}</dd>
+                      <dd>{formatDateOfBirthDisplay(membershipRecord.dateOfBirth) || '—'}</dd>
                         </div>
                         <div>
                           <dt>Address</dt>
@@ -5009,6 +5221,14 @@ function App() {
                           <dt>Application reference</dt>
                           <dd>
                             <code className="mycmusc-inline-ref">{membershipRecord.applicationId}</code>
+                          </dd>
+                        </div>
+                        <div>
+                          <dt>Activated on</dt>
+                          <dd>
+                            {membershipRecord.activatedAt
+                              ? new Date(membershipRecord.activatedAt).toLocaleString('en-GB')
+                              : 'Not recorded'}
                           </dd>
                         </div>
                       </dl>
