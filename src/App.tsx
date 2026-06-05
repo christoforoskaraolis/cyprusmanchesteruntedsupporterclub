@@ -3237,6 +3237,7 @@ function App() {
   const [activePage, setActivePage] = useState<ActivePage>(() =>
     typeof window === 'undefined' ? 'home' : pageFromPath(window.location.pathname),
   )
+  const [mobileMoreOpen, setMobileMoreOpen] = useState(false)
   const [searchOpen, setSearchOpen] = useState(false)
   const [fixturesFeed, setFixturesFeed] = useState<UpcomingFixture[]>([])
   const [fixturesLoading, setFixturesLoading] = useState(false)
@@ -3333,6 +3334,7 @@ function App() {
   const openPage = useCallback(
     (page: ActivePage, opts?: { resetSearch?: boolean; resetFixtures?: boolean }) => {
       if (opts?.resetSearch ?? true) setSearchOpen(false)
+      setMobileMoreOpen(false)
       setActivePage(page)
       if (!isAdminRoute && typeof window !== 'undefined') {
         const path = pathFromPage(page)
@@ -3350,6 +3352,8 @@ function App() {
   const showMatchTickets = Boolean(user?.id && isMembershipActive)
   /** Merchandise is available to any signed-in user. */
   const showMerchandise = Boolean(user?.id)
+  const mobileMoreActive =
+    activePage === 'social' || activePage === 'board' || activePage === 'merchandise' || activePage === 'contact'
   const welcomeFirstName =
     myProfile?.fullName?.trim().split(/\s+/)[0] ||
     user?.email?.split('@')[0] ||
@@ -6221,36 +6225,86 @@ function App() {
         )}
       </main>
 
-      <nav className="mobile-bottom-nav" aria-label="Mobile navigation">
-        <button
-          type="button"
-          className={`mobile-bottom-nav-btn ${activePage === 'home' ? 'is-active' : ''}`}
-          onClick={() => openPage('home')}
-        >
-          Home
-        </button>
-        <button
-          type="button"
-          className={`mobile-bottom-nav-btn ${activePage === 'news' ? 'is-active' : ''}`}
-          onClick={() => openPage('news')}
-        >
-          News
-        </button>
-        <button
-          type="button"
-          className={`mobile-bottom-nav-btn ${activePage === 'mycmusc' ? 'is-active' : ''}`}
-          onClick={() => openPage('mycmusc')}
-        >
-          MY MUCY
-        </button>
-        <button
-          type="button"
-          className={`mobile-bottom-nav-btn ${activePage === 'contact' ? 'is-active' : ''}`}
-          onClick={() => openPage('contact')}
-        >
-          Contact
-        </button>
-      </nav>
+      <div className="mobile-bottom-nav-wrap">
+        {mobileMoreOpen && (
+          <button
+            type="button"
+            className="mobile-more-backdrop"
+            aria-label="Close menu"
+            onClick={() => setMobileMoreOpen(false)}
+          />
+        )}
+        {mobileMoreOpen && (
+          <div className="mobile-more-menu" role="menu" aria-label="More sections">
+            <button
+              type="button"
+              role="menuitem"
+              className={`mobile-more-menu-item ${activePage === 'social' ? 'is-active' : ''}`}
+              onClick={() => openPage('social')}
+            >
+              Social Media
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              className={`mobile-more-menu-item ${activePage === 'board' ? 'is-active' : ''}`}
+              onClick={() => openPage('board')}
+            >
+              Board
+            </button>
+            {showMerchandise && (
+              <button
+                type="button"
+                role="menuitem"
+                className={`mobile-more-menu-item ${activePage === 'merchandise' ? 'is-active' : ''}`}
+                onClick={() => openPage('merchandise')}
+              >
+                Merchandise
+              </button>
+            )}
+            <button
+              type="button"
+              role="menuitem"
+              className={`mobile-more-menu-item ${activePage === 'contact' ? 'is-active' : ''}`}
+              onClick={() => openPage('contact')}
+            >
+              Contact Us
+            </button>
+          </div>
+        )}
+        <nav className="mobile-bottom-nav" aria-label="Mobile navigation">
+          <button
+            type="button"
+            className={`mobile-bottom-nav-btn ${activePage === 'home' ? 'is-active' : ''}`}
+            onClick={() => openPage('home')}
+          >
+            Home
+          </button>
+          <button
+            type="button"
+            className={`mobile-bottom-nav-btn ${activePage === 'news' ? 'is-active' : ''}`}
+            onClick={() => openPage('news')}
+          >
+            News
+          </button>
+          <button
+            type="button"
+            className={`mobile-bottom-nav-btn ${activePage === 'mycmusc' ? 'is-active' : ''}`}
+            onClick={() => openPage('mycmusc')}
+          >
+            MY MUCY
+          </button>
+          <button
+            type="button"
+            className={`mobile-bottom-nav-btn ${mobileMoreActive || mobileMoreOpen ? 'is-active' : ''}`}
+            aria-expanded={mobileMoreOpen}
+            aria-haspopup="menu"
+            onClick={() => setMobileMoreOpen((open) => !open)}
+          >
+            More
+          </button>
+        </nav>
+      </div>
 
       <footer className="website-footer">
         <p>Cyprus Manchester United Supporters Club</p>
