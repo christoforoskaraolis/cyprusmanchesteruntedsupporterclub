@@ -1506,9 +1506,14 @@ function AdminConsole({
                     className="board-admin-activate"
                     disabled={busyId !== null}
                     onClick={async () => {
+                      setMemberActionError(null)
                       setBusyId(m.applicationId)
                       try {
                         await onActivate(m.applicationId)
+                      } catch (error) {
+                        setMemberActionError(
+                          error instanceof Error ? error.message : 'Could not activate membership.',
+                        )
                       } finally {
                         setBusyId(null)
                       }

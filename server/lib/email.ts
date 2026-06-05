@@ -1,7 +1,7 @@
 import nodemailer from 'nodemailer'
 import { env } from '../env.ts'
 
-function smtpConfigured(): boolean {
+export function smtpConfigured(): boolean {
   return Boolean(env.smtpHost && env.smtpUser && env.smtpPass && env.smtpFrom)
 }
 
@@ -16,6 +16,9 @@ export async function sendEmail(to: string, subject: string, text: string, html:
     host: env.smtpHost,
     port: env.smtpPort,
     secure: env.smtpSecure,
+    connectionTimeout: 10_000,
+    greetingTimeout: 10_000,
+    socketTimeout: 15_000,
     auth: {
       user: env.smtpUser,
       pass: env.smtpPass,

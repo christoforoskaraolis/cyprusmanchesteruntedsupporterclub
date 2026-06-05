@@ -435,21 +435,21 @@ membershipRouter.put(
       [status, applicationId],
     )
 
+    res.json({ ok: true })
+
     if (status === 'active' && wasPending) {
       const to = (application.profile_email || application.auth_email || '').trim()
-      if (to) {
-        const baseUrl = env.publicAppUrl || req.headers.origin || 'http://localhost:5173'
-        const mycmuscUrl = `${baseUrl.replace(/\/+$/, '')}/mycmusc`
-        const firstName = (application.first_name || '').trim() || 'Member'
-        try {
-          await sendMembershipActivationEmail({ to, firstName, mycmuscUrl })
-        } catch (error) {
-          console.error('[membership] activation email failed:', error)
-        }
+      if (!to) {
+        console.warn(`[membership] activation email skipped for ${applicationId}: no email on file`)
+        return
       }
+      const baseUrl = env.publicAppUrl || req.headers.origin || 'http://localhost:5173'
+      const mycmuscUrl = `${baseUrl.replace(/\/+$/, '')}/mycmusc`
+      const firstName = (application.first_name || '').trim() || 'Member'
+      void sendMembershipActivationEmail({ to, firstName, mycmuscUrl }).catch((error) => {
+        console.error(`[membership] activation email failed for ${applicationId}:`, error)
+      })
     }
-
-    res.json({ ok: true })
   }),
 )
 
