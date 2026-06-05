@@ -4,6 +4,12 @@ import './index.css'
 import { AuthProvider } from './context/AuthContext.tsx'
 import App from './App.tsx'
 
+if ('serviceWorker' in navigator) {
+  void navigator.serviceWorker.register('/sw.js').catch(() => {
+    /* optional — subscribe flow also registers */
+  })
+}
+
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <AuthProvider>

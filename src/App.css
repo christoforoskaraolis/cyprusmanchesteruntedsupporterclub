@@ -2435,6 +2435,44 @@
   color: var(--text-muted);
 }
 
+.mycmusc-push-card {
+  text-align: left;
+  margin-bottom: 1.25rem;
+  padding: 1rem 1.1rem 1.15rem;
+  border-radius: 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+}
+
+.mycmusc-push-lead {
+  margin: 0 0 0.85rem;
+  font-size: 0.9rem;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+.mycmusc-push-ios-hint {
+  margin: 0 0 0.85rem;
+  padding: 0.75rem 0.85rem;
+  border-radius: 10px;
+  font-size: 0.85rem;
+  line-height: 1.45;
+  color: var(--text);
+  background: #fff8e6;
+  border: 1px solid #f0d78c;
+}
+
+.mycmusc-push-status {
+  margin: 0 0 0.75rem;
+  font-size: 0.88rem;
+  color: var(--text-muted);
+}
+
+.mycmusc-push-status--on {
+  color: #0d7a3e;
+  font-weight: 600;
+}
+
 .mycmusc-profile-card {
   text-align: left;
   margin-bottom: 1.25rem;

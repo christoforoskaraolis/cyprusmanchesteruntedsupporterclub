@@ -106,6 +106,7 @@ import {
   OptionalOfficialMembershipPicker,
 } from './components/MembershipRegistrationPayment.tsx'
 import { OfficialMembershipRequestSection } from './components/OfficialMembershipRequestSection.tsx'
+import { NewsPushAlerts } from './components/NewsPushAlerts.tsx'
 import { AdminNewsPostPreview } from './components/AdminNewsPostPreview.tsx'
 import { NewsFeed } from './components/NewsFeed.tsx'
 
@@ -1971,7 +1972,10 @@ function AdminConsole({
         <section className="admin-news-block admin-panel-block" aria-label="Manage news posts">
           <div className="admin-block-head">
             <h2 className="admin-block-title">News posts</h2>
-            <p className="admin-block-lead">Create or edit posts shown on the public News page.</p>
+            <p className="admin-block-lead">
+              Create or edit posts shown on the public News page. New posts automatically send a push alert to members
+              who enabled news alerts in MY MUCY.
+            </p>
           </div>
           <form
             className="admin-news-form"
@@ -5646,6 +5650,8 @@ function App() {
                     </p>
                   )}
                 </div>
+
+                <NewsPushAlerts />
 
                 <div className="mycmusc-profile-card">
                   <h2 className="mycmusc-profile-card-title">Your details</h2>

@@ -2,7 +2,9 @@ import { Router } from 'express'
 import { query } from '../db.ts'
 import { asyncHandler } from '../lib/asyncHandler.ts'
 import { badRequest } from '../lib/errors.ts'
+import { env } from '../env.ts'
 import { requireAdmin, requireUser } from '../middleware/auth.ts'
+import { sendNewsPushToAllSubscribers } from '../lib/webPush.ts'
 
 type NewsRow = {
   id: string
@@ -55,9 +57,10 @@ newsRouter.post(
     if (!title?.trim() || !body?.trim() || !publishedAt) {
       throw badRequest('title, body and publishedAt are required')
     }
-    await query(
+    const { rows } = await query<{ id: string }>(
       `insert into public.news_posts (title, body, image_url, image_url_mobile, published_at, created_by, updated_by)
-       values ($1, $2, $3, $4, $5, $6, $6)`,
+       values ($1, $2, $3, $4, $5, $6, $6)
+       returning id`,
       [
         title.trim(),
         body.trim(),
@@ -67,6 +70,25 @@ newsRouter.post(
         req.user!.id,
       ],
     )
+    const postId = rows[0]?.id
+    const newsTitle = title.trim()
+    const baseUrl = (env.publicAppUrl || '').replace(/\/$/, '')
+
+    void sendNewsPushToAllSubscribers({
+      title: 'New club news',
+      body: newsTitle,
+      url: baseUrl ? `${baseUrl}/news` : '/news',
+      icon: baseUrl ? `${baseUrl}/logo.jpg` : '/logo.jpg',
+    })
+      .then((result) => {
+        if (result.attempted > 0) {
+          console.log(
+            `[web-push] news ${postId ?? 'new'}: sent ${result.sent}/${result.attempted}, failed ${result.failed}, removed ${result.removed}`,
+          )
+        }
+      })
+      .catch((err) => console.error('[web-push] news broadcast failed:', err))
+
     res.status(201).json({ ok: true })
   }),
 )
