@@ -106,7 +106,7 @@ import {
   OptionalOfficialMembershipPicker,
 } from './components/MembershipRegistrationPayment.tsx'
 import { OfficialMembershipRequestSection } from './components/OfficialMembershipRequestSection.tsx'
-import { NewsPushAlerts } from './components/NewsPushAlerts.tsx'
+import { NewsPushBell } from './components/NewsPushBell.tsx'
 import { AdminNewsPostPreview } from './components/AdminNewsPostPreview.tsx'
 import { NewsFeed } from './components/NewsFeed.tsx'
 
@@ -3040,6 +3040,14 @@ function IconSearch() {
   )
 }
 
+function IconMenu() {
+  return (
+    <svg className="top-bar-icon" width="22" height="22" viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M4 7h16M4 12h16M4 17h16" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" />
+    </svg>
+  )
+}
+
 function IconSocialGlobe({ className }: { className?: string }) {
   return (
     <svg className={className} width="24" height="24" viewBox="0 0 24 24" aria-hidden="true">
@@ -4901,6 +4909,15 @@ function App() {
         <div className="top-bar-right">
           <button
             type="button"
+            className="top-bar-icon-btn mobile-nav-menu-btn"
+            aria-label="Open site menu"
+            aria-expanded={mobileMoreOpen}
+            onClick={() => setMobileMoreOpen((open) => !open)}
+          >
+            <IconMenu />
+          </button>
+          <button
+            type="button"
             className={`top-bar-pill-btn ${activePage === 'mycmusc' ? 'is-active' : ''}`}
             onClick={() => openPage('mycmusc')}
           >
@@ -5212,7 +5229,10 @@ function App() {
         )}
         {activePage === 'news' && (
           <div className="section-page news-promo-page">
-            <h1 className="section-title">News</h1>
+            <div className="news-page-header">
+              <h1 className="section-title">News</h1>
+              <NewsPushBell />
+            </div>
             <p className="section-lead news-promo-page-lead">
               Swipe on mobile or tap a story to read the full announcement.
             </p>
@@ -5225,7 +5245,6 @@ function App() {
             ) : (
               <NewsFeed posts={newsPosts} onReadPost={setNewsDetailPost} idPrefix="news-page" />
             )}
-            <NewsPushAlerts />
           </div>
         )}
         {activePage === 'social' && (
@@ -6225,53 +6244,79 @@ function App() {
         )}
       </main>
 
-      <div className="mobile-bottom-nav-wrap">
-        {mobileMoreOpen && (
+      {mobileMoreOpen && (
+        <button
+          type="button"
+          className="mobile-more-backdrop"
+          aria-label="Close menu"
+          onClick={() => setMobileMoreOpen(false)}
+        />
+      )}
+      {mobileMoreOpen && (
+        <div className="mobile-nav-sheet" role="menu" aria-label="Site sections">
           <button
             type="button"
-            className="mobile-more-backdrop"
-            aria-label="Close menu"
-            onClick={() => setMobileMoreOpen(false)}
-          />
-        )}
-        {mobileMoreOpen && (
-          <div className="mobile-more-menu" role="menu" aria-label="More sections">
+            role="menuitem"
+            className={`mobile-nav-sheet-item ${activePage === 'home' ? 'is-active' : ''}`}
+            onClick={() => openPage('home')}
+          >
+            Home
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            className={`mobile-nav-sheet-item ${activePage === 'news' ? 'is-active' : ''}`}
+            onClick={() => openPage('news')}
+          >
+            News
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            className={`mobile-nav-sheet-item ${activePage === 'mycmusc' ? 'is-active' : ''}`}
+            onClick={() => openPage('mycmusc')}
+          >
+            MY MUCY
+          </button>
+          <div className="mobile-nav-sheet-divider" aria-hidden />
+          <button
+            type="button"
+            role="menuitem"
+            className={`mobile-nav-sheet-item ${activePage === 'social' ? 'is-active' : ''}`}
+            onClick={() => openPage('social')}
+          >
+            Social Media
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            className={`mobile-nav-sheet-item ${activePage === 'board' ? 'is-active' : ''}`}
+            onClick={() => openPage('board')}
+          >
+            Board
+          </button>
+          {showMerchandise && (
             <button
               type="button"
               role="menuitem"
-              className={`mobile-more-menu-item ${activePage === 'social' ? 'is-active' : ''}`}
-              onClick={() => openPage('social')}
+              className={`mobile-nav-sheet-item ${activePage === 'merchandise' ? 'is-active' : ''}`}
+              onClick={() => openPage('merchandise')}
             >
-              Social Media
+              Merchandise
             </button>
-            <button
-              type="button"
-              role="menuitem"
-              className={`mobile-more-menu-item ${activePage === 'board' ? 'is-active' : ''}`}
-              onClick={() => openPage('board')}
-            >
-              Board
-            </button>
-            {showMerchandise && (
-              <button
-                type="button"
-                role="menuitem"
-                className={`mobile-more-menu-item ${activePage === 'merchandise' ? 'is-active' : ''}`}
-                onClick={() => openPage('merchandise')}
-              >
-                Merchandise
-              </button>
-            )}
-            <button
-              type="button"
-              role="menuitem"
-              className={`mobile-more-menu-item ${activePage === 'contact' ? 'is-active' : ''}`}
-              onClick={() => openPage('contact')}
-            >
-              Contact Us
-            </button>
-          </div>
-        )}
+          )}
+          <button
+            type="button"
+            role="menuitem"
+            className={`mobile-nav-sheet-item ${activePage === 'contact' ? 'is-active' : ''}`}
+            onClick={() => openPage('contact')}
+          >
+            Contact Us
+          </button>
+        </div>
+      )}
+
+      <div className="mobile-bottom-nav-wrap">
         <nav className="mobile-bottom-nav" aria-label="Mobile navigation">
           <button
             type="button"
