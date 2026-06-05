@@ -1801,13 +1801,14 @@
     overflow-x: clip;
   }
 
-  .merch-basket-bar {
-    position: static;
+  .merch-page .merch-basket-bar {
+    position: static !important;
     left: auto;
     right: auto;
     bottom: auto;
     z-index: auto;
     margin-top: 0.85rem;
+    margin-bottom: 0.5rem;
     padding: 0;
     pointer-events: auto;
     background: none;
@@ -3936,8 +3937,10 @@
   position: relative;
 }
 
-.merch-page--with-basket {
-  padding-bottom: 5.75rem;
+@media (min-width: 901px) {
+  .merch-page--with-basket {
+    padding-bottom: 5.75rem;
+  }
 }
 
 .merch-hero {
@@ -4525,16 +4528,24 @@
 }
 
 .merch-basket-bar {
-  position: fixed;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  z-index: 40;
   display: flex;
   justify-content: center;
-  padding: 0.5rem 1rem calc(0.55rem + env(safe-area-inset-bottom, 0px));
-  pointer-events: none;
-  background: linear-gradient(180deg, transparent 0%, var(--bg) 35%, var(--bg) 100%);
+  margin-top: 0.85rem;
+  padding: 0;
+}
+
+@media (min-width: 901px) {
+  .merch-basket-bar {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 40;
+    margin-top: 0;
+    padding: 0.5rem 1rem calc(0.55rem + env(safe-area-inset-bottom, 0px));
+    pointer-events: none;
+    background: linear-gradient(180deg, transparent 0%, var(--bg) 35%, var(--bg) 100%);
+  }
 }
 
 .merch-basket-btn {
