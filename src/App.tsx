@@ -5536,6 +5536,24 @@ function App() {
                   </ul>
                 )}
 
+                {user && merchCartCount > 0 && merchView === 'shop' && (
+                  <div className="merch-basket-bar">
+                    <button
+                      type="button"
+                      className="merch-basket-btn"
+                      onClick={() => {
+                        setMerchOrderMessage(null)
+                        setMerchView('checkout')
+                      }}
+                    >
+                      <span className="merch-basket-label">Basket</span>
+                      <span className="merch-basket-meta">
+                        {merchCartCount} item{merchCartCount === 1 ? '' : 's'} · €{merchCartTotal.toFixed(2)}
+                      </span>
+                    </button>
+                  </div>
+                )}
+
                 {user && merchMyOrders.length > 0 && (
                   <section className="merch-orders" aria-labelledby="merch-orders-heading">
                     <h2 id="merch-orders-heading" className="merch-orders-title">
@@ -5566,24 +5584,6 @@ function App() {
                   </section>
                 )}
               </>
-            )}
-
-            {user && merchCartCount > 0 && merchView === 'shop' && (
-              <div className="merch-basket-bar">
-                <button
-                  type="button"
-                  className="merch-basket-btn"
-                  onClick={() => {
-                    setMerchOrderMessage(null)
-                    setMerchView('checkout')
-                  }}
-                >
-                  <span className="merch-basket-label">Basket</span>
-                  <span className="merch-basket-meta">
-                    {merchCartCount} item{merchCartCount === 1 ? '' : 's'} · €{merchCartTotal.toFixed(2)}
-                  </span>
-                </button>
-              </div>
             )}
           </div>
         )}

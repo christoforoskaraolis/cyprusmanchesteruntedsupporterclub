@@ -1801,6 +1801,22 @@
     overflow-x: clip;
   }
 
+  .merch-basket-bar {
+    position: static;
+    left: auto;
+    right: auto;
+    bottom: auto;
+    z-index: auto;
+    margin-top: 0.85rem;
+    padding: 0;
+    pointer-events: auto;
+    background: none;
+  }
+
+  .merch-page--with-basket {
+    padding-bottom: 0;
+  }
+
   .website-shell .home-page,
   .website-shell .section-page {
     width: 100%;
