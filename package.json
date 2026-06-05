@@ -16,6 +16,7 @@
     "migrate": "tsx server/scripts/migrate.ts",
     "cleanup:member-01": "tsx server/scripts/cleanup-keep-member-01.ts",
     "generate:vapid-keys": "tsx server/scripts/generate-vapid-keys.ts",
+    "check:push": "tsx server/scripts/check-push-status.ts",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview"
