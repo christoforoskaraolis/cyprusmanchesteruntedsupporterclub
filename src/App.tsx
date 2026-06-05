@@ -69,11 +69,15 @@ import { createAdminUser, deleteAdminUser, fetchAdminUsers, type AdminUserRow } 
 import {
   createOfficialMembershipRequest,
   createOfficialMembershipOffer,
+  deleteAdminOfficialMembershipRequest,
   deleteOfficialMembershipOffer,
+  fetchAdminOfficialMembershipRequests,
   fetchOfficialMembershipOffers,
   fetchMyOfficialMembershipRequests,
   reorderOfficialMembershipOffers,
+  setAdminOfficialMembershipRequestStatus,
   updateOfficialMembershipOffer,
+  type AdminOfficialMembershipRequest,
   type OfficialMembershipOffer,
   type OfficialMembershipRequest,
 } from './lib/officialMembershipsApi.ts'
@@ -91,6 +95,7 @@ import {
   MembershipPendingView,
   OptionalOfficialMembershipPicker,
 } from './components/MembershipRegistrationPayment.tsx'
+import { OfficialMembershipRequestSection } from './components/OfficialMembershipRequestSection.tsx'
 
 const MEMBERSHIP_FEE_EUR = 15
 const TICKET_RESERVATION_FEE_EUR = 20
@@ -902,10 +907,21 @@ type AdminConsoleProps = {
   onDeleteAdminUser: (email: string) => Promise<void>
   officialOffers: OfficialMembershipOffer[]
   officialOffersLoading: boolean
+  officialRequests: AdminOfficialMembershipRequest[]
+  officialRequestsLoading: boolean
   onCreateOfficialOffer: (payload: { title: string; priceEur: number; imageUrl: string }) => Promise<void>
   onUpdateOfficialOffer: (id: string, payload: { title: string; priceEur: number; imageUrl?: string }) => Promise<void>
   onDeleteOfficialOffer: (id: string) => Promise<void>
   onReorderOfficialOffers: (ids: string[]) => Promise<void>
+  onSetOfficialRequestStatus: (
+    requestId: string,
+    status: 'pending' | 'completed' | 'rejected' | 'cancelled',
+    options?: {
+      officialMuMembershipId?: string
+      officialMuMembershipStatus?: OfficialMuMembershipStatus
+    },
+  ) => Promise<void>
+  onDeleteOfficialRequest: (requestId: string) => Promise<void>
 }
 
 function AdminConsole({
@@ -945,10 +961,14 @@ function AdminConsole({
   onDeleteAdminUser,
   officialOffers,
   officialOffersLoading,
+  officialRequests,
+  officialRequestsLoading,
   onCreateOfficialOffer,
   onUpdateOfficialOffer,
   onDeleteOfficialOffer,
   onReorderOfficialOffers,
+  onSetOfficialRequestStatus,
+  onDeleteOfficialRequest,
 }: AdminConsoleProps) {
   const [adminTab, setAdminTab] = useState<AdminTab>('members')
   const [filter, setFilter] = useState<AdminFilter>('all')
@@ -967,6 +987,8 @@ function AdminConsole({
   const [busyMerchOrderId, setBusyMerchOrderId] = useState<string | null>(null)
   const [memberSearch, setMemberSearch] = useState('')
   const [ticketSearch, setTicketSearch] = useState('')
+  const [officialRequestFilter, setOfficialRequestFilter] = useState<'pending' | 'completed' | 'rejected'>('pending')
+  const [officialRequestSearch, setOfficialRequestSearch] = useState('')
   const [merchSearch, setMerchSearch] = useState('')
   const [busyTicketWindowKey, setBusyTicketWindowKey] = useState<string | null>(null)
   const [adminMerchTitle, setAdminMerchTitle] = useState('')
@@ -983,6 +1005,12 @@ function AdminConsole({
   const [officialBusy, setOfficialBusy] = useState(false)
   const [officialError, setOfficialError] = useState<string | null>(null)
   const [editingOfficialById, setEditingOfficialById] = useState<Record<string, { title: string; price: string }>>({})
+  const [officialRequestBusyId, setOfficialRequestBusyId] = useState<string | null>(null)
+  const [expandedOfficialRequestId, setExpandedOfficialRequestId] = useState<string | null>(null)
+  const [officialMuIdDraftByRequestId, setOfficialMuIdDraftByRequestId] = useState<Record<string, string>>({})
+  const [officialMuStatusDraftByRequestId, setOfficialMuStatusDraftByRequestId] = useState<
+    Record<string, OfficialMuMembershipStatus>
+  >({})
   const [memberIdDraftByApplicationId, setMemberIdDraftByApplicationId] = useState<Record<string, string>>({})
   const [memberMuStatusDraftByApplicationId, setMemberMuStatusDraftByApplicationId] = useState<
     Record<string, OfficialMuMembershipFormStatus>
@@ -1028,6 +1056,21 @@ function AdminConsole({
       o.lines.some((line) => line.title.toLowerCase().includes(q))
     )
   })
+
+  const filteredOfficialRequests = officialRequests
+    .filter((r) => r.status === officialRequestFilter)
+    .filter((r) => {
+      const q = officialRequestSearch.trim().toLowerCase()
+      if (!q) return true
+      return (
+        r.offerTitle.toLowerCase().includes(q) ||
+        r.userId.toLowerCase().includes(q) ||
+        (r.user.fullName ?? '').toLowerCase().includes(q) ||
+        (r.user.email ?? '').toLowerCase().includes(q) ||
+        (r.user.applicationId ?? '').toLowerCase().includes(q)
+      )
+    })
+    .sort((a, b) => new Date(b.requestedAt).getTime() - new Date(a.requestedAt).getTime())
 
   function reportStamp(): string {
     return new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')
@@ -1097,6 +1140,50 @@ function AdminConsole({
       o.lines.map((line) => `${line.title} x${line.quantity} (€${line.unitPriceEur.toFixed(2)})`).join(' | '),
     ])
     downloadCsv(`merchandise-report-${reportStamp()}.csv`, headers, rows)
+  }
+
+  function exportOfficialMembershipsReport() {
+    const headers = [
+      'Request ID',
+      'Status',
+      'Requested At',
+      'Offer',
+      'Offer Price EUR',
+      'User ID',
+      'Name',
+      'Email',
+      'Mobile',
+      'Date of Birth',
+      'Address',
+      'Area',
+      'Postal Code',
+      'City',
+      'Country',
+      'Official MU ID',
+      'Official MU status',
+      'Application Reference',
+    ]
+    const rows = officialRequests.map((r) => [
+      r.id,
+      r.status,
+      r.requestedAt,
+      r.offerTitle,
+      r.offerPriceEur.toFixed(2),
+      r.userId,
+      r.user.fullName ?? '',
+      r.user.email ?? '',
+      r.user.mobilePhone ?? '',
+      formatDateOfBirthDisplay(r.user.dateOfBirth ?? ''),
+      r.user.address ?? '',
+      r.user.area ?? '',
+      r.user.postalCode ?? '',
+      r.user.city ?? '',
+      r.user.country ?? '',
+      r.user.officialMuMembershipId ?? '',
+      formatOfficialMuMembershipStatus(r.user.officialMuMembershipStatus),
+      r.user.applicationId ?? '',
+    ])
+    downloadCsv(`official-memberships-report-${reportStamp()}.csv`, headers, rows)
   }
 
   function moveItem(ids: string[], from: number, to: number) {
@@ -2328,8 +2415,8 @@ function AdminConsole({
           <div className="admin-block-head">
             <h2 className="admin-block-title">Official Manchester United memberships</h2>
             <p className="admin-block-lead">
-              Manage optional official MU package offers shown on Cyprus and family member registration. Set each
-              member&apos;s official MU ID and status under <strong>Members → Full details</strong>.
+              Manage official MU package offers and review requests submitted from MY MUCY, registration forms, and
+              family member applications.
             </p>
           </div>
           {officialError && <p className="auth-message is-error">{officialError}</p>}
@@ -2559,6 +2646,249 @@ function AdminConsole({
               )})}
             </ul>
           )}
+
+          <section className="admin-panel-block" aria-label="Official membership requests" style={{ marginTop: '2rem' }}>
+            <div className="admin-block-head">
+              <h3 className="admin-block-title">Official membership requests</h3>
+              <p className="admin-block-lead">
+                Requests submitted by members appear here. When accepting, enter the official MU ID and status to save on
+                the member&apos;s record.
+              </p>
+              <button type="button" className="admin-merch-create-btn" onClick={exportOfficialMembershipsReport}>
+                Export Excel
+              </button>
+            </div>
+            <div className="admin-filter-row" role="tablist" aria-label="Filter official membership requests by status">
+              {(['pending', 'completed', 'rejected'] as const).map((f) => (
+                <button
+                  key={f}
+                  type="button"
+                  role="tab"
+                  aria-selected={officialRequestFilter === f}
+                  className={`admin-filter-btn ${officialRequestFilter === f ? 'is-active' : ''}`}
+                  onClick={() => setOfficialRequestFilter(f)}
+                >
+                  {f === 'pending' ? 'Pending' : f === 'completed' ? 'Completed' : 'Rejected'}
+                </button>
+              ))}
+            </div>
+            <div className="admin-search-row">
+              <input
+                className="auth-input admin-search-input"
+                type="search"
+                placeholder="Search by name, email, offer, application ref, or user ID"
+                value={officialRequestSearch}
+                onChange={(e) => setOfficialRequestSearch(e.target.value)}
+              />
+            </div>
+            {officialRequestsLoading ? (
+              <p className="admin-empty">Loading requests…</p>
+            ) : filteredOfficialRequests.length === 0 ? (
+              <p className="admin-empty">
+                No {officialRequestFilter === 'completed' ? 'completed' : officialRequestFilter} official membership
+                requests.
+              </p>
+            ) : (
+              <ul className="admin-ticket-request-list">
+                {filteredOfficialRequests.map((r) => {
+                  const muIdDraft =
+                    officialMuIdDraftByRequestId[r.id] ?? r.user.officialMuMembershipId ?? ''
+                  const muStatusDraft =
+                    officialMuStatusDraftByRequestId[r.id] ??
+                    r.user.officialMuMembershipStatus ??
+                    'activated'
+                  return (
+                    <li key={r.id} className="admin-ticket-request-card">
+                      <div className="admin-ticket-request-main">
+                        <strong>{r.offerTitle}</strong>
+                        <p className="admin-member-meta">
+                          €{r.offerPriceEur.toFixed(2)} · {r.user.fullName ?? '—'}
+                          {r.user.email ? ` · ${r.user.email}` : ''}
+                        </p>
+                        <p className="admin-renewal-meta">
+                          Requested: {new Date(r.requestedAt).toLocaleString('en-GB')}
+                          {r.user.applicationId ? (
+                            <>
+                              {' '}
+                              · Ref: <code className="admin-inline-code">{r.user.applicationId}</code>
+                            </>
+                          ) : null}
+                        </p>
+                        <span className={`fixtures-ticket-pill fixtures-ticket-pill--${r.status}`}>
+                          {r.status[0].toUpperCase() + r.status.slice(1)}
+                        </span>
+                        {(r.user.officialMuMembershipId || r.user.officialMuMembershipStatus) && (
+                          <p className="admin-member-meta">
+                            On file: {r.user.officialMuMembershipId || '—'} ·{' '}
+                            {formatOfficialMuMembershipStatus(r.user.officialMuMembershipStatus)}
+                          </p>
+                        )}
+                      </div>
+                      <div className="admin-ticket-request-actions">
+                        {r.status === 'pending' && (
+                          <>
+                            <label className="auth-field membership-field">
+                              <span className="auth-label">Official MU ID</span>
+                              <input
+                                className="admin-merch-create-input"
+                                type="text"
+                                placeholder="Required to accept"
+                                value={muIdDraft}
+                                onChange={(e) =>
+                                  setOfficialMuIdDraftByRequestId((prev) => ({
+                                    ...prev,
+                                    [r.id]: e.target.value,
+                                  }))
+                                }
+                                disabled={officialRequestBusyId !== null}
+                              />
+                            </label>
+                            <label className="auth-field membership-field">
+                              <span className="auth-label">Status on accept</span>
+                              <select
+                                className="auth-input"
+                                value={muStatusDraft}
+                                onChange={(e) =>
+                                  setOfficialMuStatusDraftByRequestId((prev) => ({
+                                    ...prev,
+                                    [r.id]: e.target.value as OfficialMuMembershipStatus,
+                                  }))
+                                }
+                                disabled={officialRequestBusyId !== null}
+                              >
+                                <option value="activated">Activated</option>
+                                <option value="pending">Pending</option>
+                              </select>
+                            </label>
+                            <button
+                              type="button"
+                              className="board-admin-activate"
+                              disabled={officialRequestBusyId !== null}
+                              onClick={async () => {
+                                setOfficialError(null)
+                                setOfficialRequestBusyId(r.id)
+                                try {
+                                  const parsed = parseOfficialMuMembershipFields(muIdDraft, muStatusDraft)
+                                  if ('error' in parsed) {
+                                    setOfficialError(parsed.error)
+                                    return
+                                  }
+                                  await onSetOfficialRequestStatus(r.id, 'completed', {
+                                    officialMuMembershipId: parsed.officialMuMembershipId,
+                                    officialMuMembershipStatus:
+                                      parsed.officialMuMembershipStatus ?? undefined,
+                                  })
+                                } catch (err) {
+                                  setOfficialError(
+                                    err instanceof Error ? err.message : 'Could not complete request.',
+                                  )
+                                } finally {
+                                  setOfficialRequestBusyId(null)
+                                }
+                              }}
+                            >
+                              {officialRequestBusyId === r.id ? 'Saving…' : 'Accept & save ID'}
+                            </button>
+                            <button
+                              type="button"
+                              className="admin-revoke-btn"
+                              disabled={officialRequestBusyId !== null}
+                              onClick={async () => {
+                                setOfficialRequestBusyId(r.id)
+                                try {
+                                  await onSetOfficialRequestStatus(r.id, 'rejected')
+                                } catch (err) {
+                                  setOfficialError(
+                                    err instanceof Error ? err.message : 'Could not reject request.',
+                                  )
+                                } finally {
+                                  setOfficialRequestBusyId(null)
+                                }
+                              }}
+                            >
+                              Reject
+                            </button>
+                          </>
+                        )}
+                        <button
+                          type="button"
+                          className="admin-details-btn"
+                          onClick={() =>
+                            setExpandedOfficialRequestId((id) => (id === r.id ? null : r.id))
+                          }
+                        >
+                          {expandedOfficialRequestId === r.id ? 'Hide details' : 'More info'}
+                        </button>
+                        <button
+                          type="button"
+                          className="admin-news-delete-btn"
+                          disabled={officialRequestBusyId !== null}
+                          onClick={async () => {
+                            const yes = window.confirm('Delete this official membership request?')
+                            if (!yes) return
+                            setOfficialRequestBusyId(r.id)
+                            try {
+                              await onDeleteOfficialRequest(r.id)
+                            } catch (err) {
+                              setOfficialError(
+                                err instanceof Error ? err.message : 'Could not delete request.',
+                              )
+                            } finally {
+                              setOfficialRequestBusyId(null)
+                            }
+                          }}
+                        >
+                          Delete
+                        </button>
+                      </div>
+                      {expandedOfficialRequestId === r.id && (
+                        <dl className="admin-member-dl">
+                          <div>
+                            <dt>User ID</dt>
+                            <dd>{r.userId}</dd>
+                          </div>
+                          <div>
+                            <dt>Mobile</dt>
+                            <dd>{r.user.mobilePhone ?? '—'}</dd>
+                          </div>
+                          <div>
+                            <dt>Date of birth</dt>
+                            <dd>{formatDateOfBirthDisplay(r.user.dateOfBirth ?? '') || '—'}</dd>
+                          </div>
+                          <div>
+                            <dt>Address</dt>
+                            <dd>
+                              {r.user.address ?? '—'}
+                              {r.user.area || r.user.postalCode || r.user.city || r.user.country ? (
+                                <>
+                                  <br />
+                                  {[r.user.area, r.user.postalCode].filter(Boolean).join(', ')}
+                                  <br />
+                                  {[r.user.city, r.user.country].filter(Boolean).join(', ')}
+                                </>
+                              ) : null}
+                            </dd>
+                          </div>
+                          <div>
+                            <dt>Application reference</dt>
+                            <dd>{r.user.applicationId ?? '—'}</dd>
+                          </div>
+                          <div>
+                            <dt>Official MU ID on file</dt>
+                            <dd>{r.user.officialMuMembershipId ?? '—'}</dd>
+                          </div>
+                          <div>
+                            <dt>Official MU status on file</dt>
+                            <dd>{formatOfficialMuMembershipStatus(r.user.officialMuMembershipStatus)}</dd>
+                          </div>
+                        </dl>
+                      )}
+                    </li>
+                  )
+                })}
+              </ul>
+            )}
+          </section>
         </section>
       )}
         </div>
@@ -2859,6 +3189,8 @@ function App() {
   const [officialOffers, setOfficialOffers] = useState<OfficialMembershipOffer[]>([])
   const [officialOffersLoading, setOfficialOffersLoading] = useState(false)
   const [myOfficialRequests, setMyOfficialRequests] = useState<OfficialMembershipRequest[]>([])
+  const [adminOfficialRequests, setAdminOfficialRequests] = useState<AdminOfficialMembershipRequest[]>([])
+  const [adminOfficialRequestsLoading, setAdminOfficialRequestsLoading] = useState(false)
   const [newsPosts, setNewsPosts] = useState<NewsPost[]>([])
   const [newsLoading, setNewsLoading] = useState(false)
   const [newsDetailPost, setNewsDetailPost] = useState<NewsPost | null>(null)
@@ -3243,6 +3575,18 @@ function App() {
     setMyOfficialRequests(rows)
   }, [session?.user?.id])
 
+  const loadAdminOfficialRequests = useCallback(async () => {
+    setAdminOfficialRequestsLoading(true)
+    const { rows, error } = await fetchAdminOfficialMembershipRequests()
+    setAdminOfficialRequestsLoading(false)
+    if (error) {
+      console.error(error)
+      setAdminOfficialRequests([])
+      return
+    }
+    setAdminOfficialRequests(rows)
+  }, [])
+
   async function applyCreateMerchandiseProductFromAdmin(payload: {
     title: string
     priceEur: number
@@ -3332,6 +3676,28 @@ function App() {
     if (error) throw error
     const refreshed = await fetchOfficialMembershipOffers()
     if (!refreshed.error) setOfficialOffers(refreshed.rows)
+  }
+
+  async function applySetOfficialRequestStatus(
+    requestId: string,
+    status: 'pending' | 'completed' | 'rejected' | 'cancelled',
+    options?: {
+      officialMuMembershipId?: string
+      officialMuMembershipStatus?: OfficialMuMembershipStatus
+    },
+  ) {
+    const { error } = await setAdminOfficialMembershipRequestStatus(requestId, status, options)
+    if (error) throw error
+    await loadAdminOfficialRequests()
+    await loadAdminRegistry()
+    await refreshMyMembership()
+  }
+
+  async function applyDeleteOfficialRequest(requestId: string) {
+    const { error } = await deleteAdminOfficialMembershipRequest(requestId)
+    if (error) throw error
+    await loadAdminOfficialRequests()
+    await loadMyOfficialRequests()
   }
 
   const merchCartLines = useMemo(() => {
@@ -3546,6 +3912,10 @@ function App() {
   useEffect(() => {
     if (isAdminRoute && isAdmin) void loadAdminRegistry()
   }, [isAdminRoute, isAdmin, loadAdminRegistry])
+
+  useEffect(() => {
+    if (isAdminRoute && isAdmin) void loadAdminOfficialRequests()
+  }, [isAdminRoute, isAdmin, loadAdminOfficialRequests])
 
   useEffect(() => {
     if (isAdminRoute && mode === 'create-account') setMode('sign-in')
@@ -4341,10 +4711,14 @@ function App() {
               onDeleteAdminUser={applyDeleteAdminUser}
               officialOffers={officialOffers}
               officialOffersLoading={officialOffersLoading}
+              officialRequests={adminOfficialRequests}
+              officialRequestsLoading={adminOfficialRequestsLoading}
               onCreateOfficialOffer={applyCreateOfficialOffer}
               onUpdateOfficialOffer={applyUpdateOfficialOffer}
               onDeleteOfficialOffer={applyDeleteOfficialOffer}
               onReorderOfficialOffers={applyReorderOfficialOffers}
+              onSetOfficialRequestStatus={applySetOfficialRequestStatus}
+              onDeleteOfficialRequest={applyDeleteOfficialRequest}
             />
           ) : (
             <div className="section-page admin-page">
@@ -5620,6 +5994,14 @@ function App() {
                   )}
                 </section>
 
+                <OfficialMembershipRequestSection
+                  officialOffers={officialOffers}
+                  officialOffersLoading={officialOffersLoading}
+                  myOfficialRequests={myOfficialRequests}
+                  membershipApplicationId={membershipRecord.applicationId}
+                  onRefreshRequests={loadMyOfficialRequests}
+                />
+
                 <RenewMembershipModal
                   open={renewalModalOpen}
                   onClose={() => {
@@ -5641,11 +6023,20 @@ function App() {
               })()
               )
             ) : isMembershipPending && membershipRecord ? (
-              <MembershipPendingView
-                record={membershipRecord}
-                officialOffers={officialOffers}
-                myOfficialRequests={myOfficialRequests}
-              />
+              <>
+                <MembershipPendingView
+                  record={membershipRecord}
+                  officialOffers={officialOffers}
+                  myOfficialRequests={myOfficialRequests}
+                />
+                <OfficialMembershipRequestSection
+                  officialOffers={officialOffers}
+                  officialOffersLoading={officialOffersLoading}
+                  myOfficialRequests={myOfficialRequests}
+                  membershipApplicationId={membershipRecord.applicationId}
+                  onRefreshRequests={loadMyOfficialRequests}
+                />
+              </>
             ) : showCyprusMembershipForm ? (
               <CyprusMembershipForm
                 onBack={() => setShowCyprusMembershipForm(false)}

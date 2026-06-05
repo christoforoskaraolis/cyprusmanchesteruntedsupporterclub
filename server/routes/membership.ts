@@ -1,7 +1,9 @@
 import { Router } from 'express'
+import { env } from '../env.ts'
 import { query } from '../db.ts'
 import { asyncHandler } from '../lib/asyncHandler.ts'
 import { HttpError, badRequest, notFound } from '../lib/errors.ts'
+import { sendMembershipActivationEmail } from '../lib/membershipActivationEmail.ts'
 import { parseOfficialMuMembershipFields } from '../lib/officialMuMembership.ts'
 import { requireAdmin, requireUser } from '../middleware/auth.ts'
 
@@ -404,12 +406,49 @@ membershipRouter.put(
   requireAdmin,
   asyncHandler(async (req, res) => {
     const { status } = req.body as { status: 'pending' | 'active' }
+    const applicationId = String(req.params.applicationId ?? '').trim()
+    if (!applicationId) throw badRequest('Application ID is required')
+
+    const { rows } = await query<{
+      status: string
+      first_name: string
+      profile_email: string | null
+      auth_email: string | null
+    }>(
+      `select ma.status, ma.first_name, p.email as profile_email, au.email as auth_email
+       from public.membership_applications ma
+       left join public.profiles p on p.id = ma.user_id
+       left join public.auth_users au on au.user_id = ma.user_id
+       where ma.application_id = $1
+       limit 1`,
+      [applicationId],
+    )
+    const application = rows[0]
+    if (!application) throw notFound('Application not found')
+
+    const wasPending = application.status === 'pending'
+
     await query(
       `update public.membership_applications
        set status = $1, activated_at = case when $1='active' then now() else null end
        where application_id = $2`,
-      [status, req.params.applicationId],
+      [status, applicationId],
     )
+
+    if (status === 'active' && wasPending) {
+      const to = (application.profile_email || application.auth_email || '').trim()
+      if (to) {
+        const baseUrl = env.publicAppUrl || req.headers.origin || 'http://localhost:5173'
+        const mycmuscUrl = `${baseUrl.replace(/\/+$/, '')}/mycmusc`
+        const firstName = (application.first_name || '').trim() || 'Member'
+        try {
+          await sendMembershipActivationEmail({ to, firstName, mycmuscUrl })
+        } catch (error) {
+          console.error('[membership] activation email failed:', error)
+        }
+      }
+    }
+
     res.json({ ok: true })
   }),
 )
