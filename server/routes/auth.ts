@@ -22,6 +22,16 @@ function signToken(userId: string, email: string): string {
   return jwt.sign({ sub: userId, email }, env.authJwtSecret, { expiresIn: '30d' })
 }
 
+function normalizeEmail(raw: unknown): string {
+  return String(raw ?? '')
+    .trim()
+    .toLowerCase()
+}
+
+function isUniqueViolation(err: unknown): boolean {
+  return typeof err === 'object' && err !== null && 'code' in err && (err as { code?: string }).code === '23505'
+}
+
 async function createAndSendPasswordResetEmail(userId: string, email: string, reqOrigin: string | undefined): Promise<void> {
   const rawToken = crypto.randomBytes(32).toString('hex')
   const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex')
@@ -65,35 +75,90 @@ async function createAndSendVerificationEmail(userId: string, email: string, req
 authRouter.post(
   '/sign-up',
   asyncHandler(async (req, res) => {
-    const email = String(req.body?.email ?? '')
-      .trim()
-      .toLowerCase()
+    const email = normalizeEmail(req.body?.email)
     const password = String(req.body?.password ?? '')
     const fullName = String(req.body?.fullName ?? '').trim()
 
     if (!email || !password) throw badRequest('Email and password are required')
     if (password.length < 8) throw badRequest('Password must be at least 8 characters')
 
-    const { rows: existing } = await query<{ user_id: string }>(`select user_id from public.auth_users where email = $1`, [email])
-    if (existing.length > 0) throw badRequest('There is already an account with this email')
+    const { rows: existing } = await query<{ user_id: string; email_verified_at: string | null }>(
+      `select user_id, email_verified_at
+       from public.auth_users
+       where lower(email) = $1
+       limit 1`,
+      [email],
+    )
+    const existingRow = existing[0]
+    if (existingRow) {
+      if (!existingRow.email_verified_at) {
+        const passwordHash = await bcrypt.hash(password, 12)
+        await query(`update public.auth_users set password_hash = $2, email = $1 where user_id = $3`, [
+          email,
+          passwordHash,
+          existingRow.user_id,
+        ])
+        if (fullName) {
+          await query(`update public.profiles set full_name = $2 where id = $1`, [existingRow.user_id, fullName])
+        }
+        await createAndSendVerificationEmail(existingRow.user_id, email, req.headers.origin)
+        res.status(201).json({ requiresEmailVerification: true, resent: true })
+        return
+      }
+      throw badRequest(
+        'There is already an account with this email. Sign in, or use Forgot password if you need help.',
+      )
+    }
 
     const passwordHash = await bcrypt.hash(password, 12)
-    const userId = await withTransaction(async (client) => {
-      const inserted = await client.query<{ id: string }>(
-        `insert into public.profiles (id, email, full_name)
-         values (gen_random_uuid(), $1, $2)
-         returning id`,
-        [email, fullName || null],
-      )
-      const id = inserted.rows[0]?.id
-      if (!id) throw new Error('Failed to create profile')
-      await client.query(
-        `insert into public.auth_users (user_id, email, password_hash, email_verified_at)
-         values ($1, $2, $3, null)`,
-        [id, email, passwordHash],
-      )
-      return id
-    })
+    let userId: string
+    try {
+      userId = await withTransaction(async (client) => {
+        const { rows: orphanProfiles } = await client.query<{ id: string }>(
+          `select p.id
+           from public.profiles p
+           left join public.auth_users au on au.user_id = p.id
+           where lower(trim(p.email)) = $1
+             and au.user_id is null
+           order by p.created_at asc
+           limit 1`,
+          [email],
+        )
+        const orphanId = orphanProfiles[0]?.id ?? null
+        let id = orphanId
+        if (!id) {
+          const inserted = await client.query<{ id: string }>(
+            `insert into public.profiles (id, email, full_name)
+             values (gen_random_uuid(), $1, $2)
+             returning id`,
+            [email, fullName || null],
+          )
+          id = inserted.rows[0]?.id
+        } else {
+          await client.query(
+            `update public.profiles
+             set email = $1,
+                 full_name = coalesce(nullif($2, ''), full_name)
+             where id = $3`,
+            [email, fullName, id],
+          )
+        }
+        if (!id) throw new Error('Failed to create profile')
+        await client.query(
+          `insert into public.auth_users (user_id, email, password_hash, email_verified_at)
+           values ($1, $2, $3, null)`,
+          [id, email, passwordHash],
+        )
+        return id
+      })
+    } catch (err) {
+      if (isUniqueViolation(err)) {
+        throw badRequest(
+          'There is already an account with this email. Sign in, or use Forgot password if you need help.',
+        )
+      }
+      throw err
+    }
 
     await createAndSendVerificationEmail(userId, email, req.headers.origin)
     res.status(201).json({ requiresEmailVerification: true })
@@ -103,16 +168,14 @@ authRouter.post(
 authRouter.post(
   '/sign-in',
   asyncHandler(async (req, res) => {
-    const email = String(req.body?.email ?? '')
-      .trim()
-      .toLowerCase()
+    const email = normalizeEmail(req.body?.email)
     const password = String(req.body?.password ?? '')
     if (!email || !password) throw badRequest('Email and password are required')
 
     const { rows } = await query<AuthUserRow>(
       `select user_id, email, password_hash, email_verified_at
        from public.auth_users
-       where email = $1
+       where lower(email) = $1
        limit 1`,
       [email],
     )
@@ -173,13 +236,11 @@ authRouter.post(
 authRouter.post(
   '/forgot-password',
   asyncHandler(async (req, res) => {
-    const email = String(req.body?.email ?? '')
-      .trim()
-      .toLowerCase()
+    const email = normalizeEmail(req.body?.email)
     if (!email) throw badRequest('Email is required')
 
     const { rows } = await query<{ user_id: string }>(
-      `select user_id from public.auth_users where email = $1 limit 1`,
+      `select user_id from public.auth_users where lower(email) = $1 limit 1`,
       [email],
     )
     const userId = rows[0]?.user_id
@@ -231,15 +292,13 @@ authRouter.post(
 authRouter.post(
   '/resend-verification',
   asyncHandler(async (req, res) => {
-    const email = String(req.body?.email ?? '')
-      .trim()
-      .toLowerCase()
+    const email = normalizeEmail(req.body?.email)
     if (!email) throw badRequest('Email is required')
 
     const { rows } = await query<{ user_id: string; email_verified_at: string | null }>(
       `select user_id, email_verified_at
        from public.auth_users
-       where email = $1
+       where lower(email) = $1
        limit 1`,
       [email],
     )

@@ -2895,6 +2895,7 @@ function App() {
   const [recoveryError, setRecoveryError] = useState<string | null>(null)
   const [recoverySubmitting, setRecoverySubmitting] = useState(false)
   const [passwordResetToken, setPasswordResetToken] = useState<string | null>(null)
+  const [authSubmitting, setAuthSubmitting] = useState(false)
   const [forgotSubmitting, setForgotSubmitting] = useState(false)
   const [resendVerificationSubmitting, setResendVerificationSubmitting] = useState(false)
   const adminStatusCheckedRef = useRef(false)
@@ -3949,6 +3950,7 @@ function App() {
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault()
+    if (authSubmitting) return
     setMessage(null)
 
     if (!email.trim()) {
@@ -3974,28 +3976,41 @@ function App() {
       }
     }
 
-    if (isAdminRoute || mode === 'sign-in') {
-      const { error } = await signIn(email, password)
-      if (error) {
-        setMessage(error.message)
-        return
+    setAuthSubmitting(true)
+    try {
+      if (isAdminRoute || mode === 'sign-in') {
+        const { error } = await signIn(email, password)
+        if (error) {
+          setMessage(error.message)
+          return
+        }
+      } else {
+        const { error, requiresEmailVerification, verificationResent } = await signUp(
+          email,
+          password,
+          `${name.trim()} ${surname.trim()}`,
+        )
+        if (error) {
+          setMessage(error.message)
+          return
+        }
+        if (requiresEmailVerification) {
+          setMode('sign-in')
+          setMessage(
+            verificationResent
+              ? 'We sent another verification email. Please verify your email, then sign in.'
+              : 'We sent a verification email. Please verify your email, then sign in.',
+          )
+          resetForm()
+          return
+        }
       }
-    } else {
-      const { error, requiresEmailVerification } = await signUp(email, password, `${name.trim()} ${surname.trim()}`)
-      if (error) {
-        setMessage(error.message)
-        return
-      }
-      if (requiresEmailVerification) {
-        setMode('sign-in')
-        setMessage('We sent a verification email. Please verify your email, then sign in.')
-        resetForm()
-        return
-      }
-    }
 
-    openPage('home')
-    resetForm()
+      openPage('home')
+      resetForm()
+    } finally {
+      setAuthSubmitting(false)
+    }
   }
 
   if (!configured) {
@@ -4241,8 +4256,14 @@ function App() {
                   <p className={`auth-message ${authMessageSuccess ? 'is-success' : 'is-error'}`}>{message}</p>
                 )}
 
-                <button type="submit" className="auth-submit">
-                  {isAdminRoute || mode === 'sign-in' ? 'Sign in' : 'Create account'}
+                <button type="submit" className="auth-submit" disabled={authSubmitting}>
+                  {authSubmitting
+                    ? isAdminRoute || mode === 'sign-in'
+                      ? 'Signing in…'
+                      : 'Creating account…'
+                    : isAdminRoute || mode === 'sign-in'
+                      ? 'Sign in'
+                      : 'Create account'}
                 </button>
               </form>
 

@@ -29,7 +29,11 @@ type AuthContextValue = {
   /** Re-read profiles.is_admin (e.g. after enabling admin in Supabase). */
   refreshAdminStatus: () => Promise<void>
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>
-  signUp: (email: string, password: string, fullName: string) => Promise<{ error: Error | null; requiresEmailVerification?: boolean }>
+  signUp: (
+    email: string,
+    password: string,
+    fullName: string,
+  ) => Promise<{ error: Error | null; requiresEmailVerification?: boolean; verificationResent?: boolean }>
   verifyEmail: (token: string) => Promise<{ error: Error | null }>
   resendVerificationEmail: (email: string) => Promise<{ error: Error | null }>
   resetPasswordForEmail: (email: string) => Promise<{ error: Error | null }>
@@ -99,7 +103,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const response = await fetch('/api/auth/sign-in', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: email.trim(), password }),
+        body: JSON.stringify({ email: email.trim().toLowerCase(), password }),
       })
       const payload = (await response.json().catch(() => ({}))) as {
         error?: string
@@ -124,7 +128,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const response = await fetch('/api/auth/sign-up', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: email.trim(), password, fullName: fullName.trim() }),
+        body: JSON.stringify({
+          email: email.trim().toLowerCase(),
+          password,
+          fullName: fullName.trim(),
+        }),
       })
       const payload = (await response.json().catch(() => ({}))) as {
         error?: string
@@ -132,12 +140,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         user?: AuthUser
         isAdmin?: boolean
         requiresEmailVerification?: boolean
+        resent?: boolean
       }
       if (!response.ok) {
         return { error: new Error(payload.error ?? 'Create account failed') }
       }
       if (payload.requiresEmailVerification) {
-        return { error: null, requiresEmailVerification: true }
+        return {
+          error: null,
+          requiresEmailVerification: true,
+          verificationResent: payload.resent === true,
+        }
       }
       if (!payload.token || !payload.user) {
         return { error: new Error('Create account failed') }
