@@ -4981,6 +4981,7 @@ function App() {
           >
             MY MUCY
           </button>
+          <NewsPushBell variant="topbar" />
           <button
             type="button"
             className={`top-bar-icon-btn ${searchOpen ? 'is-active' : ''}`}
@@ -5289,7 +5290,7 @@ function App() {
           <div className="section-page news-promo-page">
             <div className="news-page-header">
               <h1 className="section-title">News</h1>
-              <NewsPushBell />
+              <NewsPushBell variant="page" />
             </div>
             <p className="section-lead news-promo-page-lead">
               Swipe on mobile or tap a story to read the full announcement.

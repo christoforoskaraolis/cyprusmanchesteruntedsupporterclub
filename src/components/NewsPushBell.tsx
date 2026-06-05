@@ -9,9 +9,15 @@ import {
   unsubscribeFromNewsPush,
 } from '../lib/pushApi.ts'
 
-function IconBell({ filled }: { filled: boolean }) {
+function IconBell({ filled, topbar }: { filled: boolean; topbar?: boolean }) {
   return (
-    <svg className="news-push-bell-icon" width="22" height="22" viewBox="0 0 24 24" aria-hidden="true">
+    <svg
+      className={topbar ? 'top-bar-icon news-push-bell-icon' : 'news-push-bell-icon'}
+      width="22"
+      height="22"
+      viewBox="0 0 24 24"
+      aria-hidden="true"
+    >
       <path
         d="M12 22a2.2 2.2 0 0 0 2.1-1.55H9.9A2.2 2.2 0 0 0 12 22Z"
         fill={filled ? 'currentColor' : 'none'}
@@ -30,7 +36,12 @@ function IconBell({ filled }: { filled: boolean }) {
   )
 }
 
-export function NewsPushBell() {
+type NewsPushBellProps = {
+  /** Page header (mobile News) or desktop top bar bell. */
+  variant?: 'page' | 'topbar'
+}
+
+export function NewsPushBell({ variant = 'page' }: NewsPushBellProps) {
   const wrapRef = useRef<HTMLDivElement>(null)
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(true)
@@ -101,30 +112,45 @@ export function NewsPushBell() {
 
   const bellLabel = subscribed ? 'News alerts on' : 'News alerts off'
 
+  const isTopbar = variant === 'topbar'
+
   return (
-    <div className="news-push-bell-wrap" ref={wrapRef}>
+    <div
+      className={`news-push-bell-wrap ${isTopbar ? 'news-push-bell-wrap--topbar' : 'news-push-bell-wrap--page'}`}
+      ref={wrapRef}
+    >
       <button
         type="button"
-        className={`news-push-bell-btn ${subscribed ? 'is-on' : ''} ${open ? 'is-open' : ''}`}
+        className={
+          isTopbar
+            ? `top-bar-icon-btn news-push-bell-topbar-btn ${subscribed ? 'is-on is-subscribed' : ''} ${open ? 'is-open' : ''}`
+            : `news-push-bell-btn ${subscribed ? 'is-on' : ''} ${open ? 'is-open' : ''}`
+        }
         aria-label={bellLabel}
         aria-expanded={open}
         aria-haspopup="true"
         disabled={loading}
         onClick={() => setOpen((v) => !v)}
       >
-        <IconBell filled={subscribed} />
+        <IconBell filled={subscribed} topbar={isTopbar} />
         {subscribed && <span className="news-push-bell-dot" aria-hidden />}
       </button>
 
       {open && (
-        <div className="news-push-bell-popover" role="dialog" aria-label="News alert settings">
+        <div
+          className={`news-push-bell-popover ${isTopbar ? 'news-push-bell-popover--topbar' : ''}`}
+          role="dialog"
+          aria-label="News alert settings"
+        >
           <p className="news-push-bell-popover-title">News alerts</p>
           {!serverEnabled ? (
             <p className="news-push-bell-popover-text">Alerts are not configured on the server yet.</p>
           ) : (
             <>
               <p className="news-push-bell-popover-text">
-                {subscribed ? 'Phone alerts are on for this device.' : 'Get notified when new club news is published.'}
+                {subscribed
+                  ? 'Alerts are on for this device.'
+                  : 'Get notified when new club news is published.'}
               </p>
               {ios && !standalone && !subscribed && (
                 <p className="news-push-bell-ios-hint">
