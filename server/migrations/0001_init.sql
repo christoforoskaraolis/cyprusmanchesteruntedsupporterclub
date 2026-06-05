@@ -1,7 +1,6 @@
 -- Initial Neon schema for cyprus-manchester-united-supporters.
--- Auth identities continue to live in Supabase; user_id columns store the
--- Supabase auth.users.id as a UUID without a foreign key (RLS removed since
--- access control is enforced in the API layer).
+-- Auth lives in public.auth_users (see 0005_neon_auth.sql). user_id columns
+-- reference profile UUIDs; access control is enforced in the Express API layer.
 
 create extension if not exists "pgcrypto";
 

@@ -26,7 +26,7 @@ type AuthContextValue = {
   user: AuthUser | null
   loading: boolean
   isAdmin: boolean
-  /** Re-read profiles.is_admin (e.g. after enabling admin in Supabase). */
+  /** Re-read profiles.is_admin (e.g. after an admin grants access in the database). */
   refreshAdminStatus: () => Promise<void>
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>
   signUp: (

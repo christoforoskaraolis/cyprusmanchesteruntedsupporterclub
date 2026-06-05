@@ -1172,7 +1172,8 @@ function AdminConsole({
           </div>
         </div>
         <p className="admin-page-hint">
-          Admin access is controlled in <code className="admin-inline-code">profiles.is_admin</code> on Supabase.
+          Admin access is granted via <strong>Admin users</strong> above, or by setting{' '}
+          <code className="admin-inline-code">profiles.is_admin</code> in the Neon database.
         </p>
       </header>
 
@@ -4349,8 +4350,9 @@ function App() {
             <div className="section-page admin-page">
               <h1 className="section-title">Admin access required</h1>
               <p className="section-lead">
-                This account is not marked as admin. Set <code className="admin-inline-code">profiles.is_admin</code> to{' '}
-                <code className="admin-inline-code">true</code> in Supabase for this user and sign in again.
+                This account is not marked as admin. Add your email under Admin users, or set{' '}
+                <code className="admin-inline-code">profiles.is_admin</code> to{' '}
+                <code className="admin-inline-code">true</code> in the database, then sign in again.
               </p>
             </div>
           )}
@@ -5168,9 +5170,9 @@ function App() {
                   )}
                   {membershipRecord.membershipNumber == null && (
                     <p className="mycmusc-migration-hint" role="note">
-                      If you do not see a number yet, the club database needs the latest migration (
-                      <code className="admin-inline-code">20260411140000_membership_serial_number.sql</code>
-                      ). Your admin can run it in the Supabase SQL Editor; then refresh this page.
+                      If you do not see a number yet, the Neon database may need the latest server migrations. Your
+                      admin can run <code className="admin-inline-code">npm run migrate</code> against production, then
+                      refresh this page.
                     </p>
                   )}
                 </div>
