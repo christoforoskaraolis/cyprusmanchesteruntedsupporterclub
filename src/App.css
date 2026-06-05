@@ -1831,6 +1831,34 @@
   color: var(--text-h);
 }
 
+.admin-member-action-notice {
+  margin: 0 0 0.75rem;
+  padding: 0.65rem 0.85rem;
+  border-radius: 8px;
+  background: #ecfdf5;
+  border: 1px solid #a7f3d0;
+  color: #065f46;
+  font-size: 0.9rem;
+}
+
+.admin-member-email-status {
+  margin-top: 0.2rem;
+  font-weight: 600;
+}
+
+.admin-member-email-status--queued {
+  color: #b45309;
+}
+
+.admin-member-email-status--sent {
+  color: #047857;
+}
+
+.admin-member-email-status--failed,
+.admin-member-email-status--skipped {
+  color: #b91c1c;
+}
+
 .admin-member-submitted {
   margin: 0.65rem 0 0.75rem;
   font-size: 0.75rem;

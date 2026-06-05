@@ -9,6 +9,24 @@ import { requireAdmin, requireUser } from '../middleware/auth.ts'
 
 export const membershipRouter = Router()
 
+type ActivationEmailStatus = 'queued' | 'sent' | 'failed' | 'skipped'
+
+async function setActivationEmailStatus(
+  applicationId: string,
+  status: ActivationEmailStatus,
+  options?: { recipient?: string; error?: string },
+): Promise<void> {
+  await query(
+    `update public.membership_applications
+     set activation_email_status = $1,
+         activation_email_sent_at = case when $1 = 'sent' then now() else activation_email_sent_at end,
+         activation_email_recipient = coalesce($2, activation_email_recipient),
+         activation_email_error = case when $1 in ('queued', 'sent') then null else $3 end
+     where application_id = $4`,
+    [status, options?.recipient ?? null, options?.error ?? null, applicationId],
+  )
+}
+
 membershipRouter.get(
   '/my-latest',
   requireUser,
@@ -430,26 +448,45 @@ membershipRouter.put(
 
     await query(
       `update public.membership_applications
-       set status = $1, activated_at = case when $1='active' then now() else null end
+       set status = $1,
+           activated_at = case when $1='active' then now() else null end,
+           activation_email_status = case when $1='pending' then null else activation_email_status end,
+           activation_email_sent_at = case when $1='pending' then null else activation_email_sent_at end,
+           activation_email_recipient = case when $1='pending' then null else activation_email_recipient end,
+           activation_email_error = case when $1='pending' then null else activation_email_error end
        where application_id = $2`,
       [status, applicationId],
     )
 
-    res.json({ ok: true })
+    let activationEmailStatus: ActivationEmailStatus | null = null
 
     if (status === 'active' && wasPending) {
       const to = (application.profile_email || application.auth_email || '').trim()
       if (!to) {
+        await setActivationEmailStatus(applicationId, 'skipped', {
+          error: 'No email address on file for this member.',
+        })
+        activationEmailStatus = 'skipped'
         console.warn(`[membership] activation email skipped for ${applicationId}: no email on file`)
-        return
+      } else {
+        await setActivationEmailStatus(applicationId, 'queued', { recipient: to })
+        activationEmailStatus = 'queued'
+        const baseUrl = env.publicAppUrl || req.headers.origin || 'http://localhost:5173'
+        const mycmuscUrl = `${baseUrl.replace(/\/+$/, '')}/mycmusc`
+        const firstName = (application.first_name || '').trim() || 'Member'
+        void sendMembershipActivationEmail({ to, firstName, mycmuscUrl })
+          .then(async () => {
+            await setActivationEmailStatus(applicationId, 'sent', { recipient: to })
+          })
+          .catch(async (error) => {
+            const message = error instanceof Error ? error.message : 'Could not send activation email.'
+            await setActivationEmailStatus(applicationId, 'failed', { recipient: to, error: message })
+            console.error(`[membership] activation email failed for ${applicationId}:`, error)
+          })
       }
-      const baseUrl = env.publicAppUrl || req.headers.origin || 'http://localhost:5173'
-      const mycmuscUrl = `${baseUrl.replace(/\/+$/, '')}/mycmusc`
-      const firstName = (application.first_name || '').trim() || 'Member'
-      void sendMembershipActivationEmail({ to, firstName, mycmuscUrl }).catch((error) => {
-        console.error(`[membership] activation email failed for ${applicationId}:`, error)
-      })
     }
+
+    res.json({ ok: true, activationEmailStatus })
   }),
 )
 

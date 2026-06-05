@@ -17,6 +17,7 @@ import {
   fetchMyPendingRenewal,
   fetchMyProfile,
   fetchPendingRenewalRequests,
+  formatActivationEmailStatus,
   formatMembershipNumber,
   formatFamilyRelationship,
   formatOfficialMembershipRequestLabel,
@@ -871,7 +872,7 @@ type AdminConsoleProps = {
   loading: boolean
   pendingRenewals: PendingRenewalListRow[]
   pendingTicketRequests: AdminFixtureTicketRequest[]
-  onActivate: (applicationId: string) => Promise<void>
+  onActivate: (applicationId: string) => Promise<string | null>
   onSetPending: (applicationId: string) => Promise<void>
   onDeleteMemberRequest: (applicationId: string) => Promise<void>
   onUpdateMemberId: (
@@ -1017,6 +1018,7 @@ function AdminConsole({
   >({})
   const [membershipNumberDraftByApplicationId, setMembershipNumberDraftByApplicationId] = useState<Record<string, string>>({})
   const [memberActionError, setMemberActionError] = useState<string | null>(null)
+  const [memberActionNotice, setMemberActionNotice] = useState<string | null>(null)
   const pendingMembersCount = memberRegistry.filter((member) => member.status === 'pending').length
   const activeMembersCount = memberRegistry.filter((member) => member.status === 'active').length
   const pendingOrdersCount = merchandiseOrders.filter((order) => order.status === 'pending').length
@@ -1451,6 +1453,7 @@ function AdminConsole({
           Export Excel
         </button>
       </div>
+      {memberActionNotice && <p className="admin-member-action-notice">{memberActionNotice}</p>}
       {memberActionError && <p className="admin-empty" style={{ color: '#b91c1c' }}>{memberActionError}</p>}
 
       {loading ? (
@@ -1486,6 +1489,13 @@ function AdminConsole({
                   <p className="admin-member-meta admin-member-official-request">
                     {formatOfficialMembershipRequestLabel(m.officialMembershipOfferTitle)}
                   </p>
+                  {m.status === 'active' && m.activationEmailStatus && (
+                    <p
+                      className={`admin-member-meta admin-member-email-status admin-member-email-status--${m.activationEmailStatus}`}
+                    >
+                      {formatActivationEmailStatus(m)}
+                    </p>
+                  )}
                 </div>
                 <span
                   className={`board-admin-status board-admin-status--${m.status === 'pending' ? 'pending' : 'active'}`}
@@ -1507,9 +1517,11 @@ function AdminConsole({
                     disabled={busyId !== null}
                     onClick={async () => {
                       setMemberActionError(null)
+                      setMemberActionNotice(null)
                       setBusyId(m.applicationId)
                       try {
-                        await onActivate(m.applicationId)
+                        const notice = await onActivate(m.applicationId)
+                        if (notice) setMemberActionNotice(notice)
                       } catch (error) {
                         setMemberActionError(
                           error instanceof Error ? error.message : 'Could not activate membership.',
@@ -3914,6 +3926,23 @@ function App() {
     setMemberRegistry(rows.map(dbRowToMemberEntry))
   }, [isAdmin])
 
+  const pollActivationEmailStatus = useCallback((applicationId: string) => {
+    let attempts = 0
+    const maxAttempts = 30
+    const tick = async () => {
+      attempts += 1
+      const { rows, error } = await fetchAllMembershipApplications()
+      if (!error) {
+        const entries = rows.map(dbRowToMemberEntry)
+        setMemberRegistry(entries)
+        const entry = entries.find((row) => row.applicationId === applicationId)
+        if (entry?.activationEmailStatus && entry.activationEmailStatus !== 'queued') return
+      }
+      if (attempts < maxAttempts) window.setTimeout(() => void tick(), 3000)
+    }
+    void tick()
+  }, [])
+
   useEffect(() => {
     if (!isAdminRoute) {
       adminStatusCheckedRef.current = false
@@ -4033,23 +4062,42 @@ function App() {
       sponsorApplicationId: membershipRecord.applicationId,
       officialMembershipOfferTitle,
       ...payload,
+      activationEmailStatus: null,
+      activationEmailSentAt: null,
+      activationEmailRecipient: null,
+      activationEmailError: null,
     })
     await refreshMyMembership()
     await loadMyOfficialRequests()
   }
 
-  async function applyActivateMembership(applicationId: string) {
-    const { error } = await setApplicationStatus(applicationId, 'active')
+  async function applyActivateMembership(applicationId: string): Promise<string | null> {
+    const { error, activationEmailStatus } = await setApplicationStatus(applicationId, 'active')
     if (error) throw new Error(error.message)
+    let noticeEntry: MemberRegistryEntry | null = null
     setMemberRegistry((prev) =>
-      prev.map((m) =>
-        m.applicationId === applicationId
-          ? { ...m, status: 'active', activatedAt: new Date().toISOString() }
-          : m,
-      ),
+      prev.map((m) => {
+        if (m.applicationId !== applicationId) return m
+        const updated: MemberRegistryEntry = {
+          ...m,
+          status: 'active',
+          activatedAt: new Date().toISOString(),
+          activationEmailStatus: activationEmailStatus ?? null,
+          activationEmailSentAt: null,
+          activationEmailRecipient: m.email,
+          activationEmailError: null,
+        }
+        noticeEntry = updated
+        return updated
+      }),
     )
     void reloadMemberRegistryOnly()
     void refreshMyMembership()
+    if (activationEmailStatus === 'queued') {
+      pollActivationEmailStatus(applicationId)
+    }
+    if (!noticeEntry) return 'Membership activated.'
+    return `Membership activated. ${formatActivationEmailStatus(noticeEntry)}`
   }
 
   async function applySetMembershipPending(applicationId: string) {

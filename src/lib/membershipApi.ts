@@ -73,6 +73,8 @@ export function parseOfficialMuMembershipFields(
   return { officialMuMembershipId: muId, officialMuMembershipStatus: muStatus }
 }
 
+export type ActivationEmailStatus = 'queued' | 'sent' | 'failed' | 'skipped'
+
 export type MemberRegistryEntry = {
   applicationId: string
   email: string | null
@@ -100,6 +102,35 @@ export type MemberRegistryEntry = {
   familyRelationshipOther: string | null
   /** Offer title when member selected an official MU package at registration; null if none. */
   officialMembershipOfferTitle: string | null
+  /** Welcome email delivery tracking after admin activation. */
+  activationEmailStatus: ActivationEmailStatus | null
+  activationEmailSentAt: string | null
+  activationEmailRecipient: string | null
+  activationEmailError: string | null
+}
+
+export function formatActivationEmailStatus(entry: {
+  activationEmailStatus: ActivationEmailStatus | null
+  activationEmailSentAt: string | null
+  activationEmailRecipient: string | null
+  activationEmailError: string | null
+}): string {
+  switch (entry.activationEmailStatus) {
+    case 'queued':
+      return 'Sending welcome email…'
+    case 'sent':
+      return `Welcome email sent${entry.activationEmailRecipient ? ` to ${entry.activationEmailRecipient}` : ''}${
+        entry.activationEmailSentAt
+          ? ` at ${new Date(entry.activationEmailSentAt).toLocaleString('en-GB')}`
+          : ''
+      }`
+    case 'failed':
+      return `Welcome email failed${entry.activationEmailError ? `: ${entry.activationEmailError}` : ''}`
+    case 'skipped':
+      return entry.activationEmailError ?? 'Welcome email skipped (no email on file)'
+    default:
+      return 'Welcome email not sent yet'
+  }
 }
 
 export type MemberApplicationPayload = Omit<
@@ -113,6 +144,10 @@ export type MemberApplicationPayload = Omit<
   | 'membershipNumber'
   | 'sponsorApplicationId'
   | 'officialMembershipOfferTitle'
+  | 'activationEmailStatus'
+  | 'activationEmailSentAt'
+  | 'activationEmailRecipient'
+  | 'activationEmailError'
 >
 
 export type DbMembershipApplication = {
@@ -140,6 +175,10 @@ export type DbMembershipApplication = {
   family_relationship?: string | null
   family_relationship_other?: string | null
   official_membership_offer_title?: string | null
+  activation_email_status?: ActivationEmailStatus | null
+  activation_email_sent_at?: string | null
+  activation_email_recipient?: string | null
+  activation_email_error?: string | null
 }
 
 export type DbRenewalRequest = {
@@ -203,6 +242,10 @@ export function dbRowToMemberEntry(row: DbMembershipApplication): MemberRegistry
     familyRelationship: row.family_relationship ?? null,
     familyRelationshipOther: row.family_relationship_other ?? null,
     officialMembershipOfferTitle: row.official_membership_offer_title?.trim() || null,
+    activationEmailStatus: row.activation_email_status ?? null,
+    activationEmailSentAt: row.activation_email_sent_at ?? null,
+    activationEmailRecipient: row.activation_email_recipient ?? null,
+    activationEmailError: row.activation_email_error ?? null,
   }
 }
 
@@ -314,10 +357,14 @@ export async function fetchAllMembershipApplications() {
 export async function setApplicationStatus(applicationId: string, status: 'pending' | 'active') {
   void defaultMembershipValidUntilIso
   try {
-    await apiSend(`/api/membership/applications/${applicationId}/status`, 'PUT', { status })
-    return { error: undefined }
+    const data = await apiSend<{ ok: boolean; activationEmailStatus?: ActivationEmailStatus | null }>(
+      `/api/membership/applications/${applicationId}/status`,
+      'PUT',
+      { status },
+    )
+    return { activationEmailStatus: data.activationEmailStatus ?? null, error: undefined }
   } catch (error) {
-    return { error: asError(error) }
+    return { activationEmailStatus: null, error: asError(error) }
   }
 }
 
