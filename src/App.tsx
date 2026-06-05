@@ -3904,6 +3904,16 @@ function App() {
     }
   }, [isAdmin])
 
+  const reloadMemberRegistryOnly = useCallback(async () => {
+    if (!isAdmin) return
+    const { rows, error } = await fetchAllMembershipApplications()
+    if (error) {
+      console.error(error)
+      return
+    }
+    setMemberRegistry(rows.map(dbRowToMemberEntry))
+  }, [isAdmin])
+
   useEffect(() => {
     if (!isAdminRoute) {
       adminStatusCheckedRef.current = false
@@ -4031,22 +4041,35 @@ function App() {
   async function applyActivateMembership(applicationId: string) {
     const { error } = await setApplicationStatus(applicationId, 'active')
     if (error) throw new Error(error.message)
-    await loadAdminRegistry()
-    await refreshMyMembership()
+    setMemberRegistry((prev) =>
+      prev.map((m) =>
+        m.applicationId === applicationId
+          ? { ...m, status: 'active', activatedAt: new Date().toISOString() }
+          : m,
+      ),
+    )
+    void reloadMemberRegistryOnly()
+    void refreshMyMembership()
   }
 
   async function applySetMembershipPending(applicationId: string) {
     const { error } = await setApplicationStatus(applicationId, 'pending')
     if (error) throw new Error(error.message)
-    await loadAdminRegistry()
-    await refreshMyMembership()
+    setMemberRegistry((prev) =>
+      prev.map((m) =>
+        m.applicationId === applicationId ? { ...m, status: 'pending', activatedAt: undefined } : m,
+      ),
+    )
+    void reloadMemberRegistryOnly()
+    void refreshMyMembership()
   }
 
   async function applyDeleteMemberRequest(applicationId: string) {
     const { error } = await deleteMembershipApplication(applicationId)
     if (error) throw new Error(error.message)
-    await loadAdminRegistry()
-    await refreshMyMembership()
+    setMemberRegistry((prev) => prev.filter((m) => m.applicationId !== applicationId))
+    void reloadMemberRegistryOnly()
+    void refreshMyMembership()
   }
 
   async function applyUpdateMemberId(
