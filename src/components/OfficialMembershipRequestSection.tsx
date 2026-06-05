@@ -12,6 +12,8 @@ type OfficialMembershipRequestSectionProps = {
   myOfficialRequests: OfficialMembershipRequest[]
   membershipApplicationId: string | null
   onRefreshRequests: () => Promise<void>
+  returnPath?: string
+  onBack?: () => void
 }
 
 export function OfficialMembershipRequestSection({
@@ -20,6 +22,8 @@ export function OfficialMembershipRequestSection({
   myOfficialRequests,
   membershipApplicationId,
   onRefreshRequests,
+  returnPath = '/mycmusc',
+  onBack,
 }: OfficialMembershipRequestSectionProps) {
   const [selectedOfferId, setSelectedOfferId] = useState('')
   const [submitting, setSubmitting] = useState(false)
@@ -30,7 +34,12 @@ export function OfficialMembershipRequestSection({
   const pendingRequest = myOfficialRequests.find((r) => r.status === 'pending')
 
   return (
-    <section className="mycmusc-profile-card" aria-label="Official Manchester United membership">
+    <section className="mycmusc-profile-card official-membership-page-panel" aria-label="Official Manchester United membership">
+      {onBack && (
+        <button type="button" className="mycmusc-reg-btn mycmusc-reg-btn--secondary official-membership-back-btn" onClick={onBack}>
+          ← Back to MY MUCY
+        </button>
+      )}
       <h2 className="mycmusc-profile-card-title">Official Manchester United membership</h2>
       <p className="section-lead mycmusc-reg-lead">
         Get or renew your official Manchester United membership. Select a package, submit your request, then pay
@@ -126,7 +135,7 @@ export function OfficialMembershipRequestSection({
                         description: offer ? `Official MU membership — ${offer.title}` : 'Official MU membership',
                         paymentKind: 'official_membership',
                         referenceId: paymentOfferId,
-                        returnPath: '/mycmusc',
+                        returnPath,
                       }}
                     />
                   </>

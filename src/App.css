@@ -2767,6 +2767,34 @@
   color: var(--text-h);
 }
 
+.official-membership-teaser-lead {
+  margin: 0 0 0.85rem;
+  font-size: 0.92rem;
+  line-height: 1.55;
+  color: var(--text-muted);
+}
+
+.official-membership-teaser-meta {
+  margin: 0 0 0.85rem;
+  font-size: 0.9rem;
+  color: var(--text);
+}
+
+.official-membership-teaser-pending {
+  margin: 0 0 0.75rem;
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: #9a6700;
+}
+
+.official-membership-back-btn {
+  margin-bottom: 0.85rem;
+}
+
+.official-membership-page-panel {
+  margin-top: 0;
+}
+
 .mycmusc-membership-summary {
   margin: 0 0 1.1rem;
   padding: 0.85rem 1rem;

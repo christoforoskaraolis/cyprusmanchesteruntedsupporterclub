@@ -106,6 +106,7 @@ import {
   OptionalOfficialMembershipPicker,
 } from './components/MembershipRegistrationPayment.tsx'
 import { OfficialMembershipRequestSection } from './components/OfficialMembershipRequestSection.tsx'
+import { OfficialMembershipTeaser } from './components/OfficialMembershipTeaser.tsx'
 import { NewsPushBell } from './components/NewsPushBell.tsx'
 import { AdminNewsPostPreview } from './components/AdminNewsPostPreview.tsx'
 import { NewsFeed } from './components/NewsFeed.tsx'
@@ -2994,6 +2995,7 @@ type ActivePage =
   | 'news'
   | 'social'
   | 'mycmusc'
+  | 'official-membership'
   | 'tickets'
   | 'merchandise'
 
@@ -3004,9 +3006,9 @@ function pageFromPath(pathname: string): ActivePage {
   if (clean === '/news') return 'news'
   if (clean === '/social') return 'social'
   if (clean === '/mycmusc') return 'mycmusc'
+  if (clean === '/official-membership' || clean === '/official-memberships') return 'official-membership'
   if (clean === '/tickets') return 'tickets'
   if (clean === '/merchandise') return 'merchandise'
-  if (clean === '/official-memberships') return 'mycmusc'
   return 'home'
 }
 
@@ -3016,6 +3018,7 @@ function pathFromPage(page: ActivePage): string {
   if (page === 'news') return '/news'
   if (page === 'social') return '/social'
   if (page === 'mycmusc') return '/mycmusc'
+  if (page === 'official-membership') return '/official-membership'
   if (page === 'tickets') return '/tickets'
   if (page === 'merchandise') return '/merchandise'
   return '/'
@@ -4918,7 +4921,7 @@ function App() {
           </button>
           <button
             type="button"
-            className={`top-bar-pill-btn ${activePage === 'mycmusc' ? 'is-active' : ''}`}
+            className={`top-bar-pill-btn ${activePage === 'mycmusc' || activePage === 'official-membership' ? 'is-active' : ''}`}
             onClick={() => openPage('mycmusc')}
           >
             MY MUCY
@@ -5587,6 +5590,34 @@ function App() {
             )}
           </div>
         )}
+        {activePage === 'official-membership' && (
+          <div className="section-page official-membership-page">
+            {membershipLoading ? (
+              <p className="section-lead">Loading membership…</p>
+            ) : membershipRecord ? (
+              <OfficialMembershipRequestSection
+                officialOffers={officialOffers}
+                officialOffersLoading={officialOffersLoading}
+                myOfficialRequests={myOfficialRequests}
+                membershipApplicationId={membershipRecord.applicationId}
+                onRefreshRequests={loadMyOfficialRequests}
+                returnPath="/official-membership"
+                onBack={() => openPage('mycmusc')}
+              />
+            ) : (
+              <>
+                <h1 className="section-title">Official Manchester United membership</h1>
+                <p className="section-lead">
+                  Complete your Cyprus club membership in MY MUCY before requesting official Manchester United
+                  membership.
+                </p>
+                <button type="button" className="mycmusc-reg-btn mycmusc-reg-btn--primary" onClick={() => openPage('mycmusc')}>
+                  Go to MY MUCY
+                </button>
+              </>
+            )}
+          </div>
+        )}
         {activePage === 'mycmusc' && (
           <div className="section-page mycmusc-page">
             <h1 className="section-title">MY MUCY</h1>
@@ -6118,12 +6149,10 @@ function App() {
                   )}
                 </section>
 
-                <OfficialMembershipRequestSection
-                  officialOffers={officialOffers}
-                  officialOffersLoading={officialOffersLoading}
+                <OfficialMembershipTeaser
+                  membershipRecord={membershipRecord}
                   myOfficialRequests={myOfficialRequests}
-                  membershipApplicationId={membershipRecord.applicationId}
-                  onRefreshRequests={loadMyOfficialRequests}
+                  onOpenRequestPage={() => openPage('official-membership')}
                 />
 
                 <RenewMembershipModal
@@ -6153,12 +6182,10 @@ function App() {
                   officialOffers={officialOffers}
                   myOfficialRequests={myOfficialRequests}
                 />
-                <OfficialMembershipRequestSection
-                  officialOffers={officialOffers}
-                  officialOffersLoading={officialOffersLoading}
+                <OfficialMembershipTeaser
+                  membershipRecord={membershipRecord}
                   myOfficialRequests={myOfficialRequests}
-                  membershipApplicationId={membershipRecord.applicationId}
-                  onRefreshRequests={loadMyOfficialRequests}
+                  onOpenRequestPage={() => openPage('official-membership')}
                 />
               </>
             ) : showCyprusMembershipForm ? (
@@ -6273,7 +6300,7 @@ function App() {
           <button
             type="button"
             role="menuitem"
-            className={`mobile-nav-sheet-item ${activePage === 'mycmusc' ? 'is-active' : ''}`}
+            className={`mobile-nav-sheet-item ${activePage === 'mycmusc' || activePage === 'official-membership' ? 'is-active' : ''}`}
             onClick={() => openPage('mycmusc')}
           >
             MY MUCY
