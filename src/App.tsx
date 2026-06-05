@@ -37,7 +37,16 @@ import {
   updateMyProfileDetails,
 } from './lib/membershipApi.ts'
 import { fetchCachedFixtures, syncFixturesFromManutd, type UpcomingFixture } from './lib/fixturesApi.ts'
-import { deleteNewsPost, fetchNewsPosts, insertNewsPost, type NewsPost, updateNewsPost } from './lib/newsApi.ts'
+import {
+  deleteNewsPost,
+  fetchNewsPosts,
+  insertNewsPost,
+  newsDesktopImage,
+  newsMobileImage,
+  type NewsPost,
+  type NewsPostPayload,
+  updateNewsPost,
+} from './lib/newsApi.ts'
 import {
   completeMyAcceptedTicketRequest,
   type AdminFixtureTicketRequest,
@@ -97,6 +106,7 @@ import {
   OptionalOfficialMembershipPicker,
 } from './components/MembershipRegistrationPayment.tsx'
 import { OfficialMembershipRequestSection } from './components/OfficialMembershipRequestSection.tsx'
+import { AdminNewsPostPreview } from './components/AdminNewsPostPreview.tsx'
 import { NewsFeed } from './components/NewsFeed.tsx'
 
 const MEMBERSHIP_FEE_EUR = 15
@@ -710,9 +720,22 @@ function NewsDetailModal({ post, open, onClose }: NewsDetailModalProps) {
         <p className="news-detail-modal-date">
           Published: {new Date(post.publishedAt).toLocaleString('en-GB', { dateStyle: 'long', timeStyle: 'short' })}
         </p>
-        {post.imageUrl && (
+        {(newsDesktopImage(post) || newsMobileImage(post)) && (
           <div className="news-detail-modal-visual">
-            <img src={post.imageUrl} alt="" className="news-detail-modal-img" />
+            {newsDesktopImage(post) && (
+              <img
+                src={newsDesktopImage(post)!}
+                alt=""
+                className="news-detail-modal-img news-detail-modal-img--desktop"
+              />
+            )}
+            {newsMobileImage(post) && (
+              <img
+                src={newsMobileImage(post)!}
+                alt=""
+                className="news-detail-modal-img news-detail-modal-img--mobile"
+              />
+            )}
           </div>
         )}
         <div className="news-detail-modal-body">{post.body}</div>
@@ -888,8 +911,8 @@ type AdminConsoleProps = {
   onCancelTicketRequest: (row: AdminFixtureTicketRequest) => Promise<void>
   newsPosts: NewsPost[]
   newsLoading: boolean
-  onCreateNews: (payload: { title: string; body: string; imageUrl: string | null; publishedAt: string }) => Promise<void>
-  onUpdateNews: (id: string, payload: { title: string; body: string; imageUrl: string | null; publishedAt: string }) => Promise<void>
+  onCreateNews: (payload: NewsPostPayload) => Promise<void>
+  onUpdateNews: (id: string, payload: NewsPostPayload) => Promise<void>
   onDeleteNews: (id: string) => Promise<void>
   merchandiseOrders: MerchandiseOrderRow[]
   onUpdateMerchandiseOrderStatus: (orderId: string, status: MerchandiseOrderStatus) => Promise<void>
@@ -982,6 +1005,7 @@ function AdminConsole({
   const [newsTitle, setNewsTitle] = useState('')
   const [newsBody, setNewsBody] = useState('')
   const [newsImageUrl, setNewsImageUrl] = useState('')
+  const [newsImageUrlMobile, setNewsImageUrlMobile] = useState('')
   const [newsPublishedAt, setNewsPublishedAt] = useState('')
   const [editingNewsId, setEditingNewsId] = useState<string | null>(null)
   const [busyNewsId, setBusyNewsId] = useState<string | null>(null)
@@ -1216,15 +1240,17 @@ function AdminConsole({
     setAdminMerchError(null)
   }
 
-  async function onPickNewsImage(file: File | null) {
+  async function onPickNewsImage(target: 'desktop' | 'mobile', file: File | null) {
     if (!file) return
     if (!file.type.startsWith('image/')) {
       setNewsError('Please choose an image file.')
       return
     }
     try {
-      const dataUrl = await resizeImageFileToJpegDataUrl(file, { maxEdge: 1600, quality: 0.88 })
-      setNewsImageUrl(dataUrl)
+      const maxEdge = target === 'desktop' ? 1600 : 1350
+      const dataUrl = await resizeImageFileToJpegDataUrl(file, { maxEdge, quality: 0.88 })
+      if (target === 'desktop') setNewsImageUrl(dataUrl)
+      else setNewsImageUrlMobile(dataUrl)
       setNewsError(null)
     } catch (e) {
       setNewsError(e instanceof Error ? e.message : 'Could not process image.')
@@ -1955,20 +1981,23 @@ function AdminConsole({
               const title = newsTitle.trim()
               const body = newsBody.trim()
               const imageUrl = newsImageUrl.trim() || null
+              const imageUrlMobile = newsImageUrlMobile.trim() || null
               const publishedAt = newsPublishedAt ? new Date(newsPublishedAt).toISOString() : new Date().toISOString()
               if (!title || !body) {
                 setNewsError('Title and content are required.')
                 return
               }
               try {
+                const payload = { title, body, imageUrl, imageUrlMobile, publishedAt }
                 if (editingNewsId) {
-                  await onUpdateNews(editingNewsId, { title, body, imageUrl, publishedAt })
+                  await onUpdateNews(editingNewsId, payload)
                 } else {
-                  await onCreateNews({ title, body, imageUrl, publishedAt })
+                  await onCreateNews(payload)
                 }
                 setNewsTitle('')
                 setNewsBody('')
                 setNewsImageUrl('')
+                setNewsImageUrlMobile('')
                 setNewsPublishedAt('')
                 setEditingNewsId(null)
               } catch (err) {
@@ -1989,32 +2018,68 @@ function AdminConsole({
               value={newsBody}
               onChange={(e) => setNewsBody(e.target.value)}
             />
-            <label className="admin-news-date-row">
-              <span>Photo (optional)</span>
-              <input
-                className="auth-input"
-                type="url"
-                placeholder="https://example.com/photo.jpg"
-                value={newsImageUrl}
-                onChange={(e) => setNewsImageUrl(e.target.value)}
-              />
-            </label>
-            <label className="admin-news-date-row">
-              <span>Or upload photo (optional)</span>
-              <input
-                className="auth-input"
-                type="file"
-                accept="image/*"
-                onChange={(e) => void onPickNewsImage(e.target.files?.[0] ?? null)}
-              />
-            </label>
-            <p className="admin-news-image-hint">
-              Recommended: <strong>1600 × 900 px</strong> (16:9 landscape). On phones the image is shown as a tall
-              card — keep the main subject centred so it crops nicely.
-            </p>
-            {newsImageUrl.trim() && (
-              <img src={newsImageUrl} alt="News preview" className="admin-news-preview-image" />
-            )}
+            <div className="admin-news-photo-block">
+              <h4 className="admin-news-photo-block-title">Desktop photo (PC)</h4>
+              <p className="admin-news-image-hint">
+                Recommended: <strong>1600 × 900 px</strong> (16:9 landscape) for the website grid.
+              </p>
+              <label className="admin-news-date-row">
+                <span>Image URL (optional)</span>
+                <input
+                  className="auth-input"
+                  type="url"
+                  placeholder="https://example.com/desktop-photo.jpg"
+                  value={newsImageUrl}
+                  onChange={(e) => setNewsImageUrl(e.target.value)}
+                />
+              </label>
+              <label className="admin-news-date-row">
+                <span>Or upload</span>
+                <input
+                  className="auth-input"
+                  type="file"
+                  accept="image/*"
+                  onChange={(e) => void onPickNewsImage('desktop', e.target.files?.[0] ?? null)}
+                />
+              </label>
+            </div>
+            <div className="admin-news-photo-block">
+              <h4 className="admin-news-photo-block-title">Smartphone photo</h4>
+              <p className="admin-news-image-hint">
+                Recommended: <strong>1080 × 1350 px</strong> (4:5 portrait) for the mobile swipe card. Optional —
+                if empty, the desktop photo is used on phones too.
+              </p>
+              <label className="admin-news-date-row">
+                <span>Image URL (optional)</span>
+                <input
+                  className="auth-input"
+                  type="url"
+                  placeholder="https://example.com/mobile-photo.jpg"
+                  value={newsImageUrlMobile}
+                  onChange={(e) => setNewsImageUrlMobile(e.target.value)}
+                />
+              </label>
+              <label className="admin-news-date-row">
+                <span>Or upload</span>
+                <input
+                  className="auth-input"
+                  type="file"
+                  accept="image/*"
+                  onChange={(e) => void onPickNewsImage('mobile', e.target.files?.[0] ?? null)}
+                />
+              </label>
+            </div>
+            <AdminNewsPostPreview
+              title={newsTitle}
+              body={newsBody}
+              imageUrl={newsImageUrl.trim() || null}
+              imageUrlMobile={newsImageUrlMobile.trim() || null}
+              publishedAt={
+                newsPublishedAt
+                  ? new Date(newsPublishedAt).toISOString()
+                  : new Date().toISOString()
+              }
+            />
             <label className="admin-news-date-row">
               <span>Publish date/time (optional)</span>
               <input
@@ -2038,6 +2103,7 @@ function AdminConsole({
                     setNewsTitle('')
                     setNewsBody('')
                     setNewsImageUrl('')
+                    setNewsImageUrlMobile('')
                     setNewsPublishedAt('')
                     setNewsError(null)
                   }}
@@ -2070,6 +2136,7 @@ function AdminConsole({
                         setNewsTitle(n.title)
                         setNewsBody(n.body)
                         setNewsImageUrl(n.imageUrl ?? '')
+                        setNewsImageUrlMobile(n.imageUrlMobile ?? '')
                         setNewsPublishedAt(new Date(n.publishedAt).toISOString().slice(0, 16))
                         setNewsError(null)
                       }}
@@ -3436,16 +3503,13 @@ function App() {
     await loadAdminRegistry()
   }
 
-  async function applyCreateNews(payload: { title: string; body: string; imageUrl: string | null; publishedAt: string }) {
+  async function applyCreateNews(payload: NewsPostPayload) {
     const { error } = await insertNewsPost(payload, user?.id ?? null)
     if (error) throw new Error(error.message)
     await loadNewsPosts()
   }
 
-  async function applyUpdateNews(
-    id: string,
-    payload: { title: string; body: string; imageUrl: string | null; publishedAt: string },
-  ) {
+  async function applyUpdateNews(id: string, payload: NewsPostPayload) {
     const { error } = await updateNewsPost(id, payload, user?.id ?? null)
     if (error) throw new Error(error.message)
     await loadNewsPosts()

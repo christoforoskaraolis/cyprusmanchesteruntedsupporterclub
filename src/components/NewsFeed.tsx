@@ -1,11 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import type { NewsPost } from '../lib/newsApi.ts'
+import { newsDesktopImage, newsMobileImage, type NewsPost } from '../lib/newsApi.ts'
 
 type NewsFeedProps = {
   posts: NewsPost[]
   onReadPost: (post: NewsPost) => void
   limit?: number
   idPrefix?: string
+  /** Force desktop or mobile layout regardless of screen size (admin preview). */
+  previewLayout?: 'responsive' | 'desktop' | 'mobile'
+  /** Disable card clicks — preview only. */
+  readOnly?: boolean
 }
 
 function newsBodyExcerpt(body: string, maxChars = 140): string {
@@ -35,7 +39,14 @@ function formatNewsShortDate(iso: string): string {
   return new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
 }
 
-export function NewsFeed({ posts, onReadPost, limit, idPrefix = 'news' }: NewsFeedProps) {
+export function NewsFeed({
+  posts,
+  onReadPost,
+  limit,
+  idPrefix = 'news',
+  previewLayout = 'responsive',
+  readOnly = false,
+}: NewsFeedProps) {
   const visiblePosts = useMemo(() => (limit != null ? posts.slice(0, limit) : posts), [posts, limit])
   const [activeIndex, setActiveIndex] = useState(0)
   const carouselRef = useRef<HTMLDivElement>(null)
@@ -61,22 +72,30 @@ export function NewsFeed({ posts, onReadPost, limit, idPrefix = 'news' }: NewsFe
 
   if (visiblePosts.length === 0) return null
 
+  const layoutClass =
+    previewLayout === 'desktop'
+      ? 'news-feed--layout-desktop'
+      : previewLayout === 'mobile'
+        ? 'news-feed--layout-mobile'
+        : ''
+
   return (
-    <div className="news-feed">
+    <div className={`news-feed ${layoutClass} ${readOnly ? 'news-feed--readonly' : ''}`.trim()}>
       <div className="news-feed-mobile" aria-label="Latest news">
         <div className="news-feed-carousel" ref={carouselRef}>
           {visiblePosts.map((post) => {
             const titleId = `${idPrefix}-hero-title-${post.id}`
+            const mobileImage = newsMobileImage(post)
             return (
               <article
                 key={post.id}
-                className={`news-feed-hero-card ${post.imageUrl ? '' : 'news-feed-hero-card--no-image'}`}
+                className={`news-feed-hero-card ${mobileImage ? '' : 'news-feed-hero-card--no-image'}`}
                 aria-labelledby={titleId}
               >
-                {post.imageUrl ? (
+                {mobileImage ? (
                   <div
                     className="news-feed-hero-visual"
-                    style={{ backgroundImage: `url(${post.imageUrl})` }}
+                    style={{ backgroundImage: `url(${mobileImage})` }}
                     role="img"
                     aria-label=""
                   />
@@ -96,7 +115,12 @@ export function NewsFeed({ posts, onReadPost, limit, idPrefix = 'news' }: NewsFe
                     {post.title}
                   </h2>
                   <p className="news-feed-hero-excerpt">{newsBodyExcerpt(post.body)}</p>
-                  <button type="button" className="news-feed-read-btn" onClick={() => onReadPost(post)}>
+                  <button
+                    type="button"
+                    className="news-feed-read-btn"
+                    disabled={readOnly}
+                    onClick={() => onReadPost(post)}
+                  >
                     Read
                   </button>
                 </div>
@@ -131,15 +155,21 @@ export function NewsFeed({ posts, onReadPost, limit, idPrefix = 'news' }: NewsFe
       <ul className="news-feed-desktop">
         {visiblePosts.map((post) => {
           const titleId = `${idPrefix}-editorial-title-${post.id}`
+          const desktopImage = newsDesktopImage(post)
           return (
             <li key={post.id}>
               <article className="news-feed-editorial-card" aria-labelledby={titleId}>
-                <button type="button" className="news-feed-editorial-hit" onClick={() => onReadPost(post)}>
+                <button
+                  type="button"
+                  className="news-feed-editorial-hit"
+                  disabled={readOnly}
+                  onClick={() => onReadPost(post)}
+                >
                   <div
-                    className={`news-feed-editorial-visual ${post.imageUrl ? '' : 'news-feed-editorial-visual--placeholder'}`}
-                    style={post.imageUrl ? { backgroundImage: `url(${post.imageUrl})` } : undefined}
-                    role={post.imageUrl ? 'img' : undefined}
-                    aria-hidden={!post.imageUrl}
+                    className={`news-feed-editorial-visual ${desktopImage ? '' : 'news-feed-editorial-visual--placeholder'}`}
+                    style={desktopImage ? { backgroundImage: `url(${desktopImage})` } : undefined}
+                    role={desktopImage ? 'img' : undefined}
+                    aria-hidden={!desktopImage}
                   />
                   <div className="news-feed-editorial-body">
                     <p className="news-feed-meta news-feed-meta--editorial">
