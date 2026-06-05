@@ -10,6 +10,8 @@ type NewsFeedProps = {
   previewLayout?: 'responsive' | 'desktop' | 'mobile'
   /** Disable card clicks — preview only. */
   readOnly?: boolean
+  /** Home page: one latest story on phones; grid unchanged on desktop. */
+  variant?: 'default' | 'home'
 }
 
 function newsBodyExcerpt(body: string, maxChars = 140): string {
@@ -46,29 +48,35 @@ export function NewsFeed({
   idPrefix = 'news',
   previewLayout = 'responsive',
   readOnly = false,
+  variant = 'default',
 }: NewsFeedProps) {
   const visiblePosts = useMemo(() => (limit != null ? posts.slice(0, limit) : posts), [posts, limit])
+  const mobilePosts = useMemo(
+    () => (variant === 'home' ? visiblePosts.slice(0, 1) : visiblePosts),
+    [visiblePosts, variant],
+  )
   const [activeIndex, setActiveIndex] = useState(0)
   const carouselRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     setActiveIndex(0)
     if (carouselRef.current) carouselRef.current.scrollLeft = 0
-  }, [visiblePosts.length])
+  }, [mobilePosts.length])
 
   useEffect(() => {
     const el = carouselRef.current
-    if (!el) return
+    if (!el || mobilePosts.length <= 1) return
     const onScroll = () => {
       const firstCard = el.querySelector<HTMLElement>('.news-feed-hero-card')
       if (!firstCard) return
-      const step = firstCard.offsetWidth + 10
+      const gap = Number.parseFloat(getComputedStyle(el).columnGap || getComputedStyle(el).gap || '0') || 10
+      const step = firstCard.offsetWidth + gap
       if (step <= 0) return
-      setActiveIndex(Math.min(visiblePosts.length - 1, Math.max(0, Math.round(el.scrollLeft / step))))
+      setActiveIndex(Math.min(mobilePosts.length - 1, Math.max(0, Math.round(el.scrollLeft / step))))
     }
     el.addEventListener('scroll', onScroll, { passive: true })
     return () => el.removeEventListener('scroll', onScroll)
-  }, [visiblePosts.length])
+  }, [mobilePosts.length])
 
   if (visiblePosts.length === 0) return null
 
@@ -79,11 +87,13 @@ export function NewsFeed({
         ? 'news-feed--layout-mobile'
         : ''
 
+  const variantClass = variant === 'home' ? 'news-feed--home' : ''
+
   return (
-    <div className={`news-feed ${layoutClass} ${readOnly ? 'news-feed--readonly' : ''}`.trim()}>
+    <div className={`news-feed ${layoutClass} ${variantClass} ${readOnly ? 'news-feed--readonly' : ''}`.trim()}>
       <div className="news-feed-mobile" aria-label="Latest news">
         <div className="news-feed-carousel" ref={carouselRef}>
-          {visiblePosts.map((post) => {
+          {mobilePosts.map((post) => {
             const titleId = `${idPrefix}-hero-title-${post.id}`
             const mobileImage = newsMobileImage(post)
             return (
@@ -128,21 +138,22 @@ export function NewsFeed({
             )
           })}
         </div>
-        {visiblePosts.length > 1 && (
+        {mobilePosts.length > 1 && (
           <div className="news-feed-dots" role="tablist" aria-label="News slides">
-            {visiblePosts.map((post, index) => (
+            {mobilePosts.map((post, index) => (
               <button
                 key={post.id}
                 type="button"
                 role="tab"
                 aria-selected={index === activeIndex}
-                aria-label={`News item ${index + 1} of ${visiblePosts.length}`}
+                aria-label={`News item ${index + 1} of ${mobilePosts.length}`}
                 className={`news-feed-dot ${index === activeIndex ? 'is-active' : ''}`}
                 onClick={() => {
                   const el = carouselRef.current
                   const firstCard = el?.querySelector<HTMLElement>('.news-feed-hero-card')
                   if (!el || !firstCard) return
-                  const step = firstCard.offsetWidth + 10
+                  const gap = Number.parseFloat(getComputedStyle(el).columnGap || getComputedStyle(el).gap || '0') || 10
+                  const step = firstCard.offsetWidth + gap
                   el.scrollTo({ left: index * step, behavior: 'smooth' })
                   setActiveIndex(index)
                 }}

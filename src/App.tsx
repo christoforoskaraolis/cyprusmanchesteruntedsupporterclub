@@ -6202,6 +6202,7 @@ function App() {
                   posts={newsPosts}
                   onReadPost={setNewsDetailPost}
                   limit={3}
+                  variant="home"
                   idPrefix="home-news"
                 />
                 <p className="home-news-more">
