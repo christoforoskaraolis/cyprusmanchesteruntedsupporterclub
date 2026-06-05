@@ -97,6 +97,7 @@ import {
   OptionalOfficialMembershipPicker,
 } from './components/MembershipRegistrationPayment.tsx'
 import { OfficialMembershipRequestSection } from './components/OfficialMembershipRequestSection.tsx'
+import { NewsFeed } from './components/NewsFeed.tsx'
 
 const MEMBERSHIP_FEE_EUR = 15
 const TICKET_RESERVATION_FEE_EUR = 20
@@ -1221,17 +1222,13 @@ function AdminConsole({
       setNewsError('Please choose an image file.')
       return
     }
-    if (file.size > 2_500_000) {
-      setNewsError('Image is too large. Please use a file up to 2.5MB.')
-      return
-    }
-    const reader = new FileReader()
-    reader.onload = () => {
-      setNewsImageUrl(typeof reader.result === 'string' ? reader.result : '')
+    try {
+      const dataUrl = await resizeImageFileToJpegDataUrl(file, { maxEdge: 1600, quality: 0.88 })
+      setNewsImageUrl(dataUrl)
       setNewsError(null)
+    } catch (e) {
+      setNewsError(e instanceof Error ? e.message : 'Could not process image.')
     }
-    reader.onerror = () => setNewsError('Could not read image file.')
-    reader.readAsDataURL(file)
   }
 
   return (
@@ -2011,6 +2008,10 @@ function AdminConsole({
                 onChange={(e) => void onPickNewsImage(e.target.files?.[0] ?? null)}
               />
             </label>
+            <p className="admin-news-image-hint">
+              Recommended: <strong>1600 × 900 px</strong> (16:9 landscape). On phones the image is shown as a tall
+              card — keep the main subject centred so it crops nicely.
+            </p>
             {newsImageUrl.trim() && (
               <img src={newsImageUrl} alt="News preview" className="admin-news-preview-image" />
             )}
@@ -3026,19 +3027,6 @@ function formatFixtureKickoff(iso: string): string {
     hour: '2-digit',
     minute: '2-digit',
   })
-}
-
-/** Short teaser for news promo cards (first meaningful line, else truncated). */
-function newsBodyExcerpt(body: string, maxChars = 160): string {
-  const lines = body
-    .split(/\n/)
-    .map((l) => l.trim())
-    .filter(Boolean)
-  const first = lines[0] ?? ''
-  if (first.length >= 24 && first.length <= maxChars) return first
-  const flat = body.replace(/\s+/g, ' ').trim()
-  if (flat.length <= maxChars) return flat
-  return `${flat.slice(0, Math.max(24, maxChars - 1)).trim()}…`
 }
 
 function formatDisplayName(raw: string): string {
@@ -5154,7 +5142,7 @@ function App() {
           <div className="section-page news-promo-page">
             <h1 className="section-title">News</h1>
             <p className="section-lead news-promo-page-lead">
-              Tap <strong>More info</strong> on a card to read the full announcement.
+              Swipe on mobile or tap a story to read the full announcement.
             </p>
             {newsLoading ? (
               <p className="section-lead">Loading latest club announcements...</p>
@@ -5163,39 +5151,7 @@ function App() {
                 No posts yet. Club announcements and matchday updates will appear here.
               </p>
             ) : (
-              <ul className="news-promo-grid">
-                {newsPosts.map((post) => (
-                  <li key={post.id}>
-                    <article
-                      className={`news-promo-card ${post.imageUrl ? '' : 'news-promo-card--no-image'}`}
-                      aria-labelledby={`news-promo-title-${post.id}`}
-                    >
-                      {post.imageUrl ? (
-                        <div
-                          className="news-promo-card-bg"
-                          style={{ backgroundImage: `url(${post.imageUrl})` }}
-                          role="img"
-                          aria-hidden
-                        />
-                      ) : null}
-                      <div className="news-promo-card-overlay" aria-hidden />
-                      <div className="news-promo-card-inner">
-                        <h2 id={`news-promo-title-${post.id}`} className="news-promo-card-title">
-                          {post.title}
-                        </h2>
-                        <p className="news-promo-card-excerpt">{newsBodyExcerpt(post.body)}</p>
-                        <button
-                          type="button"
-                          className="news-promo-card-btn"
-                          onClick={() => setNewsDetailPost(post)}
-                        >
-                          More info
-                        </button>
-                      </div>
-                    </article>
-                  </li>
-                ))}
-              </ul>
+              <NewsFeed posts={newsPosts} onReadPost={setNewsDetailPost} idPrefix="news-page" />
             )}
           </div>
         )}
@@ -6178,39 +6134,12 @@ function App() {
               <p className="section-lead">No news posts yet.</p>
             ) : (
               <>
-                <ul className="news-promo-grid news-promo-grid--home">
-                  {newsPosts.slice(0, 2).map((post) => (
-                    <li key={post.id}>
-                      <article
-                        className={`news-promo-card ${post.imageUrl ? '' : 'news-promo-card--no-image'}`}
-                        aria-labelledby={`home-news-promo-${post.id}`}
-                      >
-                        {post.imageUrl ? (
-                          <div
-                            className="news-promo-card-bg"
-                            style={{ backgroundImage: `url(${post.imageUrl})` }}
-                            role="img"
-                            aria-hidden
-                          />
-                        ) : null}
-                        <div className="news-promo-card-overlay" aria-hidden />
-                        <div className="news-promo-card-inner">
-                          <h2 id={`home-news-promo-${post.id}`} className="news-promo-card-title">
-                            {post.title}
-                          </h2>
-                          <p className="news-promo-card-excerpt">{newsBodyExcerpt(post.body)}</p>
-                          <button
-                            type="button"
-                            className="news-promo-card-btn"
-                            onClick={() => setNewsDetailPost(post)}
-                          >
-                            More info
-                          </button>
-                        </div>
-                      </article>
-                    </li>
-                  ))}
-                </ul>
+                <NewsFeed
+                  posts={newsPosts}
+                  onReadPost={setNewsDetailPost}
+                  limit={3}
+                  idPrefix="home-news"
+                />
                 <p className="home-news-more">
                   <button type="button" className="home-news-more-link" onClick={() => openPage('news')}>
                     View all news
