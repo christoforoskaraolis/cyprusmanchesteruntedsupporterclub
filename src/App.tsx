@@ -3361,7 +3361,7 @@ function App() {
   /** Merchandise is available to any signed-in user. */
   const showMerchandise = Boolean(user?.id)
   const mobileMoreActive =
-    activePage === 'social' || activePage === 'board' || activePage === 'merchandise' || activePage === 'contact'
+    activePage === 'social' || activePage === 'merchandise' || activePage === 'contact' || activePage === 'mycmusc'
   const welcomeFirstName =
     myProfile?.fullName?.trim().split(/\s+/)[0] ||
     user?.email?.split('@')[0] ||
@@ -6334,10 +6334,10 @@ function App() {
           </button>
           <button
             type="button"
-            className={`mobile-bottom-nav-btn ${activePage === 'mycmusc' ? 'is-active' : ''}`}
-            onClick={() => openPage('mycmusc')}
+            className={`mobile-bottom-nav-btn ${activePage === 'board' ? 'is-active' : ''}`}
+            onClick={() => openPage('board')}
           >
-            MY MUCY
+            Board
           </button>
           <button
             type="button"
