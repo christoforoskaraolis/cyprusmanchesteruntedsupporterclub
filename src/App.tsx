@@ -5221,6 +5221,7 @@ function App() {
             ) : (
               <NewsFeed posts={newsPosts} onReadPost={setNewsDetailPost} idPrefix="news-page" />
             )}
+            <NewsPushAlerts />
           </div>
         )}
         {activePage === 'social' && (
@@ -5650,8 +5651,6 @@ function App() {
                     </p>
                   )}
                 </div>
-
-                <NewsPushAlerts />
 
                 <div className="mycmusc-profile-card">
                   <h2 className="mycmusc-profile-card-title">Your details</h2>
@@ -6221,6 +6220,37 @@ function App() {
           </div>
         )}
       </main>
+
+      <nav className="mobile-bottom-nav" aria-label="Mobile navigation">
+        <button
+          type="button"
+          className={`mobile-bottom-nav-btn ${activePage === 'home' ? 'is-active' : ''}`}
+          onClick={() => openPage('home')}
+        >
+          Home
+        </button>
+        <button
+          type="button"
+          className={`mobile-bottom-nav-btn ${activePage === 'news' ? 'is-active' : ''}`}
+          onClick={() => openPage('news')}
+        >
+          News
+        </button>
+        <button
+          type="button"
+          className={`mobile-bottom-nav-btn ${activePage === 'mycmusc' ? 'is-active' : ''}`}
+          onClick={() => openPage('mycmusc')}
+        >
+          MY MUCY
+        </button>
+        <button
+          type="button"
+          className={`mobile-bottom-nav-btn ${activePage === 'contact' ? 'is-active' : ''}`}
+          onClick={() => openPage('contact')}
+        >
+          Contact
+        </button>
+      </nav>
 
       <footer className="website-footer">
         <p>Cyprus Manchester United Supporters Club</p>

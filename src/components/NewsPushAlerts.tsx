@@ -72,9 +72,9 @@ export function NewsPushAlerts() {
 
   if (!browserSupported) {
     return (
-      <section className="mycmusc-push-card" aria-label="News alerts">
-        <h2 className="mycmusc-profile-card-title">News alerts</h2>
-        <p className="mycmusc-push-lead">
+      <section className="news-push-card" aria-label="News alerts">
+        <h2 className="news-push-card-title">News alerts</h2>
+        <p className="news-push-lead">
           Push notifications are not available in this browser. Try Chrome on Android, or add the site to your iPhone
           Home Screen and open it from there.
         </p>
@@ -83,26 +83,26 @@ export function NewsPushAlerts() {
   }
 
   return (
-    <section className="mycmusc-push-card" aria-label="News alerts">
-      <h2 className="mycmusc-profile-card-title">News alerts</h2>
-      <p className="mycmusc-push-lead">
+    <section className="news-push-card" aria-label="News alerts">
+      <h2 className="news-push-card-title">News alerts</h2>
+      <p className="news-push-lead">
         Get a phone alert when the club publishes news. You can turn this off anytime.
       </p>
 
       {ios && !standalone && (
-        <p className="mycmusc-push-ios-hint" role="note">
+        <p className="news-push-ios-hint" role="note">
           On iPhone: open this site in <strong>Safari</strong>, tap Share, then <strong>Add to Home Screen</strong>.
           Open the app from your home screen, then enable alerts here.
         </p>
       )}
 
       {loading ? (
-        <p className="mycmusc-push-status">Checking alert settings…</p>
+        <p className="news-push-status">Checking alert settings…</p>
       ) : !serverEnabled ? (
-        <p className="mycmusc-push-status">Push alerts are not configured on the server yet.</p>
+        <p className="news-push-status">Push alerts are not configured on the server yet.</p>
       ) : subscribed ? (
         <>
-          <p className="mycmusc-push-status mycmusc-push-status--on">Alerts enabled on this device</p>
+          <p className="news-push-status news-push-status--on">Alerts enabled on this device</p>
           <button
             type="button"
             className="mycmusc-reg-btn mycmusc-reg-btn--secondary"
