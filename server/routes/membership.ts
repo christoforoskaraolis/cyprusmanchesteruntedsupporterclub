@@ -531,6 +531,27 @@ membershipRouter.put(
 )
 
 membershipRouter.put(
+  '/applications/:applicationId/present-received',
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const applicationId = String(req.params.applicationId ?? '').trim()
+    const presentReceived = (req.body as { presentReceived?: unknown })?.presentReceived === true
+    if (!applicationId) throw badRequest('Application ID is required')
+
+    const { rows } = await query<{ application_id: string }>(
+      `update public.membership_applications
+       set present_received = $1,
+           present_received_at = case when $1 then now() else null end
+       where application_id = $2
+       returning application_id`,
+      [presentReceived, applicationId],
+    )
+    if (rows.length === 0) throw notFound('Membership request not found')
+    res.json({ ok: true, presentReceived })
+  }),
+)
+
+membershipRouter.put(
   '/applications/:applicationId/membership-number',
   requireAdmin,
   asyncHandler(async (req, res) => {

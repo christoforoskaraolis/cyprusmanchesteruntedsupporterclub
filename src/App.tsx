@@ -33,6 +33,7 @@ import {
   setApplicationStatus,
   updateApplicationMemberId,
   updateApplicationMembershipNumber,
+  updateApplicationPresentReceived,
   updateFamilyMemberDetails,
   updateMyProfileDetails,
 } from './lib/membershipApi.ts'
@@ -907,6 +908,7 @@ type AdminConsoleProps = {
     officialMuMembershipStatus: OfficialMuMembershipStatus | null,
   ) => Promise<void>
   onUpdateMembershipNumber: (applicationId: string, membershipNumber: number | null) => Promise<void>
+  onUpdatePresentReceived: (applicationId: string, presentReceived: boolean) => Promise<void>
   onCompleteRenewal: (row: PendingRenewalListRow) => Promise<void>
   onApproveTicketRequest: (row: AdminFixtureTicketRequest) => Promise<void>
   onCompleteTicketRequest: (row: AdminFixtureTicketRequest) => Promise<void>
@@ -961,6 +963,7 @@ function AdminConsole({
   onDeleteMemberRequest,
   onUpdateMemberId,
   onUpdateMembershipNumber,
+  onUpdatePresentReceived,
   onCompleteRenewal,
   onApproveTicketRequest,
   onCompleteTicketRequest,
@@ -1126,6 +1129,8 @@ function AdminConsole({
       'Submitted At',
       'Activated At',
       'Valid Until',
+      'Present Received',
+      'Present Received At',
     ]
     const rows = memberRegistry.map((m) => [
       m.applicationId,
@@ -1147,6 +1152,8 @@ function AdminConsole({
       m.submittedAt,
       m.activatedAt ?? '',
       m.validUntil ?? '',
+      m.presentReceived ? 'yes' : 'no',
+      m.presentReceivedAt ?? '',
     ])
     downloadCsv(`members-report-${reportStamp()}.csv`, headers, rows)
   }
@@ -1534,6 +1541,34 @@ function AdminConsole({
                   <> · Activated: {new Date(m.activatedAt).toLocaleString('en-GB')}</>
                 )}
               </p>
+              {m.status === 'active' && (
+                <label className="admin-present-received">
+                  <input
+                    type="checkbox"
+                    checked={m.presentReceived}
+                    disabled={busyId !== null}
+                    onChange={async (e) => {
+                      setMemberActionError(null)
+                      setBusyId(m.applicationId)
+                      try {
+                        await onUpdatePresentReceived(m.applicationId, e.target.checked)
+                      } catch (error) {
+                        setMemberActionError(
+                          error instanceof Error ? error.message : 'Could not update present status.',
+                        )
+                      } finally {
+                        setBusyId(null)
+                      }
+                    }}
+                  />
+                  Present received
+                  {m.presentReceivedAt && (
+                    <span className="admin-present-received-at">
+                      · {new Date(m.presentReceivedAt).toLocaleString('en-GB')}
+                    </span>
+                  )}
+                </label>
+              )}
               <div className="admin-member-actions">
                 {m.status === 'pending' ? (
                   <button
@@ -4137,6 +4172,8 @@ function App() {
       activationEmailSentAt: null,
       activationEmailRecipient: null,
       activationEmailError: null,
+      presentReceived: false,
+      presentReceivedAt: null,
     })
     await refreshMyMembership()
     await loadMyOfficialRequests()
@@ -4207,6 +4244,23 @@ function App() {
     if (error) throw new Error(error.message)
     await loadAdminRegistry()
     await refreshMyMembership()
+  }
+
+  async function applyUpdatePresentReceived(applicationId: string, presentReceived: boolean) {
+    const { error } = await updateApplicationPresentReceived(applicationId, presentReceived)
+    if (error) throw new Error(error.message)
+    setMemberRegistry((prev) =>
+      prev.map((m) =>
+        m.applicationId === applicationId
+          ? {
+              ...m,
+              presentReceived,
+              presentReceivedAt: presentReceived ? new Date().toISOString() : null,
+            }
+          : m,
+      ),
+    )
+    void reloadMemberRegistryOnly()
   }
 
   async function applyCompleteRenewal(row: PendingRenewalListRow) {
@@ -4831,6 +4885,7 @@ function App() {
               onDeleteMemberRequest={applyDeleteMemberRequest}
               onUpdateMemberId={applyUpdateMemberId}
               onUpdateMembershipNumber={applyUpdateMembershipNumber}
+              onUpdatePresentReceived={applyUpdatePresentReceived}
               onCompleteRenewal={applyCompleteRenewal}
               onApproveTicketRequest={applyApproveTicketRequest}
               onCompleteTicketRequest={applyCompleteTicketRequest}

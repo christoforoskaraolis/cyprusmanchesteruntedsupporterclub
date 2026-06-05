@@ -107,6 +107,9 @@ export type MemberRegistryEntry = {
   activationEmailSentAt: string | null
   activationEmailRecipient: string | null
   activationEmailError: string | null
+  /** Admin: welcome/membership present handed to member. */
+  presentReceived: boolean
+  presentReceivedAt: string | null
 }
 
 export function formatActivationEmailStatus(entry: {
@@ -148,6 +151,8 @@ export type MemberApplicationPayload = Omit<
   | 'activationEmailSentAt'
   | 'activationEmailRecipient'
   | 'activationEmailError'
+  | 'presentReceived'
+  | 'presentReceivedAt'
 >
 
 export type DbMembershipApplication = {
@@ -179,6 +184,8 @@ export type DbMembershipApplication = {
   activation_email_sent_at?: string | null
   activation_email_recipient?: string | null
   activation_email_error?: string | null
+  present_received?: boolean | null
+  present_received_at?: string | null
 }
 
 export type DbRenewalRequest = {
@@ -246,6 +253,8 @@ export function dbRowToMemberEntry(row: DbMembershipApplication): MemberRegistry
     activationEmailSentAt: row.activation_email_sent_at ?? null,
     activationEmailRecipient: row.activation_email_recipient ?? null,
     activationEmailError: row.activation_email_error ?? null,
+    presentReceived: row.present_received === true,
+    presentReceivedAt: row.present_received_at ?? null,
   }
 }
 
@@ -396,6 +405,15 @@ export async function deleteMembershipApplication(applicationId: string) {
 export async function updateApplicationMembershipNumber(applicationId: string, membershipNumber: number | null) {
   try {
     await apiSend(`/api/membership/applications/${applicationId}/membership-number`, 'PUT', { membershipNumber })
+    return { error: undefined }
+  } catch (error) {
+    return { error: asError(error) }
+  }
+}
+
+export async function updateApplicationPresentReceived(applicationId: string, presentReceived: boolean) {
+  try {
+    await apiSend(`/api/membership/applications/${applicationId}/present-received`, 'PUT', { presentReceived })
     return { error: undefined }
   } catch (error) {
     return { error: asError(error) }
