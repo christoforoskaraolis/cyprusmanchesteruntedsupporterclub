@@ -78,7 +78,7 @@ newsRouter.post(
       title: 'New club news',
       body: newsTitle,
       url: baseUrl ? `${baseUrl}/news` : '/news',
-      icon: baseUrl ? `${baseUrl}/logo.jpg` : '/logo.jpg',
+      icon: baseUrl ? `${baseUrl}/icons/icon-192.png` : '/icons/icon-192.png',
     })
       .then((result) => {
         if (result.attempted > 0) {

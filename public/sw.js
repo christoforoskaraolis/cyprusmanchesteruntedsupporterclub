@@ -1,7 +1,7 @@
 /* Cyprus MU Supporters Club — web push service worker */
 
 self.addEventListener('push', (event) => {
-  let data = { title: 'Club news', body: 'New update from Cyprus Manchester United Supporters Club', url: '/news', icon: '/logo.jpg' }
+  let data = { title: 'Club news', body: 'New update from Cyprus Manchester United Supporters Club', url: '/news', icon: '/icons/icon-192.png' }
   try {
     if (event.data) data = { ...data, ...event.data.json() }
   } catch {
@@ -11,8 +11,8 @@ self.addEventListener('push', (event) => {
   event.waitUntil(
     self.registration.showNotification(data.title, {
       body: data.body,
-      icon: data.icon || '/logo.jpg',
-      badge: '/logo.jpg',
+      icon: data.icon || '/icons/icon-192.png',
+      badge: '/icons/icon-192.png',
       data: { url: data.url || '/news' },
     }),
   )

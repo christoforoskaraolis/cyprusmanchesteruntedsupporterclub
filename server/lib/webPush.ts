@@ -64,7 +64,7 @@ export async function sendNewsPushToAllSubscribers(payload: NewsPushPayload): Pr
     title: payload.title,
     body: payload.body,
     url: payload.url,
-    icon: payload.icon ?? '/logo.jpg',
+    icon: payload.icon ?? '/icons/icon-192.png',
   })
 
   await Promise.all(
