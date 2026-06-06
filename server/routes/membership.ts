@@ -380,8 +380,9 @@ membershipRouter.put(
            country = $7,
            official_mu_membership_id = $8,
            official_mu_membership_status = $9
-       where id = $10`,
+       where id = $1`,
       [
+        app.id,
         (payload.mobilePhone ?? '').trim(),
         (payload.address ?? '').trim(),
         (payload.area ?? '').trim(),
@@ -390,7 +391,6 @@ membershipRouter.put(
         (payload.country ?? '').trim(),
         officialMuId || null,
         officialMuStatus,
-        app.id,
       ],
     )
     res.json({ ok: true })
