@@ -39,6 +39,14 @@ body {
   min-height: 100svh;
 }
 
+button,
+input[type='button'],
+input[type='submit'],
+input[type='reset'] {
+  -webkit-appearance: none;
+  appearance: none;
+}
+
 #root {
   min-height: 100svh;
   display: flex;

@@ -6298,7 +6298,7 @@ function App() {
                 <p className="section-lead" style={{ marginBottom: '0.75rem' }}>
                   Register for Cyprus Club Membership to unlock match ticket requests.
                 </p>
-                <button type="button" className="top-bar-pill-btn" onClick={() => openPage('mycmusc')}>
+                <button type="button" className="mycmusc-reg-btn mycmusc-reg-btn--primary" onClick={() => openPage('mycmusc')}>
                   Register for Cyprus Club Membership
                 </button>
               </div>

@@ -113,14 +113,17 @@ export function ClubPaymentMethodFields({ stripe }: { stripe?: StripePaymentOpti
       <div className="membership-payment-method">
         <span className="membership-payment-method-label">Revolut</span>
         {CMUSC_PAYMENT_REVOLUT.startsWith('http://') || CMUSC_PAYMENT_REVOLUT.startsWith('https://') ? (
-          <a
-            className="membership-payment-revolut-link"
-            href={CMUSC_PAYMENT_REVOLUT}
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            {CMUSC_PAYMENT_REVOLUT}
-          </a>
+          <>
+            <a
+              className="membership-payment-revolut-link"
+              href={CMUSC_PAYMENT_REVOLUT}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              Pay with Revolut
+            </a>
+            <p className="membership-payment-revolut-url">{CMUSC_PAYMENT_REVOLUT}</p>
+          </>
         ) : (
           <p className="membership-payment-revolut-text">{CMUSC_PAYMENT_REVOLUT}</p>
         )}

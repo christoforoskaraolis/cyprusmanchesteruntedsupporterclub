@@ -298,10 +298,13 @@
   font-weight: 600;
   padding: 0.35rem 0.55rem;
   border-radius: 8px;
-  border: 1px solid var(--border);
-  background: var(--surface-2);
-  color: var(--text-h);
+  border: none;
+  background: var(--mu-red);
+  background-color: var(--mu-red);
+  color: #fff;
   cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
 }
 
 .fixtures-refresh-btn:disabled {
@@ -391,11 +394,14 @@
   font-weight: 700;
   padding: 0.4rem 0.6rem;
   border-radius: 8px;
-  border: 1px solid var(--mu-red);
+  border: none;
   background: var(--mu-red);
+  background-color: var(--mu-red);
   color: #fff;
   cursor: pointer;
   white-space: nowrap;
+  -webkit-appearance: none;
+  appearance: none;
 }
 
 .fixtures-ticket-request-btn:disabled {
@@ -463,15 +469,18 @@
   font-weight: 700;
   padding: 0.3rem 0.45rem;
   border-radius: 7px;
-  border: 1px solid var(--border);
-  background: var(--surface);
-  color: var(--text-h);
+  border: none;
+  background: var(--mu-red);
+  background-color: var(--mu-red);
+  color: #fff;
   cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
 }
 
 .fixtures-admin-btn.is-active {
-  border-color: var(--mu-red);
-  color: var(--mu-red);
+  background: var(--mu-red-hover);
+  background-color: var(--mu-red-hover);
 }
 
 .fixtures-admin-btn:disabled {
@@ -1514,6 +1523,9 @@
   cursor: pointer;
   color: #fff;
   background: var(--mu-red);
+  background-color: var(--mu-red);
+  -webkit-appearance: none;
+  appearance: none;
   transition: background 0.15s ease;
 }
 
@@ -1634,17 +1646,22 @@
 .home-news-more-link {
   font: inherit;
   font-size: 0.9rem;
-  font-weight: 600;
-  color: var(--mu-red);
-  background: none;
+  font-weight: 700;
+  color: #fff;
+  background: var(--mu-red);
+  background-color: var(--mu-red);
   border: none;
+  border-radius: 999px;
   cursor: pointer;
-  text-decoration: underline;
-  text-underline-offset: 3px;
+  text-decoration: none;
+  -webkit-appearance: none;
+  appearance: none;
 }
 
 .home-news-more-link:hover {
-  color: var(--mu-red-hover);
+  background: var(--mu-red-hover);
+  background-color: var(--mu-red-hover);
+  color: #fff;
 }
 
 /* Phones / small screens: bottom tab bar + fluid news */
@@ -1911,8 +1928,10 @@
     max-width: 100%;
     padding: 0.72rem 1rem;
     border-radius: 999px;
-    border: 1px solid var(--border-strong);
-    background: var(--surface-2);
+    border: none;
+    background: var(--mu-red);
+    background-color: var(--mu-red);
+    color: #fff;
     text-align: center;
     text-decoration: none;
     font-weight: 700;
@@ -2162,6 +2181,38 @@
   cursor: pointer;
   color: #fff;
   background: var(--mu-red);
+  background-color: var(--mu-red);
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.admin-merch-create-btn,
+.admin-news-delete-btn {
+  font: inherit;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  padding: 0.5rem 0.85rem;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  color: #fff;
+  background: var(--mu-red);
+  background-color: var(--mu-red);
+  -webkit-appearance: none;
+  appearance: none;
+  transition: background 0.2s ease;
+}
+
+.admin-merch-create-btn:hover,
+.admin-news-delete-btn:hover {
+  background: var(--mu-red-hover);
+  background-color: var(--mu-red-hover);
+}
+
+.admin-merch-create-btn:disabled,
+.admin-news-delete-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
 }
 
 .board-admin-activate:hover {
@@ -2183,15 +2234,20 @@
   font-size: 0.9rem;
   font-weight: 600;
   padding: 0.65rem 1rem;
-  border: 2px solid var(--mu-red);
+  border: none;
   border-radius: 10px;
-  background: transparent;
-  color: var(--mu-red);
+  background: var(--mu-red);
+  background-color: var(--mu-red);
+  color: #fff;
   cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
 }
 
 .board-open-admin-btn:hover {
-  background: rgba(200, 16, 46, 0.08);
+  background: var(--mu-red-hover);
+  background-color: var(--mu-red-hover);
+  color: #fff;
 }
 
 .admin-page {
@@ -2341,19 +2397,22 @@
 .admin-filter-btn {
   font: inherit;
   font-size: 0.8125rem;
-  font-weight: 500;
+  font-weight: 600;
   padding: 0.45rem 0.85rem;
-  border: 1px solid var(--border);
+  border: none;
   border-radius: 999px;
-  background: var(--surface);
-  color: var(--text-muted);
+  background: var(--mu-red);
+  background-color: var(--mu-red);
+  color: #fff;
   cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
 }
 
 .admin-filter-btn.is-active {
-  border-color: var(--mu-red);
-  color: var(--mu-red);
-  background: rgba(200, 16, 46, 0.06);
+  background: var(--mu-red-hover);
+  background-color: var(--mu-red-hover);
+  color: #fff;
 }
 
 .admin-empty {
@@ -2487,16 +2546,20 @@
   font-size: 0.8125rem;
   font-weight: 600;
   padding: 0.5rem 0.85rem;
-  border: 1px solid var(--border-strong);
+  border: none;
   border-radius: 8px;
-  background: var(--surface-2);
-  color: var(--text-h);
+  background: var(--mu-red);
+  background-color: var(--mu-red);
+  color: #fff;
   cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
 }
 
 .admin-revoke-btn:hover {
-  border-color: var(--mu-red);
-  color: var(--mu-red);
+  background: var(--mu-red-hover);
+  background-color: var(--mu-red-hover);
+  color: #fff;
 }
 
 .admin-details-btn {
@@ -2997,6 +3060,12 @@
   text-decoration: none;
   border-radius: 12px;
   cursor: pointer;
+  border: none;
+  color: #fff;
+  background: var(--mu-red);
+  background-color: var(--mu-red);
+  -webkit-appearance: none;
+  appearance: none;
   transition: background 0.2s, color 0.2s, border-color 0.2s, transform 0.15s;
   box-sizing: border-box;
 }
@@ -3014,20 +3083,24 @@
   border: none;
   color: #fff;
   background: var(--mu-red);
+  background-color: var(--mu-red);
 }
 
 .mycmusc-reg-btn--primary:hover {
   background: var(--mu-red-hover);
+  background-color: var(--mu-red-hover);
 }
 
 .mycmusc-reg-btn--secondary {
-  border: 2px solid var(--mu-red);
-  color: var(--mu-red);
-  background: transparent;
+  border: none;
+  color: #fff;
+  background: var(--mu-red);
+  background-color: var(--mu-red);
 }
 
 .mycmusc-reg-btn--secondary:hover {
-  background: rgba(200, 16, 46, 0.08);
+  background: var(--mu-red-hover);
+  background-color: var(--mu-red-hover);
 }
 
 .mycmusc-reg-btn:disabled {
@@ -3037,11 +3110,13 @@
 }
 
 .mycmusc-reg-btn:disabled:hover {
-  background: transparent;
+  background: var(--mu-red);
+  background-color: var(--mu-red);
 }
 
 .mycmusc-reg-btn--primary:disabled:hover {
   background: var(--mu-red);
+  background-color: var(--mu-red);
 }
 
 .mycmusc-reg-hint {
@@ -3233,16 +3308,43 @@
 }
 
 .membership-payment-revolut-link {
-  display: inline-block;
-  margin: 0;
-  font-size: 0.875rem;
-  font-weight: 500;
-  word-break: break-all;
-  color: var(--mu-red);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  margin: 0.35rem 0 0;
+  padding: 0.7rem 1rem;
+  border: none;
+  border-radius: 10px;
+  font: inherit;
+  font-size: 0.95rem;
+  font-weight: 600;
+  line-height: 1.35;
+  text-align: center;
+  text-decoration: none;
+  word-break: break-word;
+  color: #fff;
+  background: var(--mu-red);
+  background-color: var(--mu-red);
+  cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
+  transition: background 0.2s ease;
 }
 
 .membership-payment-revolut-link:hover {
-  color: var(--mu-red-hover);
+  background: var(--mu-red-hover);
+  background-color: var(--mu-red-hover);
+  color: #fff;
+}
+
+.membership-payment-revolut-url {
+  margin: 0.4rem 0 0;
+  font-size: 0.75rem;
+  line-height: 1.4;
+  color: var(--text-muted);
+  word-break: break-all;
+  text-align: center;
 }
 
 .membership-payment-method--stripe {
@@ -3264,13 +3366,17 @@
   font-size: 0.95rem;
   font-weight: 600;
   color: #fff;
-  background: #635bff;
+  background: var(--mu-red);
+  background-color: var(--mu-red);
   cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
   transition: background 0.2s ease, opacity 0.2s ease;
 }
 
 .membership-payment-stripe-btn:hover:not(:disabled) {
-  background: #4f46e5;
+  background: var(--mu-red-hover);
+  background-color: var(--mu-red-hover);
 }
 
 .membership-payment-stripe-btn:disabled {
@@ -3430,18 +3536,22 @@
   align-items: center;
   gap: 0.45rem;
   padding: 0.45rem 0.85rem;
-  border: 2px solid var(--mu-red);
+  border: none;
   border-radius: 999px;
-  background: var(--surface);
-  color: var(--mu-red);
+  background: var(--mu-red);
+  background-color: var(--mu-red);
+  color: #fff;
   font-size: 0.875rem;
   font-weight: 600;
   cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
   transition: background 0.15s ease, color 0.15s ease;
 }
 
 .mycmusc-family-add-btn:hover {
-  background: var(--mu-red);
+  background: var(--mu-red-hover);
+  background-color: var(--mu-red-hover);
   color: #fff;
 }
 
@@ -3514,26 +3624,32 @@
   font-weight: 600;
   line-height: 1.3;
   border-radius: 8px;
-  border: 1px solid var(--border);
-  background: var(--surface-2);
-  color: var(--text-h);
+  border: none;
+  background: var(--mu-red);
+  background-color: var(--mu-red);
+  color: #fff;
   cursor: pointer;
-  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+  -webkit-appearance: none;
+  appearance: none;
+  transition: background 0.15s ease;
 }
 
 .mycmusc-family-action-btn:hover {
-  border-color: var(--mu-red);
-  color: var(--mu-red);
+  background: var(--mu-red-hover);
+  background-color: var(--mu-red-hover);
+  color: #fff;
 }
 
 .mycmusc-family-action-btn--primary {
-  border-color: var(--mu-red);
-  color: var(--mu-red);
-  background: transparent;
+  border: none;
+  color: #fff;
+  background: var(--mu-red);
+  background-color: var(--mu-red);
 }
 
 .mycmusc-family-action-btn--primary:hover {
-  background: var(--mu-red);
+  background: var(--mu-red-hover);
+  background-color: var(--mu-red-hover);
   color: #fff;
 }
 
@@ -3818,6 +3934,9 @@
   cursor: pointer;
   color: #fff;
   background: var(--mu-red);
+  background-color: var(--mu-red);
+  -webkit-appearance: none;
+  appearance: none;
   transition: background 0.2s, transform 0.15s;
 }
 
@@ -4522,17 +4641,21 @@
   justify-content: center;
   padding: 0;
   border: none;
-  background: transparent;
-  color: var(--text-h);
+  background: var(--mu-red);
+  background-color: var(--mu-red);
+  color: #fff;
   font-size: 1.15rem;
   font-weight: 600;
   line-height: 1;
   cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
   transition: background 0.15s;
 }
 
 .merch-qty-btn:hover:not(:disabled) {
-  background: rgba(200, 16, 46, 0.1);
+  background: var(--mu-red-hover);
+  background-color: var(--mu-red-hover);
 }
 
 .merch-qty-btn:disabled {
@@ -4688,6 +4811,9 @@
   font-weight: 800;
   letter-spacing: 0.02em;
   background: linear-gradient(135deg, var(--mu-red) 0%, #8f0b1f 100%);
+  background-color: var(--mu-red);
+  -webkit-appearance: none;
+  appearance: none;
   box-shadow:
     0 4px 0 rgba(0, 0, 0, 0.12),
     0 12px 32px rgba(200, 16, 46, 0.42);
