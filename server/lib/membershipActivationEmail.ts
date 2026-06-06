@@ -1,7 +1,7 @@
 import { sendEmail } from './email.ts'
 
 const SUBJECT =
-  '✅ Η Συνδρομή σας Έχει Ενεργοποιηθεί – Καλωσορίσατε στο Manchester United Cyprus Supporters Club/✅ Your Membership Has Been Activated – Welcome to Manchester United Cyprus Supporters Club'
+  '✅ Η Συνδρομή σας έχει ενεργοποιηθεί – Καλώς ήρθατε στο Manchester United Cyprus Supporters Club! ✅ Your Membership Has Been Activated – Welcome to the Manchester United Cyprus Supporters Club!'
 
 function escapeHtml(value: string): string {
   return value
@@ -13,58 +13,62 @@ function escapeHtml(value: string): string {
 
 function buildText(firstName: string, mycmuscUrl: string): string {
   return `Αγαπητέ/ή ${firstName},
-Με ιδιαίτερη χαρά σας ενημερώνουμε ότι η συνδρομή σας έχει ενεργοποιηθεί επιτυχώς! 🔴⚫
-Σας καλωσορίζουμε στην οικογένεια του Manchester United Cyprus Supporters Club.
-Ως ενεργό μέλος, έχετε πλέον τη δυνατότητα να:
+Με χαρά σας ενημερώνουμε ότι η συνδρομή σας έχει ενεργοποιηθεί με επιτυχία! 🔴⚫
+Καλωσορίσατε στην οικογένεια. Ως ενεργό μέλος, μπορείτε πλέον να:
 
-Συμμετέχετε στις δραστηριότητες και εκδηλώσεις του συνδέσμου
+Συμμετέχετε σε δραστηριότητες και εκδηλώσεις του συλλόγου
 Λαμβάνετε ενημερώσεις για αγώνες και συγκεντρώσεις
-Επικοινωνείτε και να συνδέεστε με άλλους φιλάθλους της Manchester United
-Απολαμβάνετε αποκλειστικά προνόμια μελών (όπου εφαρμόζεται)
+Συνδέεστε με άλλους φίλους της Manchester United
+Απολαμβάνετε αποκλειστικά προνόμια μελών (όπου ισχύει)
+
+ΕΠΟΜΕΝΑ ΒΗΜΑΤΑ:
+Για να είστε επιλέξιμοι για εισιτήρια αγώνων, θα πρέπει επίσης να διαθέτετε έγκυρη επίσημη συνδρομή One United της Manchester United.
+Εάν έχετε ήδη ανανεώσει τη συνδρομή σας One United, παρακαλούμε αγνοήστε τα παρακάτω και δεν απαιτείται καμία περαιτέρω ενέργεια.
+Σε αντίθετη περίπτωση, παρακαλούμε δημιουργήστε ή ανανεώστε τη συνδρομή σας άμεσα, επισκεπτόμενοι τον πιο κάτω σύνδεσμο:
+${mycmuscUrl}
 
 Παραλαβή Δώρου Μέλους:
-Για την παραλαβή του δώρου σας, παρακαλούμε επικοινωνήστε με έναν από τους πιο κάτω εκπροσώπους, ανάλογα με την επαρχία διαμονής σας:
+Σας προσκαλούμε να παρευρεθείτε στην Ετήσια Γενική Συνέλευση που διοργανώνουμε τον Ιούλιο για την έναρξη της νέας σεζόν! Εκεί θα μπορείτε να παραλάβετε και το δώρο μέλους σας.
+Εναλλακτικά, μετά τη Γενική Συνέλευση, μπορείτε να επικοινωνήσετε με έναν από τους πιο κάτω εκπροσώπους ανάλογα με την επαρχία διαμονής σας:
 
-Επαρχία Λευκωσίας – Άκης Νικολάου (κιν. 99908117)
-Επαρχία Λεμεσού – Θαλής Αλεξάνδρου (κιν. 99531691)
-Επαρχία Λάρνακας & Αμμοχώστου – Γρηγόρης Γρηγορίου (κιν. 99293992)
-Επαρχία Πάφου – Γιάννης Νικολαΐδης (κιν. 99552069)
+Επαρχία Λευκωσίας – Άκης Νικολάου (τηλ.: 99908117)
+Επαρχία Λεμεσού – Θαλής Αλεξάνδρου (τηλ.: 99531691)
+Επαρχίες Λάρνακας & Αμμοχώστου – Γρηγόρης Γρηγορίου (τηλ.: 99293992)
+Επαρχία Πάφου – Μιχάλης & Γιώργος Χαραλάμπους (τηλ.: 99427778)
 
-Σημαντική Ενημέρωση:
-Για να έχετε δικαίωμα υποβολής αίτησης και ανανέωσης εισιτηρίων αγώνων, είναι απαραίτητο να διαθέτετε επίσης ισχύουσα επίσημη συνδρομή της Manchester United.
-Εάν έχετε ήδη ανανεώσει την επίσημη συνδρομή σας, συμπεριλαμβανομένου του πακέτου Αγγλίας One United, παρακαλούμε αγνοήστε το πιο κάτω και δεν χρειάζεται να προχωρήσετε μέσω του συνδέσμου.
-Σε αντίθετη περίπτωση, παρακαλούμε επισκεφθείτε τον παρακάτω σύνδεσμο για να δημιουργήσετε ή να ανανεώσετε την επίσημη συνδρομή σας:
-${mycmuscUrl}
-Ανυπομονούμε να σας δούμε στις επερχόμενες εκδηλώσεις μας!
-Με εκτίμηση, MUCS CLUB
+Ανυπομονούμε να σας δούμε στις επόμενες εκδηλώσεις μας!
+Με εκτίμηση, MUSC Cyprus
 
 ---
 
 Dear ${firstName},
 We are pleased to inform you that your membership has been successfully activated! 🔴⚫
-Welcome to the Manchester United Cyprus Supporters Club family.
-As an active member, you can now:
+Welcome to the family. As an active member, you can now:
 
 Participate in club activities and events
 Receive updates about matches and gatherings
 Connect with fellow Manchester United supporters
 Enjoy exclusive member benefits (where applicable)
 
+NEXT STEPS:
+To be eligible for match tickets, you must also hold a valid official One United Manchester United membership.
+
+If you have already renewed your One United Manchester United membership, please disregard the below and no further action is required.
+Otherwise, please create or renew your membership immediately by visiting the link below:
+${mycmuscUrl}
+
 Membership Gift Collection:
-To collect your membership gift, please contact one of the representatives below based on your district of residence:
+Please join us at the Annual General Meeting we are hosting in July to kick-start the new season! At the meeting, you can also collect your membership gift!
+
+Alternatively, after the Annual General Meeting, please contact one of the representatives below based on the District in which you reside:
 
 Nicosia District – Akis Nikolaou (mobile: 99908117)
 Limassol District – Thalis Alexandrou (mobile: 99531691)
 Larnaca & Famagusta Districts – Grigoris Gregoriou (mobile: 99293992)
-Paphos District – Giannis Nikolaides (mobile: 99552069)
+Paphos District – Michalis & Giorgos Charalambous (mobile: 99427778)
 
-Important Notice:
-To be eligible for match ticket applications and renewals, you must also hold a valid official Manchester United membership.
-If you have already renewed your official membership, including the UK One United package, please disregard the below and no further action is required.
-Otherwise, please visit the link below to create or renew your official membership:
-${mycmuscUrl}
 We look forward to seeing you at our upcoming events!
-Best regards, MUCS CLUB`
+Best regards, MUSC Cyprus`
 }
 
 function buildHtml(firstName: string, mycmuscUrl: string): string {
@@ -72,56 +76,56 @@ function buildHtml(firstName: string, mycmuscUrl: string): string {
   const safeUrl = escapeHtml(mycmuscUrl)
   return `<div style="font-family:Arial,Helvetica,sans-serif;line-height:1.6;color:#111;">
   <p>Αγαπητέ/ή <strong>${safeName}</strong>,</p>
-  <p>Με ιδιαίτερη χαρά σας ενημερώνουμε ότι η συνδρομή σας έχει ενεργοποιηθεί επιτυχώς! 🔴⚫</p>
-  <p>Σας καλωσορίζουμε στην οικογένεια του <strong>Manchester United Cyprus Supporters Club</strong>.</p>
-  <p>Ως ενεργό μέλος, έχετε πλέον τη δυνατότητα να:</p>
+  <p>Με χαρά σας ενημερώνουμε ότι η συνδρομή σας έχει ενεργοποιηθεί με επιτυχία! 🔴⚫</p>
+  <p>Καλωσορίσατε στην οικογένεια. Ως ενεργό μέλος, μπορείτε πλέον να:</p>
   <ul>
-    <li>Συμμετέχετε στις δραστηριότητες και εκδηλώσεις του συνδέσμου</li>
+    <li>Συμμετέχετε σε δραστηριότητες και εκδηλώσεις του συλλόγου</li>
     <li>Λαμβάνετε ενημερώσεις για αγώνες και συγκεντρώσεις</li>
-    <li>Επικοινωνείτε και να συνδέεστε με άλλους φιλάθλους της Manchester United</li>
-    <li>Απολαμβάνετε αποκλειστικά προνόμια μελών (όπου εφαρμόζεται)</li>
+    <li>Συνδέεστε με άλλους φίλους της Manchester United</li>
+    <li>Απολαμβάνετε αποκλειστικά προνόμια μελών (όπου ισχύει)</li>
   </ul>
-  <p><strong>Παραλαβή Δώρου Μέλους:</strong><br>
-  Για την παραλαβή του δώρου σας, παρακαλούμε επικοινωνήστε με έναν από τους πιο κάτω εκπροσώπους, ανάλογα με την επαρχία διαμονής σας:</p>
-  <ul>
-    <li>Επαρχία Λευκωσίας – Άκης Νικολάου (κιν. 99908117)</li>
-    <li>Επαρχία Λεμεσού – Θαλής Αλεξάνδρου (κιν. 99531691)</li>
-    <li>Επαρχία Λάρνακας &amp; Αμμοχώστου – Γρηγόρης Γρηγορίου (κιν. 99293992)</li>
-    <li>Επαρχία Πάφου – Γιάννης Νικολαΐδης (κιν. 99552069)</li>
-  </ul>
-  <p><strong>Σημαντική Ενημέρωση:</strong><br>
-  Για να έχετε δικαίωμα υποβολής αίτησης και ανανέωσης εισιτηρίων αγώνων, είναι απαραίτητο να διαθέτετε επίσης ισχύουσα επίσημη συνδρομή της Manchester United.<br>
-  Εάν έχετε ήδη ανανεώσει την επίσημη συνδρομή σας, συμπεριλαμβανομένου του πακέτου Αγγλίας One United, παρακαλούμε αγνοήστε το πιο κάτω και δεν χρειάζεται να προχωρήσετε μέσω του συνδέσμου.<br>
-  Σε αντίθετη περίπτωση, παρακαλούμε επισκεφθείτε τον παρακάτω σύνδεσμο για να δημιουργήσετε ή να ανανεώσετε την επίσημη συνδρομή σας:<br>
+  <p><strong>ΕΠΟΜΕΝΑ ΒΗΜΑΤΑ:</strong><br>
+  Για να είστε επιλέξιμοι για εισιτήρια αγώνων, θα πρέπει επίσης να διαθέτετε έγκυρη επίσημη συνδρομή One United της Manchester United.<br>
+  Εάν έχετε ήδη ανανεώσει τη συνδρομή σας One United, παρακαλούμε αγνοήστε τα παρακάτω και δεν απαιτείται καμία περαιτέρω ενέργεια.<br>
+  Σε αντίθετη περίπτωση, παρακαλούμε δημιουργήστε ή ανανεώστε τη συνδρομή σας άμεσα, επισκεπτόμενοι τον πιο κάτω σύνδεσμο:<br>
   <a href="${safeUrl}">${safeUrl}</a></p>
-  <p>Ανυπομονούμε να σας δούμε στις επερχόμενες εκδηλώσεις μας!<br>
-  Με εκτίμηση,<br><strong>MUCS CLUB</strong></p>
+  <p><strong>Παραλαβή Δώρου Μέλους:</strong><br>
+  Σας προσκαλούμε να παρευρεθείτε στην Ετήσια Γενική Συνέλευση που διοργανώνουμε τον Ιούλιο για την έναρξη της νέας σεζόν! Εκεί θα μπορείτε να παραλάβετε και το δώρο μέλους σας.<br>
+  Εναλλακτικά, μετά τη Γενική Συνέλευση, μπορείτε να επικοινωνήσετε με έναν από τους πιο κάτω εκπροσώπους ανάλογα με την επαρχία διαμονής σας:</p>
+  <ul>
+    <li>Επαρχία Λευκωσίας – Άκης Νικολάου (τηλ.: 99908117)</li>
+    <li>Επαρχία Λεμεσού – Θαλής Αλεξάνδρου (τηλ.: 99531691)</li>
+    <li>Επαρχίες Λάρνακας &amp; Αμμοχώστου – Γρηγόρης Γρηγορίου (τηλ.: 99293992)</li>
+    <li>Επαρχία Πάφου – Μιχάλης &amp; Γιώργος Χαραλάμπους (τηλ.: 99427778)</li>
+  </ul>
+  <p>Ανυπομονούμε να σας δούμε στις επόμενες εκδηλώσεις μας!<br>
+  Με εκτίμηση, <strong>MUSC Cyprus</strong></p>
   <hr style="border:none;border-top:1px solid #ddd;margin:24px 0;">
   <p>Dear <strong>${safeName}</strong>,</p>
   <p>We are pleased to inform you that your membership has been successfully activated! 🔴⚫</p>
-  <p>Welcome to the <strong>Manchester United Cyprus Supporters Club</strong> family.</p>
-  <p>As an active member, you can now:</p>
+  <p>Welcome to the family. As an active member, you can now:</p>
   <ul>
     <li>Participate in club activities and events</li>
     <li>Receive updates about matches and gatherings</li>
     <li>Connect with fellow Manchester United supporters</li>
     <li>Enjoy exclusive member benefits (where applicable)</li>
   </ul>
+  <p><strong>NEXT STEPS:</strong><br>
+  To be eligible for match tickets, you must also hold a valid official One United Manchester United membership.</p>
+  <p>If you have already renewed your One United Manchester United membership, please disregard the below and no further action is required.<br>
+  Otherwise, please create or renew your membership immediately by visiting the link below:<br>
+  <a href="${safeUrl}">${safeUrl}</a></p>
   <p><strong>Membership Gift Collection:</strong><br>
-  To collect your membership gift, please contact one of the representatives below based on your district of residence:</p>
+  Please join us at the Annual General Meeting we are hosting in July to kick-start the new season! At the meeting, you can also collect your membership gift!</p>
+  <p>Alternatively, after the Annual General Meeting, please contact one of the representatives below based on the District in which you reside:</p>
   <ul>
     <li>Nicosia District – Akis Nikolaou (mobile: 99908117)</li>
     <li>Limassol District – Thalis Alexandrou (mobile: 99531691)</li>
     <li>Larnaca &amp; Famagusta Districts – Grigoris Gregoriou (mobile: 99293992)</li>
-    <li>Paphos District – Giannis Nikolaides (mobile: 99552069)</li>
+    <li>Paphos District – Michalis &amp; Giorgos Charalambous (mobile: 99427778)</li>
   </ul>
-  <p><strong>Important Notice:</strong><br>
-  To be eligible for match ticket applications and renewals, you must also hold a valid official Manchester United membership.<br>
-  If you have already renewed your official membership, including the UK One United package, please disregard the below and no further action is required.<br>
-  Otherwise, please visit the link below to create or renew your official membership:<br>
-  <a href="${safeUrl}">${safeUrl}</a></p>
   <p>We look forward to seeing you at our upcoming events!<br>
-  Best regards,<br><strong>MUCS CLUB</strong></p>
+  Best regards, <strong>MUSC Cyprus</strong></p>
 </div>`
 }
 

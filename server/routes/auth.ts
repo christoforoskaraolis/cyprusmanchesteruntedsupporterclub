@@ -66,7 +66,7 @@ async function createAndSendVerificationEmail(userId: string, email: string, req
   const verifyUrl = `${baseUrl.replace(/\/+$/, '')}/?verifyEmailToken=${rawToken}`
   await sendEmail(
     email,
-    'Verify your MUCS account',
+    'Verify your MUSC Cyprus account',
     `Welcome to Cyprus Manchester United Supporters Club.\n\nPlease verify your email by opening this link:\n${verifyUrl}\n\nThis link expires in 24 hours.`,
     `<p>Welcome to Cyprus Manchester United Supporters Club.</p><p>Please verify your email by clicking the link below:</p><p><a href="${verifyUrl}">${verifyUrl}</a></p><p>This link expires in 24 hours.</p>`,
   )
