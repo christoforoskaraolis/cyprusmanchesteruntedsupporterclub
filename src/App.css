@@ -60,6 +60,44 @@
   flex-shrink: 0;
 }
 
+.top-bar--admin {
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1.4fr) auto;
+}
+
+.admin-portal-url {
+  margin: 0.35rem 0 0;
+  font-size: 0.78rem;
+  line-height: 1.35;
+  color: rgba(255, 255, 255, 0.92);
+  text-align: center;
+  word-break: break-all;
+}
+
+.admin-portal-url--topbar {
+  margin: 0;
+  justify-self: center;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  opacity: 0.95;
+}
+
+.auth-header .admin-portal-url {
+  color: var(--text-muted);
+}
+
+.admin-portal-footer {
+  flex-shrink: 0;
+  padding: 0.65rem 0.85rem calc(0.75rem + env(safe-area-inset-bottom, 0px));
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-muted);
+  font-size: 0.78rem;
+  line-height: 1.35;
+  text-align: center;
+  word-break: break-all;
+}
+
 .website-top-bar {
   grid-template-columns: auto 1fr;
   gap: 0.9rem;

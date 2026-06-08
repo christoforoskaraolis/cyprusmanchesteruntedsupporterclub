@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { isAdminPath, markAdminAppIntent } from '../lib/adminAppBootstrap.ts'
+import { hasAdminAppIntent, isAdminPath, markAdminAppIntent } from '../lib/adminAppBootstrap.ts'
 
 export function useAdminRoute(): boolean {
   const [isAdminRoute, setIsAdminRoute] = useState(() =>
@@ -7,19 +7,23 @@ export function useAdminRoute(): boolean {
   )
 
   useEffect(() => {
-    const sync = () => {
-      const onAdmin = isAdminPath(window.location.pathname)
-      setIsAdminRoute(onAdmin)
-      if (onAdmin) {
-        markAdminAppIntent()
-        const path = window.location.pathname.replace(/\/+$/, '') || '/'
-        if (path !== '/admin') {
-          window.history.replaceState({}, '', '/admin')
-        }
-      }
+    const path = window.location.pathname.replace(/\/+$/, '') || '/'
+
+    if (path === '/' && hasAdminAppIntent()) {
+      window.location.replace('/admin')
+      return
     }
 
-    sync()
+    const onAdmin = isAdminPath(window.location.pathname)
+    setIsAdminRoute(onAdmin)
+    if (onAdmin) {
+      markAdminAppIntent()
+    }
+
+    const sync = () => {
+      setIsAdminRoute(isAdminPath(window.location.pathname))
+    }
+
     window.addEventListener('popstate', sync)
     return () => window.removeEventListener('popstate', sync)
   }, [])

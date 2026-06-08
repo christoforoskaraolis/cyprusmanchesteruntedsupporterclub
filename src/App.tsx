@@ -79,6 +79,7 @@ import { resizeImageFileToJpegDataUrl } from './lib/resizeImage.ts'
 import { createAdminUser, deleteAdminUser, fetchAdminUsers, type AdminUserRow } from './lib/adminUsersApi.ts'
 import { useWebAppManifest } from './hooks/useWebAppManifest.ts'
 import { useAdminRoute } from './hooks/useAdminRoute.ts'
+import { ADMIN_PORTAL_URL } from './lib/adminAppBootstrap.ts'
 import {
   createOfficialMembershipRequest,
   createOfficialMembershipOffer,
@@ -4685,6 +4686,11 @@ function App() {
             <ClubLogoMark className="auth-badge" />
             <h1 className="auth-title">{isAdminRoute ? 'Admin login' : 'Welcome to the home of Cyprus Manchester United Supporters Club'}</h1>
             <p className="auth-subtitle">{isAdminRoute ? 'Sign in with an admin account' : 'Member access'}</p>
+            {isAdminRoute && (
+              <p className="admin-portal-url" aria-label="Admin portal address">
+                {ADMIN_PORTAL_URL}
+              </p>
+            )}
           </header>
 
           {mode === 'forgot-password' ? (
@@ -4870,12 +4876,15 @@ function App() {
 
   if (isAdminRoute) {
     return (
-      <div className="app-shell">
-        <header className="top-bar">
+      <div className="app-shell app-shell--admin">
+        <header className="top-bar top-bar--admin">
           <div className="top-bar-left" />
           <button type="button" className="top-bar-logo-btn" onClick={() => (window.location.href = '/admin')}>
             <ClubLogoMark className="top-bar-club-logo" />
           </button>
+          <p className="admin-portal-url admin-portal-url--topbar" aria-label="Admin portal address">
+            {ADMIN_PORTAL_URL}
+          </p>
           <div className="top-bar-right">
             <button type="button" className="top-bar-pill-btn top-bar-signout" onClick={() => void signOut()}>
               Sign out
@@ -4942,6 +4951,9 @@ function App() {
             </div>
           )}
         </main>
+        <footer className="admin-portal-footer" aria-label="Admin portal address">
+          {ADMIN_PORTAL_URL}
+        </footer>
       </div>
     )
   }
