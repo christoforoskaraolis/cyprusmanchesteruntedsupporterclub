@@ -11,6 +11,24 @@
     <meta name="apple-mobile-web-app-title" content="MUCY" />
     <meta name="color-scheme" content="light" />
     <title>Cyprus Manchester United Supporters Club</title>
+    <script>
+      (function () {
+        var path = location.pathname.replace(/\/+$/, '') || '/';
+        if (path === '/admin') {
+          var manifest = document.querySelector('link[rel="manifest"]');
+          if (manifest) manifest.setAttribute('href', '/manifest-admin.webmanifest');
+          var appleTitle = document.querySelector('meta[name="apple-mobile-web-app-title"]');
+          if (appleTitle) appleTitle.setAttribute('content', 'MUCY Admin');
+          document.title = 'MUCY Admin — Cyprus Manchester United Supporters Club';
+          try {
+            localStorage.setItem('cmusc_admin_app', '1');
+          } catch (e) {}
+        }
+        if (path === '/' && localStorage.getItem('cmusc_admin_app') === '1') {
+          location.replace('/admin?source=admin-app');
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

@@ -78,6 +78,7 @@ import {
 import { resizeImageFileToJpegDataUrl } from './lib/resizeImage.ts'
 import { createAdminUser, deleteAdminUser, fetchAdminUsers, type AdminUserRow } from './lib/adminUsersApi.ts'
 import { useWebAppManifest } from './hooks/useWebAppManifest.ts'
+import { useAdminRoute } from './hooks/useAdminRoute.ts'
 import {
   createOfficialMembershipRequest,
   createOfficialMembershipOffer,
@@ -3265,7 +3266,7 @@ function downloadCsv(filename: string, headers: string[], rows: unknown[][]): vo
 }
 
 function App() {
-  const isAdminRoute = typeof window !== 'undefined' && window.location.pathname.replace(/\/+$/, '') === '/admin'
+  const isAdminRoute = useAdminRoute()
   useWebAppManifest(isAdminRoute)
   const {
     configured,
@@ -4580,7 +4581,11 @@ function App() {
         }
       }
 
-      if (!isAdminRoute) {
+      if (isAdminRoute) {
+        if (window.location.pathname.replace(/\/+$/, '') !== '/admin') {
+          window.history.replaceState({}, '', '/admin')
+        }
+      } else {
         openPage('home')
       }
       resetForm()
@@ -4868,7 +4873,7 @@ function App() {
       <div className="app-shell">
         <header className="top-bar">
           <div className="top-bar-left" />
-          <button type="button" className="top-bar-logo-btn" onClick={() => (window.location.href = '/')}>
+          <button type="button" className="top-bar-logo-btn" onClick={() => (window.location.href = '/admin')}>
             <ClubLogoMark className="top-bar-club-logo" />
           </button>
           <div className="top-bar-right">
