@@ -10,6 +10,19 @@ import {
 import { clearAuthToken, getAuthToken, setAuthToken } from '../lib/authSession'
 import { asError } from '../lib/apiClient'
 
+async function fetchAuthMe(token: string): Promise<{ user: AuthUser; isAdmin: boolean }> {
+  const response = await fetch('/api/auth/me', {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  if (response.status === 401) {
+    throw new Error('SESSION_EXPIRED')
+  }
+  if (!response.ok) {
+    throw new Error('SESSION_CHECK_FAILED')
+  }
+  return (await response.json()) as { user: AuthUser; isAdmin: boolean }
+}
+
 type AuthUser = {
   id: string
   email: string | null
@@ -54,49 +67,40 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setLoading(false)
       return
     }
-    fetch('/api/auth/me', {
-      headers: { Authorization: `Bearer ${token}` },
-    })
-      .then(async (response) => {
-        if (!response.ok) throw new Error('Session expired')
-        return (await response.json()) as { user: AuthUser; isAdmin: boolean }
-      })
+    fetchAuthMe(token)
       .then((data) => {
         setSession({ access_token: token, user: data.user })
         setIsAdmin(data.isAdmin === true)
       })
-      .catch(() => {
-        clearAuthToken()
-        setSession(null)
-        setIsAdmin(false)
+      .catch((error: unknown) => {
+        if (error instanceof Error && error.message === 'SESSION_EXPIRED') {
+          clearAuthToken()
+          setSession(null)
+          setIsAdmin(false)
+        }
       })
       .finally(() => setLoading(false))
   }, [])
 
   const refreshAdminStatus = useCallback(async () => {
-    const token = session?.access_token
+    const token = getAuthToken()
     if (!token) {
+      setSession(null)
       setIsAdmin(false)
       return
     }
     try {
-      const response = await fetch('/api/auth/me', {
-        headers: { Authorization: `Bearer ${token}` },
-      })
-      if (!response.ok) throw new Error('Failed to refresh admin status')
-      const data = (await response.json()) as { user: AuthUser; isAdmin: boolean }
+      const data = await fetchAuthMe(token)
       setSession({ access_token: token, user: data.user })
       setIsAdmin(data.isAdmin === true)
-    } catch {
-      clearAuthToken()
-      setSession(null)
-      setIsAdmin(false)
+    } catch (error: unknown) {
+      if (error instanceof Error && error.message === 'SESSION_EXPIRED') {
+        clearAuthToken()
+        setSession(null)
+        setIsAdmin(false)
+      }
     }
-  }, [session?.access_token])
-
-  useEffect(() => {
-    void refreshAdminStatus()
-  }, [refreshAdminStatus])
+  }, [])
 
   const signIn = useCallback(async (email: string, password: string) => {
     try {

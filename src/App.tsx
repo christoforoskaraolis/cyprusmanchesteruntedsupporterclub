@@ -77,6 +77,7 @@ import {
 } from './lib/merchandiseApi.ts'
 import { resizeImageFileToJpegDataUrl } from './lib/resizeImage.ts'
 import { createAdminUser, deleteAdminUser, fetchAdminUsers, type AdminUserRow } from './lib/adminUsersApi.ts'
+import { useWebAppManifest } from './hooks/useWebAppManifest.ts'
 import {
   createOfficialMembershipRequest,
   createOfficialMembershipOffer,
@@ -3265,6 +3266,7 @@ function downloadCsv(filename: string, headers: string[], rows: unknown[][]): vo
 
 function App() {
   const isAdminRoute = typeof window !== 'undefined' && window.location.pathname.replace(/\/+$/, '') === '/admin'
+  useWebAppManifest(isAdminRoute)
   const {
     configured,
     loading: authLoading,
@@ -4578,7 +4580,9 @@ function App() {
         }
       }
 
-      openPage('home')
+      if (!isAdminRoute) {
+        openPage('home')
+      }
       resetForm()
     } finally {
       setAuthSubmitting(false)

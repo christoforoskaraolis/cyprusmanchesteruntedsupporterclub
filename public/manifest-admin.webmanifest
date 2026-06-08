@@ -1,8 +1,8 @@
 {
-  "name": "Cyprus Manchester United Supporters Club",
-  "short_name": "MUCY",
-  "description": "Official Cyprus Manchester United Supporters Club member portal",
-  "start_url": "/",
+  "name": "MUCY Admin",
+  "short_name": "Admin",
+  "description": "Cyprus Manchester United Supporters Club admin console",
+  "start_url": "/admin",
   "scope": "/",
   "display": "standalone",
   "background_color": "#ffffff",
