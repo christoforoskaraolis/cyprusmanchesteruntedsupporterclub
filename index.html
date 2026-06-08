@@ -20,11 +20,13 @@
           var appleTitle = document.querySelector('meta[name="apple-mobile-web-app-title"]');
           if (appleTitle) appleTitle.setAttribute('content', 'MUCY Admin');
           document.title = 'MUCY Admin — Cyprus Manchester United Supporters Club';
+        }
+        if (path === '/') {
           try {
-            localStorage.setItem('cmusc_admin_app', '1');
+            localStorage.removeItem('cmusc_admin_app');
           } catch (e) {}
         }
-        if (path === '/' && localStorage.getItem('cmusc_admin_app') === '1') {
+        if (path === '/' && location.search.indexOf('source=admin-app') !== -1) {
           location.replace('/admin');
         }
         if (path === '/admin' && location.search.indexOf('source=admin-app') !== -1) {

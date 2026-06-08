@@ -24,19 +24,9 @@ const distDir = join(__dirname, '..', 'dist')
 const distIndexPath = join(distDir, 'index.html')
 const ADMIN_APP_COOKIE = 'cmusc_admin_app'
 
-function readCookie(req: Request, name: string): string | undefined {
-  const raw = req.headers.cookie
-  if (!raw) return undefined
-  for (const part of raw.split(';')) {
-    const [key, ...rest] = part.trim().split('=')
-    if (key === name) return decodeURIComponent(rest.join('='))
-  }
-  return undefined
-}
-
-function setAdminAppCookie(res: Response): void {
+function clearAdminAppCookie(res: Response): void {
   const secure = process.env.NODE_ENV === 'production' ? '; Secure' : ''
-  res.append('Set-Cookie', `${ADMIN_APP_COOKIE}=1; Path=/; Max-Age=31536000; SameSite=Lax${secure}`)
+  res.append('Set-Cookie', `${ADMIN_APP_COOKIE}=; Path=/; Max-Age=0; SameSite=Lax${secure}`)
 }
 
 function isAdminHtmlPath(path: string): boolean {
@@ -46,11 +36,11 @@ function isAdminHtmlPath(path: string): boolean {
 function serveSpaIndex(req: Request, res: Response): void {
   const html = readFileSync(distIndexPath, 'utf8')
   if (!isAdminHtmlPath(req.path)) {
+    clearAdminAppCookie(res)
     res.type('html').send(html)
     return
   }
 
-  setAdminAppCookie(res)
   const adminHtml = html
     .replace('href="/manifest.webmanifest"', 'href="/manifest-admin.webmanifest"')
     .replace('name="apple-mobile-web-app-title" content="MUCY"', 'name="apple-mobile-web-app-title" content="MUCY Admin"')
@@ -92,10 +82,6 @@ app.use((req, res, next) => {
 
   if (req.method === 'GET' || req.method === 'HEAD') {
     const path = req.path.replace(/\/+$/, '') || '/'
-    if (path === '/' && readCookie(req, ADMIN_APP_COOKIE) === '1') {
-      res.redirect(302, '/admin')
-      return
-    }
     if (path === '/' && req.query.source === 'admin-app') {
       res.redirect(302, '/admin')
       return
@@ -104,7 +90,7 @@ app.use((req, res, next) => {
 
   if (existsSync(distIndexPath)) {
     if (req.method === 'HEAD') {
-      if (isAdminHtmlPath(req.path)) setAdminAppCookie(res)
+      if (!isAdminHtmlPath(req.path)) clearAdminAppCookie(res)
       res.status(200).end()
       return
     }
