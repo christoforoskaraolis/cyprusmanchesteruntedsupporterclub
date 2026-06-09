@@ -17,6 +17,7 @@ import { officialMembershipsRouter } from './routes/officialMemberships.ts'
 import { authRouter } from './routes/auth.ts'
 import { pushRouter } from './routes/push.ts'
 import { stripeRouter } from './routes/stripe.ts'
+import { publishDueNewsPosts } from './lib/publishScheduledNews.ts'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
@@ -102,6 +103,12 @@ app.use((req, res, next) => {
 
 app.use(errorHandler)
 
+const SCHEDULED_NEWS_INTERVAL_MS = 60_000
+
 app.listen(env.port, () => {
   console.log(`[api] listening on http://localhost:${env.port}`)
+  void publishDueNewsPosts().catch((err) => console.error('[news] initial publish check failed:', err))
+  setInterval(() => {
+    void publishDueNewsPosts().catch((err) => console.error('[news] scheduled publish check failed:', err))
+  }, SCHEDULED_NEWS_INTERVAL_MS)
 })

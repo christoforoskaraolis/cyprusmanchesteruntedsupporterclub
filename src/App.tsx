@@ -40,6 +40,7 @@ import {
 import { fetchCachedFixtures, syncFixturesFromManutd, type UpcomingFixture } from './lib/fixturesApi.ts'
 import {
   deleteNewsPost,
+  fetchAdminNewsPosts,
   fetchNewsPosts,
   insertNewsPost,
   newsDesktopImage,
@@ -2012,8 +2013,8 @@ function AdminConsole({
           <div className="admin-block-head">
             <h2 className="admin-block-title">News posts</h2>
             <p className="admin-block-lead">
-              Create or edit posts shown on the public News page. New posts automatically send a push alert to members
-              who enabled news alerts in MY MUCY.
+              Create or edit posts shown on the public News page. Posts with a future publish date stay hidden until that
+              time; push alerts are sent when the post goes live for members who enabled news alerts in MY MUCY.
             </p>
           </div>
           <form
@@ -2166,7 +2167,8 @@ function AdminConsole({
                 <li key={n.id} className="admin-news-card">
                   <p className="admin-news-card-title">{n.title}</p>
                   <p className="admin-news-card-meta">
-                    Published: {new Date(n.publishedAt).toLocaleString('en-GB')}
+                    {new Date(n.publishedAt) > new Date() ? 'Scheduled' : 'Published'}:{' '}
+                    {new Date(n.publishedAt).toLocaleString('en-GB')}
                   </p>
                   {n.imageUrl && <img src={n.imageUrl} alt={n.title} className="news-image" />}
                   <p className="admin-news-card-body">{n.body}</p>
@@ -3564,19 +3566,19 @@ function App() {
   async function applyCreateNews(payload: NewsPostPayload) {
     const { error } = await insertNewsPost(payload, user?.id ?? null)
     if (error) throw new Error(error.message)
-    await loadNewsPosts()
+    await Promise.all([loadNewsPosts(), loadAdminNewsPosts()])
   }
 
   async function applyUpdateNews(id: string, payload: NewsPostPayload) {
     const { error } = await updateNewsPost(id, payload, user?.id ?? null)
     if (error) throw new Error(error.message)
-    await loadNewsPosts()
+    await Promise.all([loadNewsPosts(), loadAdminNewsPosts()])
   }
 
   async function applyDeleteNews(id: string) {
     const { error } = await deleteNewsPost(id)
     if (error) throw new Error(error.message)
-    await loadNewsPosts()
+    await Promise.all([loadNewsPosts(), loadAdminNewsPosts()])
   }
 
   const refreshMyMembership = useCallback(async () => {
@@ -3632,8 +3634,18 @@ function App() {
   }, [refreshMyMembership])
 
   const loadNewsPosts = useCallback(async () => {
-    setNewsLoading(true)
     const { rows, error } = await fetchNewsPosts()
+    if (error) {
+      console.error(error)
+      setNewsPosts([])
+      return
+    }
+    setNewsPosts(rows)
+  }, [])
+
+  const loadAdminNewsPosts = useCallback(async () => {
+    setNewsLoading(true)
+    const { rows, error } = await fetchAdminNewsPosts()
     setNewsLoading(false)
     if (error) {
       console.error(error)
@@ -3891,8 +3903,12 @@ function App() {
       setNewsLoading(false)
       return
     }
+    if (isAdminRoute && isAdmin) {
+      void loadAdminNewsPosts()
+      return
+    }
     void loadNewsPosts()
-  }, [session?.user?.id, loadNewsPosts])
+  }, [session?.user?.id, isAdminRoute, isAdmin, loadNewsPosts, loadAdminNewsPosts])
 
   useEffect(() => {
     if (!session?.user?.id) {

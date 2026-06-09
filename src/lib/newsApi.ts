@@ -28,14 +28,30 @@ export function newsMobileImage(post: Pick<NewsPost, 'imageUrl' | 'imageUrlMobil
   return post.imageUrlMobile ?? post.imageUrl
 }
 
+function mapNewsRows(rows: NewsPost[]) {
+  return rows.map((row) => ({
+    ...row,
+    imageUrlMobile: row.imageUrlMobile ?? null,
+  }))
+}
+
 export async function fetchNewsPosts() {
   try {
     const data = await apiGet<{ rows: NewsPost[] }>('/api/news')
     return {
-      rows: data.rows.map((row) => ({
-        ...row,
-        imageUrlMobile: row.imageUrlMobile ?? null,
-      })),
+      rows: mapNewsRows(data.rows),
+      error: undefined,
+    }
+  } catch (error) {
+    return { rows: [] as NewsPost[], error: asError(error) }
+  }
+}
+
+export async function fetchAdminNewsPosts() {
+  try {
+    const data = await apiGet<{ rows: NewsPost[] }>('/api/news/admin')
+    return {
+      rows: mapNewsRows(data.rows),
       error: undefined,
     }
   } catch (error) {
