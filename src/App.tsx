@@ -4987,7 +4987,7 @@ function App() {
           {showMatchTickets && (
             <button
               type="button"
-              className={`top-bar-icon-btn top-bar-fixtures-btn ${activePage === 'tickets' ? 'is-active' : ''}`}
+              className={`top-bar-pill-btn top-bar-fixtures-btn ${activePage === 'tickets' ? 'is-active' : ''}`}
               aria-label="Manchester United home fixtures and match ticket requests"
               aria-expanded={activePage === 'tickets'}
               onClick={() => openPage('tickets', { resetSearch: true, resetFixtures: false })}

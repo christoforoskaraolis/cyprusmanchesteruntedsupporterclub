@@ -1164,20 +1164,21 @@
 }
 
 .website-shell .top-bar-fixtures-btn {
-  width: auto;
-  min-width: max-content;
-  height: 38px;
-  flex-shrink: 0;
   display: inline-flex;
   align-items: center;
   gap: 0.35rem;
-  padding: 0 0.62rem;
-  border-radius: 10px;
+  flex-shrink: 0;
+  min-width: max-content;
+  height: auto;
+  padding: 0.4rem 0.62rem;
+  font-size: 0.76rem;
+  font-weight: 700;
+  border-radius: 999px;
 }
 
 .website-shell .top-bar-fixtures-label {
-  font-size: 0.74rem;
-  font-weight: 700;
+  font-size: inherit;
+  font-weight: inherit;
   white-space: nowrap;
 }
 
@@ -1734,26 +1735,27 @@
     min-width: 0;
   }
 
-  .website-shell .top-bar-fixtures-btn {
-    flex: 1 1 auto;
-    min-width: 0;
-    max-width: 9.5rem;
-    height: 36px;
-    padding: 0 0.4rem;
+  .website-shell .top-bar-fixtures-btn,
+  .website-shell .top-bar-mycmusc-btn {
+    flex-shrink: 0;
+    min-width: max-content;
+    font-size: 0.68rem;
+    font-weight: 700;
+    padding: 0.38rem 0.55rem;
+  }
+
+  .website-shell .top-bar-fixtures-btn .top-bar-icon {
+    display: none;
   }
 
   .website-shell .top-bar-fixtures-label {
-    display: inline;
-    font-size: 0.68rem;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    overflow: visible;
+    text-overflow: unset;
   }
 
-  .website-shell .top-bar-mycmusc-btn {
-    flex-shrink: 0;
-    font-size: 0.68rem;
-    padding: 0.38rem 0.5rem;
+  .website-shell .website-top-bar:has(.top-bar-fixtures-btn) .top-bar-club-logo {
+    width: 32px;
+    height: 32px;
   }
 
   .website-shell .top-bar-search-btn {
