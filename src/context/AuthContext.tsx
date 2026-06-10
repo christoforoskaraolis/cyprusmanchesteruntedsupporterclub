@@ -10,6 +10,40 @@ import {
 import { clearAuthToken, getAuthToken, setAuthToken } from '../lib/authSession'
 import { asError } from '../lib/apiClient'
 
+type AuthUser = {
+  id: string
+  email: string | null
+}
+
+type AuthSession = {
+  access_token: string
+  user: AuthUser
+}
+
+const AUTH_ME_RETRIES = 3
+const AUTH_ME_RETRY_MS = 600
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    window.setTimeout(resolve, ms)
+  })
+}
+
+function userFromToken(token: string): AuthUser | null {
+  try {
+    const payloadPart = token.split('.')[1]
+    if (!payloadPart) return null
+    const payload = JSON.parse(atob(payloadPart.replace(/-/g, '+').replace(/_/g, '/'))) as {
+      sub?: string
+      email?: string | null
+    }
+    if (!payload.sub) return null
+    return { id: payload.sub, email: payload.email ?? null }
+  } catch {
+    return null
+  }
+}
+
 async function fetchAuthMe(token: string): Promise<{ user: AuthUser; isAdmin: boolean }> {
   const response = await fetch('/api/auth/me', {
     headers: { Authorization: `Bearer ${token}` },
@@ -21,16 +55,6 @@ async function fetchAuthMe(token: string): Promise<{ user: AuthUser; isAdmin: bo
     throw new Error('SESSION_CHECK_FAILED')
   }
   return (await response.json()) as { user: AuthUser; isAdmin: boolean }
-}
-
-type AuthUser = {
-  id: string
-  email: string | null
-}
-
-type AuthSession = {
-  access_token: string
-  user: AuthUser
 }
 
 type AuthContextValue = {
@@ -61,46 +85,75 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true)
   const [isAdmin, setIsAdmin] = useState(false)
 
+  const restoreSessionFromStoredToken = useCallback((token: string) => {
+    const user = userFromToken(token)
+    if (!user) return false
+    setSession({ access_token: token, user })
+    return true
+  }, [])
+
+  const loadAuthMe = useCallback(
+    async (token: string, opts?: { retries?: number }): Promise<boolean> => {
+      const retries = opts?.retries ?? 0
+      for (let attempt = 0; attempt <= retries; attempt += 1) {
+        try {
+          const data = await fetchAuthMe(token)
+          setSession({ access_token: token, user: data.user })
+          setIsAdmin(data.isAdmin === true)
+          return true
+        } catch (error: unknown) {
+          if (error instanceof Error && error.message === 'SESSION_EXPIRED') {
+            clearAuthToken()
+            setSession(null)
+            setIsAdmin(false)
+            return false
+          }
+          if (attempt < retries) {
+            await sleep(AUTH_ME_RETRY_MS * (attempt + 1))
+            continue
+          }
+          return restoreSessionFromStoredToken(token)
+        }
+      }
+      return false
+    },
+    [restoreSessionFromStoredToken],
+  )
+
   useEffect(() => {
+    let cancelled = false
     const token = getAuthToken()
     if (!token) {
       setLoading(false)
       return
     }
-    fetchAuthMe(token)
-      .then((data) => {
-        setSession({ access_token: token, user: data.user })
-        setIsAdmin(data.isAdmin === true)
-      })
-      .catch((error: unknown) => {
-        if (error instanceof Error && error.message === 'SESSION_EXPIRED') {
-          clearAuthToken()
-          setSession(null)
-          setIsAdmin(false)
-        }
-      })
-      .finally(() => setLoading(false))
-  }, [])
+
+    void (async () => {
+      await loadAuthMe(token, { retries: AUTH_ME_RETRIES })
+      if (!cancelled) setLoading(false)
+    })()
+
+    return () => {
+      cancelled = true
+    }
+  }, [loadAuthMe])
 
   const refreshAdminStatus = useCallback(async () => {
     const token = getAuthToken()
-    if (!token) {
-      setSession(null)
-      setIsAdmin(false)
-      return
+    if (!token) return
+    await loadAuthMe(token, { retries: 1 })
+  }, [loadAuthMe])
+
+  useEffect(() => {
+    function onVisibilityChange() {
+      if (document.visibilityState !== 'visible') return
+      const token = getAuthToken()
+      if (!token) return
+      void loadAuthMe(token, { retries: 1 })
     }
-    try {
-      const data = await fetchAuthMe(token)
-      setSession({ access_token: token, user: data.user })
-      setIsAdmin(data.isAdmin === true)
-    } catch (error: unknown) {
-      if (error instanceof Error && error.message === 'SESSION_EXPIRED') {
-        clearAuthToken()
-        setSession(null)
-        setIsAdmin(false)
-      }
-    }
-  }, [])
+    document.addEventListener('visibilitychange', onVisibilityChange)
+    return () => document.removeEventListener('visibilitychange', onVisibilityChange)
+  }, [loadAuthMe])
 
   const signIn = useCallback(async (email: string, password: string) => {
     try {
