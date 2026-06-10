@@ -3083,14 +3083,6 @@ function IconSearch() {
   )
 }
 
-function IconMenu() {
-  return (
-    <svg className="top-bar-icon" width="22" height="22" viewBox="0 0 24 24" aria-hidden="true">
-      <path d="M4 7h16M4 12h16M4 17h16" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" />
-    </svg>
-  )
-}
-
 function IconSocialGlobe({ className }: { className?: string }) {
   return (
     <svg className={className} width="24" height="24" viewBox="0 0 24 24" aria-hidden="true">
@@ -3405,7 +3397,10 @@ function App() {
   /** Merchandise is available to any signed-in user. */
   const showMerchandise = Boolean(user?.id)
   const mobileMoreActive =
-    activePage === 'social' || activePage === 'merchandise' || activePage === 'contact' || activePage === 'mycmusc'
+    activePage === 'board' ||
+    activePage === 'merchandise' ||
+    activePage === 'contact' ||
+    activePage === 'official-membership'
   const welcomeFirstName =
     myProfile?.fullName?.trim().split(/\s+/)[0] ||
     user?.email?.split('@')[0] ||
@@ -4988,32 +4983,22 @@ function App() {
           <ClubLogoMark className="top-bar-club-logo" />
         </button>
 
-        {showMatchTickets && (
+        <div className="top-bar-actions">
+          {showMatchTickets && (
+            <button
+              type="button"
+              className={`top-bar-icon-btn top-bar-fixtures-btn ${activePage === 'tickets' ? 'is-active' : ''}`}
+              aria-label="Manchester United home fixtures and match ticket requests"
+              aria-expanded={activePage === 'tickets'}
+              onClick={() => openPage('tickets', { resetSearch: true, resetFixtures: false })}
+            >
+              <IconCalendar />
+              <span className="top-bar-fixtures-label">Match ticket requests</span>
+            </button>
+          )}
           <button
             type="button"
-            className={`top-bar-icon-btn top-bar-fixtures-btn ${activePage === 'tickets' ? 'is-active' : ''}`}
-            aria-label="Manchester United home fixtures and match ticket requests"
-            aria-expanded={activePage === 'tickets'}
-            onClick={() => openPage('tickets', { resetSearch: true, resetFixtures: false })}
-          >
-            <IconCalendar />
-            <span className="top-bar-fixtures-label">Match ticket requests</span>
-          </button>
-        )}
-
-        <div className="top-bar-right">
-          <button
-            type="button"
-            className="top-bar-icon-btn mobile-nav-menu-btn"
-            aria-label="Open site menu"
-            aria-expanded={mobileMoreOpen}
-            onClick={() => setMobileMoreOpen((open) => !open)}
-          >
-            <IconMenu />
-          </button>
-          <button
-            type="button"
-            className={`top-bar-pill-btn ${activePage === 'mycmusc' || activePage === 'official-membership' ? 'is-active' : ''}`}
+            className={`top-bar-pill-btn top-bar-mycmusc-btn ${activePage === 'mycmusc' || activePage === 'official-membership' ? 'is-active' : ''}`}
             onClick={() => openPage('mycmusc')}
           >
             MY MUCY
@@ -5021,7 +5006,7 @@ function App() {
           <NewsPushBell variant="topbar" />
           <button
             type="button"
-            className={`top-bar-icon-btn ${searchOpen ? 'is-active' : ''}`}
+            className={`top-bar-icon-btn top-bar-search-btn ${searchOpen ? 'is-active' : ''}`}
             aria-label="Search"
             aria-expanded={searchOpen}
             onClick={() =>
@@ -5032,7 +5017,11 @@ function App() {
           >
             <IconSearch />
           </button>
-          <button type="button" className="top-bar-pill-btn top-bar-signout" onClick={() => void signOut()}>
+          <button
+            type="button"
+            className="top-bar-pill-btn top-bar-signout top-bar-signout--desktop"
+            onClick={() => void signOut()}
+          >
             Sign out
           </button>
         </div>
@@ -6373,40 +6362,7 @@ function App() {
         />
       )}
       {mobileMoreOpen && (
-        <div className="mobile-nav-sheet" role="menu" aria-label="Site sections">
-          <button
-            type="button"
-            role="menuitem"
-            className={`mobile-nav-sheet-item ${activePage === 'home' ? 'is-active' : ''}`}
-            onClick={() => openPage('home')}
-          >
-            Home
-          </button>
-          <button
-            type="button"
-            role="menuitem"
-            className={`mobile-nav-sheet-item ${activePage === 'news' ? 'is-active' : ''}`}
-            onClick={() => openPage('news')}
-          >
-            News
-          </button>
-          <button
-            type="button"
-            role="menuitem"
-            className={`mobile-nav-sheet-item ${activePage === 'mycmusc' || activePage === 'official-membership' ? 'is-active' : ''}`}
-            onClick={() => openPage('mycmusc')}
-          >
-            MY MUCY
-          </button>
-          <div className="mobile-nav-sheet-divider" aria-hidden />
-          <button
-            type="button"
-            role="menuitem"
-            className={`mobile-nav-sheet-item ${activePage === 'social' ? 'is-active' : ''}`}
-            onClick={() => openPage('social')}
-          >
-            Social Media
-          </button>
+        <div className="mobile-nav-sheet" role="menu" aria-label="More options">
           <button
             type="button"
             role="menuitem"
@@ -6433,6 +6389,18 @@ function App() {
           >
             Contact Us
           </button>
+          <div className="mobile-nav-sheet-divider" aria-hidden />
+          <button
+            type="button"
+            role="menuitem"
+            className="mobile-nav-sheet-item mobile-nav-sheet-item--signout"
+            onClick={() => {
+              setMobileMoreOpen(false)
+              void signOut()
+            }}
+          >
+            Sign out
+          </button>
         </div>
       )}
 
@@ -6454,10 +6422,10 @@ function App() {
           </button>
           <button
             type="button"
-            className={`mobile-bottom-nav-btn ${activePage === 'board' ? 'is-active' : ''}`}
-            onClick={() => openPage('board')}
+            className={`mobile-bottom-nav-btn ${activePage === 'social' ? 'is-active' : ''}`}
+            onClick={() => openPage('social')}
           >
-            Board
+            Social Media
           </button>
           <button
             type="button"
