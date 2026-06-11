@@ -13,8 +13,14 @@ type NewsRow = {
   body: string
   image_url: string | null
   image_url_mobile: string | null
+  body_photos: unknown
   published_at: string
   updated_at: string
+}
+
+function parseBodyPhotos(value: unknown): string[] {
+  if (!Array.isArray(value)) return []
+  return value.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
 }
 
 function mapNewsRow(r: NewsRow) {
@@ -24,6 +30,7 @@ function mapNewsRow(r: NewsRow) {
     body: r.body,
     imageUrl: r.image_url,
     imageUrlMobile: r.image_url_mobile,
+    bodyPhotos: parseBodyPhotos(r.body_photos),
     publishedAt: r.published_at,
     updatedAt: r.updated_at,
   }
@@ -72,7 +79,7 @@ newsRouter.get(
   requireUser,
   asyncHandler(async (_req, res) => {
     const { rows } = await query<NewsRow>(
-      `select id, title, body, image_url, image_url_mobile, published_at, updated_at
+      `select id, title, body, image_url, image_url_mobile, body_photos, published_at, updated_at
        from public.news_posts
        where published_at <= now()
        order by published_at desc`,
@@ -86,7 +93,7 @@ newsRouter.get(
   requireAdmin,
   asyncHandler(async (_req, res) => {
     const { rows } = await query<NewsRow>(
-      `select id, title, body, image_url, image_url_mobile, published_at, updated_at
+      `select id, title, body, image_url, image_url_mobile, body_photos, published_at, updated_at
        from public.news_posts
        order by published_at desc`,
     )
@@ -98,11 +105,12 @@ newsRouter.post(
   '/',
   requireAdmin,
   asyncHandler(async (req, res) => {
-    const { title, body, imageUrl, imageUrlMobile, publishedAt } = req.body as {
+    const { title, body, imageUrl, imageUrlMobile, bodyPhotos, publishedAt } = req.body as {
       title?: string
       body?: string
       imageUrl?: string | null
       imageUrlMobile?: string | null
+      bodyPhotos?: string[]
       publishedAt?: string
     }
     if (!title?.trim() || !body?.trim() || !publishedAt) {
@@ -111,18 +119,20 @@ newsRouter.post(
 
     const publishAt = parsePublishedAt(publishedAt)
     const scheduled = isScheduledForFuture(publishAt)
+    const photos = parseBodyPhotos(bodyPhotos)
 
     const { rows } = await query<{ id: string }>(
       `insert into public.news_posts (
-         title, body, image_url, image_url_mobile, published_at, created_by, updated_by, push_sent_at
+         title, body, image_url, image_url_mobile, body_photos, published_at, created_by, updated_by, push_sent_at
        )
-       values ($1, $2, $3, $4, $5, $6, $6, $7)
+       values ($1, $2, $3, $4, $5::jsonb, $6, $7, $7, $8)
        returning id`,
       [
         title.trim(),
         body.trim(),
         imageUrl ?? null,
         imageUrlMobile ?? null,
+        JSON.stringify(photos),
         publishAt.toISOString(),
         req.user!.id,
         scheduled ? null : new Date().toISOString(),
@@ -147,11 +157,12 @@ newsRouter.put(
   '/:id',
   requireAdmin,
   asyncHandler(async (req, res) => {
-    const { title, body, imageUrl, imageUrlMobile, publishedAt } = req.body as {
+    const { title, body, imageUrl, imageUrlMobile, bodyPhotos, publishedAt } = req.body as {
       title?: string
       body?: string
       imageUrl?: string | null
       imageUrlMobile?: string | null
+      bodyPhotos?: string[]
       publishedAt?: string
     }
     if (!title?.trim() || !body?.trim() || !publishedAt) {
@@ -159,6 +170,7 @@ newsRouter.put(
     }
 
     const publishAt = parsePublishedAt(publishedAt)
+    const photos = parseBodyPhotos(bodyPhotos)
 
     await query(
       `update public.news_posts
@@ -166,19 +178,21 @@ newsRouter.put(
            body = $2,
            image_url = $3,
            image_url_mobile = $4,
-           published_at = $5,
-           updated_by = $6,
+           body_photos = $5::jsonb,
+           published_at = $6,
+           updated_by = $7,
            push_sent_at = case
              when push_sent_at is not null then push_sent_at
-             when $5::timestamptz > now() then null
+             when $6::timestamptz > now() then null
              else push_sent_at
            end
-       where id = $7`,
+       where id = $8`,
       [
         title.trim(),
         body.trim(),
         imageUrl ?? null,
         imageUrlMobile ?? null,
+        JSON.stringify(photos),
         publishAt.toISOString(),
         req.user!.id,
         req.params.id,

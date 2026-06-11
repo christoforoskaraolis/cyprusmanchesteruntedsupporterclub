@@ -2083,12 +2083,34 @@
   }
 }
 
-.news-detail-modal-body {
+.news-detail-modal-gallery {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr));
+  gap: 0.65rem;
+  list-style: none;
+  padding: 0;
+  margin: 1rem 0 0;
+}
+
+.news-detail-modal-gallery-img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+}
+
+.news-detail-modal-scroll {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
   margin: 0 0 0.85rem;
   padding-right: 0.15rem;
+}
+
+.news-detail-modal-body {
+  margin: 0;
   font-size: 0.93rem;
   line-height: 1.55;
   color: var(--text);
@@ -2625,6 +2647,31 @@
   cursor: pointer;
   text-decoration: underline;
   text-underline-offset: 2px;
+}
+
+.admin-payment-reminder-btn {
+  font: inherit;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  padding: 0.5rem 0.85rem;
+  border: 1px solid var(--mu-red);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--mu-red);
+  cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
+  transition: background 0.2s ease, color 0.2s ease;
+}
+
+.admin-payment-reminder-btn:hover:not(:disabled) {
+  background: var(--mu-red);
+  color: #fff;
+}
+
+.admin-payment-reminder-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
 }
 
 .admin-member-dl {

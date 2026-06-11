@@ -8,6 +8,8 @@ export type NewsPost = {
   imageUrl: string | null
   /** Smartphone card image (4:5 portrait). Falls back to imageUrl when null. */
   imageUrlMobile: string | null
+  /** Extra photos shown in the full article view (not the feed preview cards). */
+  bodyPhotos: string[]
   publishedAt: string
   updatedAt: string
 }
@@ -17,6 +19,7 @@ export type NewsPostPayload = {
   body: string
   imageUrl: string | null
   imageUrlMobile: string | null
+  bodyPhotos: string[]
   publishedAt: string
 }
 
@@ -32,6 +35,7 @@ function mapNewsRows(rows: NewsPost[]) {
   return rows.map((row) => ({
     ...row,
     imageUrlMobile: row.imageUrlMobile ?? null,
+    bodyPhotos: Array.isArray(row.bodyPhotos) ? row.bodyPhotos : [],
   }))
 }
 

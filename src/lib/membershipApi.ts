@@ -363,6 +363,15 @@ export async function fetchAllMembershipApplications() {
   }
 }
 
+export async function sendPaymentReminderEmail(applicationId: string) {
+  try {
+    await apiSend(`/api/membership/applications/${applicationId}/payment-reminder`, 'POST')
+    return { error: undefined }
+  } catch (error) {
+    return { error: asError(error) }
+  }
+}
+
 export async function setApplicationStatus(applicationId: string, status: 'pending' | 'active') {
   void defaultMembershipValidUntilIso
   try {

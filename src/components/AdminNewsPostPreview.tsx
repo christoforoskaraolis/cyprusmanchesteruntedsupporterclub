@@ -24,6 +24,7 @@ export function AdminNewsPostPreview({
       'Your news content will appear here as a short excerpt on the cards. The full text opens when members tap Read.',
     imageUrl,
     imageUrlMobile,
+    bodyPhotos: [],
     publishedAt,
     updatedAt: publishedAt,
   }

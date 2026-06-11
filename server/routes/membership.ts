@@ -4,6 +4,7 @@ import { query } from '../db.ts'
 import { asyncHandler } from '../lib/asyncHandler.ts'
 import { HttpError, badRequest, notFound } from '../lib/errors.ts'
 import { sendMembershipActivationEmail } from '../lib/membershipActivationEmail.ts'
+import { sendMembershipPaymentReminderEmail } from '../lib/membershipPaymentReminderEmail.ts'
 import { parseOfficialMuMembershipFields } from '../lib/officialMuMembership.ts'
 import { requireAdmin, requireUser } from '../middleware/auth.ts'
 
@@ -487,6 +488,40 @@ membershipRouter.put(
     }
 
     res.json({ ok: true, activationEmailStatus })
+  }),
+)
+
+membershipRouter.post(
+  '/applications/:applicationId/payment-reminder',
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const applicationId = String(req.params.applicationId ?? '').trim()
+    if (!applicationId) throw badRequest('Application ID is required')
+
+    const { rows } = await query<{
+      status: string
+      profile_email: string | null
+      auth_email: string | null
+    }>(
+      `select ma.status, p.email as profile_email, au.email as auth_email
+       from public.membership_applications ma
+       left join public.profiles p on p.id = ma.user_id
+       left join public.auth_users au on au.user_id = ma.user_id
+       where ma.application_id = $1
+       limit 1`,
+      [applicationId],
+    )
+    const application = rows[0]
+    if (!application) throw notFound('Application not found')
+    if (application.status !== 'pending') {
+      throw badRequest('Payment reminder can only be sent for pending registrations.')
+    }
+
+    const to = (application.profile_email || application.auth_email || '').trim()
+    if (!to) throw badRequest('No email address on file for this member.')
+
+    await sendMembershipPaymentReminderEmail({ to })
+    res.json({ ok: true })
   }),
 )
 

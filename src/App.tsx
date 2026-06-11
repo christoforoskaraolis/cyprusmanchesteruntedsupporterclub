@@ -30,6 +30,7 @@ import {
   type OfficialMuMembershipStatus,
   insertMembershipApplication,
   insertRenewalRequest,
+  sendPaymentReminderEmail,
   setApplicationStatus,
   updateApplicationMemberId,
   updateApplicationMembershipNumber,
@@ -44,7 +45,6 @@ import {
   fetchNewsPosts,
   insertNewsPost,
   newsDesktopImage,
-  newsMobileImage,
   type NewsPost,
   type NewsPostPayload,
   updateNewsPost,
@@ -727,25 +727,26 @@ function NewsDetailModal({ post, open, onClose }: NewsDetailModalProps) {
         <p className="news-detail-modal-date">
           Published: {new Date(post.publishedAt).toLocaleString('en-GB', { dateStyle: 'long', timeStyle: 'short' })}
         </p>
-        {(newsDesktopImage(post) || newsMobileImage(post)) && (
-          <div className="news-detail-modal-visual">
-            {newsDesktopImage(post) && (
+        <div className="news-detail-modal-scroll">
+          <div className="news-detail-modal-body">{post.body}</div>
+          {post.bodyPhotos.length > 0 ? (
+            <ul className="news-detail-modal-gallery" aria-label="Article photos">
+              {post.bodyPhotos.map((src, index) => (
+                <li key={`${index}-${src.slice(0, 24)}`}>
+                  <img src={src} alt="" className="news-detail-modal-gallery-img" />
+                </li>
+              ))}
+            </ul>
+          ) : newsDesktopImage(post) ? (
+            <div className="news-detail-modal-visual">
               <img
                 src={newsDesktopImage(post)!}
                 alt=""
                 className="news-detail-modal-img news-detail-modal-img--desktop"
               />
-            )}
-            {newsMobileImage(post) && (
-              <img
-                src={newsMobileImage(post)!}
-                alt=""
-                className="news-detail-modal-img news-detail-modal-img--mobile"
-              />
-            )}
-          </div>
-        )}
-        <div className="news-detail-modal-body">{post.body}</div>
+            </div>
+          ) : null}
+        </div>
         <div className="renewal-modal-actions">
           <button type="button" className="mycmusc-reg-btn mycmusc-reg-btn--primary" onClick={onClose}>
             Close
@@ -898,12 +899,94 @@ function TicketCompletionModal({
   )
 }
 
+type PaymentReminderConfirmModalProps = {
+  open: boolean
+  memberLabel: string | null
+  submitting: boolean
+  error: string | null
+  onClose: () => void
+  onConfirm: () => void
+}
+
+function PaymentReminderConfirmModal({
+  open,
+  memberLabel,
+  submitting,
+  error,
+  onClose,
+  onConfirm,
+}: PaymentReminderConfirmModalProps) {
+  if (!open) return null
+
+  return (
+    <div
+      className="renewal-modal-root"
+      role="presentation"
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget && !submitting) onClose()
+      }}
+    >
+      <div
+        className="renewal-modal-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="payment-reminder-modal-title"
+      >
+        <div className="renewal-modal-head">
+          <h2 id="payment-reminder-modal-title" className="renewal-modal-title">
+            Payment Reminder
+          </h2>
+          <button
+            type="button"
+            className="renewal-modal-close"
+            onClick={onClose}
+            disabled={submitting}
+            aria-label="Close"
+          >
+            ×
+          </button>
+        </div>
+        <p className="renewal-modal-lead">
+          Are you sure you want to send reminder payment email to the member
+          {memberLabel ? (
+            <>
+              {' '}
+              <strong>{memberLabel}</strong>
+            </>
+          ) : null}
+          ?
+        </p>
+        {error && <p className="auth-message is-error renewal-modal-error">{error}</p>}
+        <div className="renewal-modal-actions">
+          <button
+            type="button"
+            className="mycmusc-reg-btn mycmusc-reg-btn--secondary"
+            onClick={onClose}
+            disabled={submitting}
+          >
+            No
+          </button>
+          <button
+            type="button"
+            className="mycmusc-reg-btn mycmusc-reg-btn--primary"
+            onClick={() => void onConfirm()}
+            disabled={submitting}
+          >
+            {submitting ? 'Sending…' : 'Yes'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 type AdminConsoleProps = {
   memberRegistry: MemberRegistryEntry[]
   loading: boolean
   pendingRenewals: PendingRenewalListRow[]
   pendingTicketRequests: AdminFixtureTicketRequest[]
   onActivate: (applicationId: string) => Promise<string | null>
+  onSendPaymentReminder: (applicationId: string) => Promise<void>
   onSetPending: (applicationId: string) => Promise<void>
   onDeleteMemberRequest: (applicationId: string) => Promise<void>
   onUpdateMemberId: (
@@ -963,6 +1046,7 @@ function AdminConsole({
   pendingRenewals,
   pendingTicketRequests,
   onActivate,
+  onSendPaymentReminder,
   onSetPending,
   onDeleteMemberRequest,
   onUpdateMemberId,
@@ -1015,6 +1099,7 @@ function AdminConsole({
   const [newsBody, setNewsBody] = useState('')
   const [newsImageUrl, setNewsImageUrl] = useState('')
   const [newsImageUrlMobile, setNewsImageUrlMobile] = useState('')
+  const [newsBodyPhotos, setNewsBodyPhotos] = useState<string[]>([])
   const [newsPublishedAt, setNewsPublishedAt] = useState('')
   const [editingNewsId, setEditingNewsId] = useState<string | null>(null)
   const [busyNewsId, setBusyNewsId] = useState<string | null>(null)
@@ -1053,6 +1138,9 @@ function AdminConsole({
   const [membershipNumberDraftByApplicationId, setMembershipNumberDraftByApplicationId] = useState<Record<string, string>>({})
   const [memberActionError, setMemberActionError] = useState<string | null>(null)
   const [memberActionNotice, setMemberActionNotice] = useState<string | null>(null)
+  const [paymentReminderTarget, setPaymentReminderTarget] = useState<MemberRegistryEntry | null>(null)
+  const [paymentReminderSubmitting, setPaymentReminderSubmitting] = useState(false)
+  const [paymentReminderError, setPaymentReminderError] = useState<string | null>(null)
   const pendingMembersCount = memberRegistry.filter((member) => member.status === 'pending').length
   const activeMembersCount = memberRegistry.filter((member) => member.status === 'active').length
   const pendingOrdersCount = merchandiseOrders.filter((order) => order.status === 'pending').length
@@ -1268,6 +1356,25 @@ function AdminConsole({
     } catch (e) {
       setNewsError(e instanceof Error ? e.message : 'Could not process image.')
     }
+  }
+
+  async function onPickNewsBodyPhotos(files: FileList | null) {
+    if (!files?.length) return
+    const next: string[] = []
+    for (const file of Array.from(files)) {
+      if (!file.type.startsWith('image/')) {
+        setNewsError('Please choose image files only.')
+        return
+      }
+      try {
+        next.push(await resizeImageFileToJpegDataUrl(file, { maxEdge: 1600, quality: 0.88 }))
+      } catch (e) {
+        setNewsError(e instanceof Error ? e.message : 'Could not process image.')
+        return
+      }
+    }
+    setNewsBodyPhotos((prev) => [...prev, ...next])
+    setNewsError(null)
   }
 
   return (
@@ -1575,28 +1682,41 @@ function AdminConsole({
               )}
               <div className="admin-member-actions">
                 {m.status === 'pending' ? (
-                  <button
-                    type="button"
-                    className="board-admin-activate"
-                    disabled={busyId !== null}
-                    onClick={async () => {
-                      setMemberActionError(null)
-                      setMemberActionNotice(null)
-                      setBusyId(m.applicationId)
-                      try {
-                        const notice = await onActivate(m.applicationId)
-                        if (notice) setMemberActionNotice(notice)
-                      } catch (error) {
-                        setMemberActionError(
-                          error instanceof Error ? error.message : 'Could not activate membership.',
-                        )
-                      } finally {
-                        setBusyId(null)
-                      }
-                    }}
-                  >
-                    {busyId === m.applicationId ? 'Updating…' : 'Activate membership'}
-                  </button>
+                  <>
+                    <button
+                      type="button"
+                      className="board-admin-activate"
+                      disabled={busyId !== null}
+                      onClick={async () => {
+                        setMemberActionError(null)
+                        setMemberActionNotice(null)
+                        setBusyId(m.applicationId)
+                        try {
+                          const notice = await onActivate(m.applicationId)
+                          if (notice) setMemberActionNotice(notice)
+                        } catch (error) {
+                          setMemberActionError(
+                            error instanceof Error ? error.message : 'Could not activate membership.',
+                          )
+                        } finally {
+                          setBusyId(null)
+                        }
+                      }}
+                    >
+                      {busyId === m.applicationId ? 'Updating…' : 'Activate membership'}
+                    </button>
+                    <button
+                      type="button"
+                      className="admin-payment-reminder-btn"
+                      disabled={busyId !== null || paymentReminderSubmitting}
+                      onClick={() => {
+                        setPaymentReminderError(null)
+                        setPaymentReminderTarget(m)
+                      }}
+                    >
+                      Payment Reminder
+                    </button>
+                  </>
                 ) : (
                   <button
                     type="button"
@@ -2026,13 +2146,14 @@ function AdminConsole({
               const body = newsBody.trim()
               const imageUrl = newsImageUrl.trim() || null
               const imageUrlMobile = newsImageUrlMobile.trim() || null
+              const bodyPhotos = newsBodyPhotos
               const publishedAt = newsPublishedAt ? new Date(newsPublishedAt).toISOString() : new Date().toISOString()
               if (!title || !body) {
                 setNewsError('Title and content are required.')
                 return
               }
               try {
-                const payload = { title, body, imageUrl, imageUrlMobile, publishedAt }
+                const payload = { title, body, imageUrl, imageUrlMobile, bodyPhotos, publishedAt }
                 if (editingNewsId) {
                   await onUpdateNews(editingNewsId, payload)
                 } else {
@@ -2042,6 +2163,7 @@ function AdminConsole({
                 setNewsBody('')
                 setNewsImageUrl('')
                 setNewsImageUrlMobile('')
+                setNewsBodyPhotos([])
                 setNewsPublishedAt('')
                 setEditingNewsId(null)
               } catch (err) {
@@ -2113,6 +2235,40 @@ function AdminConsole({
                 />
               </label>
             </div>
+            <div className="admin-news-photo-block">
+              <h4 className="admin-news-photo-block-title">Article photos (full post)</h4>
+              <p className="admin-news-image-hint">
+                These photos appear inside the full article when members open the post — separate from the preview
+                images above. You can add multiple photos.
+              </p>
+              <label className="admin-news-date-row">
+                <span>Upload photos</span>
+                <input
+                  className="auth-input"
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  onChange={(e) => void onPickNewsBodyPhotos(e.target.files)}
+                />
+              </label>
+              {newsBodyPhotos.length > 0 && (
+                <ul className="merch-admin-photo-strip">
+                  {newsBodyPhotos.map((src, i) => (
+                    <li key={`${i}-${src.slice(0, 24)}`} className="merch-admin-photo-tile">
+                      <img src={src} alt="" className="merch-admin-photo-img" />
+                      <button
+                        type="button"
+                        className="merch-admin-photo-remove"
+                        onClick={() => setNewsBodyPhotos((prev) => prev.filter((_, j) => j !== i))}
+                        aria-label="Remove photo"
+                      >
+                        ×
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
             <AdminNewsPostPreview
               title={newsTitle}
               body={newsBody}
@@ -2148,6 +2304,7 @@ function AdminConsole({
                     setNewsBody('')
                     setNewsImageUrl('')
                     setNewsImageUrlMobile('')
+                    setNewsBodyPhotos([])
                     setNewsPublishedAt('')
                     setNewsError(null)
                   }}
@@ -2182,6 +2339,7 @@ function AdminConsole({
                         setNewsBody(n.body)
                         setNewsImageUrl(n.imageUrl ?? '')
                         setNewsImageUrlMobile(n.imageUrlMobile ?? '')
+                        setNewsBodyPhotos(n.bodyPhotos ?? [])
                         setNewsPublishedAt(new Date(n.publishedAt).toISOString().slice(0, 16))
                         setNewsError(null)
                       }}
@@ -3023,6 +3181,42 @@ function AdminConsole({
       )}
         </div>
       </div>
+      <PaymentReminderConfirmModal
+        open={paymentReminderTarget !== null}
+        memberLabel={
+          paymentReminderTarget
+            ? [paymentReminderTarget.firstName, paymentReminderTarget.lastName].filter(Boolean).join(' ') ||
+              paymentReminderTarget.email ||
+              null
+            : null
+        }
+        submitting={paymentReminderSubmitting}
+        error={paymentReminderError}
+        onClose={() => {
+          if (paymentReminderSubmitting) return
+          setPaymentReminderTarget(null)
+          setPaymentReminderError(null)
+        }}
+        onConfirm={async () => {
+          if (!paymentReminderTarget) return
+          setMemberActionError(null)
+          setMemberActionNotice(null)
+          setPaymentReminderSubmitting(true)
+          setPaymentReminderError(null)
+          try {
+            await onSendPaymentReminder(paymentReminderTarget.applicationId)
+            const recipient = paymentReminderTarget.email || 'the member'
+            setMemberActionNotice(`Payment reminder email sent to ${recipient}.`)
+            setPaymentReminderTarget(null)
+          } catch (error) {
+            setPaymentReminderError(
+              error instanceof Error ? error.message : 'Could not send payment reminder email.',
+            )
+          } finally {
+            setPaymentReminderSubmitting(false)
+          }
+        }}
+      />
     </div>
   )
 }
@@ -4223,6 +4417,11 @@ function App() {
     return `Membership activated. ${formatActivationEmailStatus(noticeEntry)}`
   }
 
+  async function applySendPaymentReminder(applicationId: string) {
+    const { error } = await sendPaymentReminderEmail(applicationId)
+    if (error) throw new Error(error.message)
+  }
+
   async function applySetMembershipPending(applicationId: string) {
     const { error } = await setApplicationStatus(applicationId, 'pending')
     if (error) throw new Error(error.message)
@@ -4910,6 +5109,7 @@ function App() {
               pendingRenewals={pendingRenewals}
               pendingTicketRequests={pendingTicketRequests}
               onActivate={applyActivateMembership}
+              onSendPaymentReminder={applySendPaymentReminder}
               onSetPending={applySetMembershipPending}
               onDeleteMemberRequest={applyDeleteMemberRequest}
               onUpdateMemberId={applyUpdateMemberId}
