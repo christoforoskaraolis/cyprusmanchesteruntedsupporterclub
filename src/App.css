@@ -3702,6 +3702,30 @@
   padding: 0.65rem 0.75rem;
 }
 
+.mycmusc-family-official-teaser {
+  margin-top: 0.85rem;
+  padding: 0.85rem 0.95rem;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: linear-gradient(180deg, #fff8f8 0%, #ffffff 100%);
+}
+
+.mycmusc-family-official-teaser-eyebrow {
+  margin: 0 0 0.35rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--mu-red);
+}
+
+.mycmusc-family-official-teaser-lead {
+  margin: 0 0 0.75rem;
+  font-size: 0.88rem;
+  line-height: 1.5;
+  color: var(--text);
+}
+
 .mycmusc-family-list-actions {
   display: flex;
   flex-wrap: wrap;

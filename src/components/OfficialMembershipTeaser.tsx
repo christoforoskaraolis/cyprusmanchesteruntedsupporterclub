@@ -4,6 +4,7 @@ import {
 } from '../lib/membershipApi.ts'
 import type { MemberRegistryEntry } from '../lib/membershipApi.ts'
 import type { OfficialMembershipRequest } from '../lib/officialMembershipsApi.ts'
+import { shouldShowOfficialMembershipRegistration } from '../lib/officialMembershipHelpers.ts'
 
 type OfficialMembershipTeaserProps = {
   membershipRecord: MemberRegistryEntry
@@ -17,7 +18,13 @@ export function OfficialMembershipTeaser({
   onOpenRequestPage,
 }: OfficialMembershipTeaserProps) {
   const isActivated = membershipRecord.officialMuMembershipStatus === 'activated'
-  const pendingRequest = myOfficialRequests.find((r) => r.status === 'pending')
+  const pendingRequest = myOfficialRequests.find(
+    (r) => r.status === 'pending' && r.membershipApplicationId === membershipRecord.applicationId,
+  )
+
+  if (!shouldShowOfficialMembershipRegistration(membershipRecord, myOfficialRequests)) {
+    return null
+  }
 
   return (
     <section className="mycmusc-profile-card official-membership-teaser" aria-label="Official Manchester United membership">

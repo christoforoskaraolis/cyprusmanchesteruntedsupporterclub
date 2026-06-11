@@ -110,6 +110,7 @@ import {
   MembershipPendingView,
   OptionalOfficialMembershipPicker,
 } from './components/MembershipRegistrationPayment.tsx'
+import { FamilyOfficialMembershipTeaser } from './components/FamilyOfficialMembershipTeaser.tsx'
 import { OfficialMembershipRequestSection } from './components/OfficialMembershipRequestSection.tsx'
 import { OfficialMembershipTeaser } from './components/OfficialMembershipTeaser.tsx'
 import { NewsPushBell } from './components/NewsPushBell.tsx'
@@ -3512,6 +3513,7 @@ function App() {
   const [showCyprusMembershipForm, setShowCyprusMembershipForm] = useState(false)
   const [showFamilyMemberForm, setShowFamilyMemberForm] = useState(false)
   const [familyMembers, setFamilyMembers] = useState<MemberRegistryEntry[]>([])
+  const [officialMembershipApplicationId, setOfficialMembershipApplicationId] = useState<string | null>(null)
   const [familyPendingRecord, setFamilyPendingRecord] = useState<MemberRegistryEntry | null>(null)
   const [familyDetailApplicationId, setFamilyDetailApplicationId] = useState<string | null>(null)
   const [familyEditApplicationId, setFamilyEditApplicationId] = useState<string | null>(null)
@@ -3586,6 +3588,11 @@ function App() {
 
   const isMembershipActive = membershipRecord?.status === 'active'
   const isMembershipPending = membershipRecord?.status === 'pending'
+  const officialMembershipFamilyMember = useMemo(() => {
+    if (!officialMembershipApplicationId || !membershipRecord) return null
+    if (officialMembershipApplicationId === membershipRecord.applicationId) return null
+    return familyMembers.find((fm) => fm.applicationId === officialMembershipApplicationId) ?? null
+  }, [officialMembershipApplicationId, membershipRecord, familyMembers])
   /** Match ticket requests are available only to active members. */
   const showMatchTickets = Boolean(user?.id && isMembershipActive)
   /** Merchandise is available to any signed-in user. */
@@ -4298,6 +4305,9 @@ function App() {
       setFamilyDetailApplicationId(null)
       setFamilyEditApplicationId(null)
       setFamilyEditError(null)
+    }
+    if (activePage !== 'official-membership') {
+      setOfficialMembershipApplicationId(null)
     }
   }, [activePage])
 
@@ -5881,10 +5891,20 @@ function App() {
                 officialOffers={officialOffers}
                 officialOffersLoading={officialOffersLoading}
                 myOfficialRequests={myOfficialRequests}
-                membershipApplicationId={membershipRecord.applicationId}
+                membershipApplicationId={
+                  officialMembershipApplicationId ?? membershipRecord.applicationId
+                }
+                familyMemberLabel={
+                  officialMembershipFamilyMember
+                    ? `${officialMembershipFamilyMember.firstName} ${officialMembershipFamilyMember.lastName}`.trim()
+                    : null
+                }
                 onRefreshRequests={loadMyOfficialRequests}
                 returnPath="/official-membership"
-                onBack={() => openPage('mycmusc')}
+                onBack={() => {
+                  setOfficialMembershipApplicationId(null)
+                  openPage('mycmusc')
+                }}
               />
             ) : (
               <>
@@ -6182,6 +6202,14 @@ function App() {
                                 </span>
                               </div>
                             </div>
+                            <FamilyOfficialMembershipTeaser
+                              familyMember={fm}
+                              myOfficialRequests={myOfficialRequests}
+                              onRegister={() => {
+                                setOfficialMembershipApplicationId(fm.applicationId)
+                                openPage('official-membership')
+                              }}
+                            />
                             <div className="mycmusc-family-list-actions">
                               <button
                                 type="button"
@@ -6434,7 +6462,10 @@ function App() {
                 <OfficialMembershipTeaser
                   membershipRecord={membershipRecord}
                   myOfficialRequests={myOfficialRequests}
-                  onOpenRequestPage={() => openPage('official-membership')}
+                  onOpenRequestPage={() => {
+                    setOfficialMembershipApplicationId(null)
+                    openPage('official-membership')
+                  }}
                 />
 
                 <RenewMembershipModal
@@ -6467,7 +6498,10 @@ function App() {
                 <OfficialMembershipTeaser
                   membershipRecord={membershipRecord}
                   myOfficialRequests={myOfficialRequests}
-                  onOpenRequestPage={() => openPage('official-membership')}
+                  onOpenRequestPage={() => {
+                    setOfficialMembershipApplicationId(null)
+                    openPage('official-membership')
+                  }}
                 />
               </>
             ) : showCyprusMembershipForm ? (

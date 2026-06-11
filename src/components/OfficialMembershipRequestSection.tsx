@@ -14,6 +14,8 @@ type OfficialMembershipRequestSectionProps = {
   onRefreshRequests: () => Promise<void>
   returnPath?: string
   onBack?: () => void
+  /** When set, copy reflects a family member request (family members only). */
+  familyMemberLabel?: string | null
 }
 
 export function OfficialMembershipRequestSection({
@@ -24,6 +26,7 @@ export function OfficialMembershipRequestSection({
   onRefreshRequests,
   returnPath = '/mycmusc',
   onBack,
+  familyMemberLabel = null,
 }: OfficialMembershipRequestSectionProps) {
   const [selectedOfferId, setSelectedOfferId] = useState('')
   const [submitting, setSubmitting] = useState(false)
@@ -31,7 +34,11 @@ export function OfficialMembershipRequestSection({
   const [paymentOfferId, setPaymentOfferId] = useState<string | null>(null)
 
   const offerById = new Map(officialOffers.map((o) => [o.id, o]))
-  const pendingRequest = myOfficialRequests.find((r) => r.status === 'pending')
+  const scopedRequests = membershipApplicationId
+    ? myOfficialRequests.filter((r) => r.membershipApplicationId === membershipApplicationId)
+    : myOfficialRequests
+  const pendingRequest = scopedRequests.find((r) => r.status === 'pending')
+  const isFamilyMemberFlow = Boolean(familyMemberLabel?.trim())
 
   return (
     <section className="mycmusc-profile-card official-membership-page-panel" aria-label="Official Manchester United membership">
@@ -41,10 +48,20 @@ export function OfficialMembershipRequestSection({
         </button>
       )}
       <h2 className="mycmusc-profile-card-title">Official Manchester United membership</h2>
-      <p className="section-lead mycmusc-reg-lead">
-        Get or renew your official Manchester United membership. Select a package, submit your request, then pay
-        using the details below.
-      </p>
+      {isFamilyMemberFlow ? (
+        <>
+          <p className="mycmusc-family-official-teaser-eyebrow">Family members only</p>
+          <p className="section-lead mycmusc-reg-lead">
+            Register official Manchester United membership for <strong>{familyMemberLabel}</strong>. This page is for
+            family members on your account only — not for your own membership.
+          </p>
+        </>
+      ) : (
+        <p className="section-lead mycmusc-reg-lead">
+          Get or renew your official Manchester United membership. Select a package, submit your request, then pay using
+          the details below.
+        </p>
+      )}
 
       {officialOffersLoading ? (
         <p className="section-lead merch-shelf-msg merch-shelf-msg--loading">Loading official memberships…</p>
@@ -146,13 +163,13 @@ export function OfficialMembershipRequestSection({
         </>
       )}
 
-      {myOfficialRequests.length > 0 && (
+      {scopedRequests.length > 0 && (
         <section className="merch-orders" aria-labelledby="official-requests-heading" style={{ marginTop: '1rem' }}>
           <h3 id="official-requests-heading" className="merch-orders-title">
-            Your official membership requests
+            {isFamilyMemberFlow ? 'Official membership requests for this family member' : 'Your official membership requests'}
           </h3>
           <ul className="merch-orders-list">
-            {myOfficialRequests.map((row) => {
+            {scopedRequests.map((row) => {
               const offer = offerById.get(row.offerId)
               return (
                 <li key={row.id} className="merch-order-card">
