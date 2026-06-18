@@ -1230,10 +1230,10 @@ function AdminConsole({
       'Valid Until',
       'Present Received',
       'Present Received At',
-      'Member',
-      'Member At',
-      'Send Microsite',
-      'Send Microsite At',
+      'Purchased Membership',
+      'Purchased Membership At',
+      'Registered to Microsite',
+      'Registered to Microsite At',
     ]
     const rows = memberRegistry.map((m) => [
       m.applicationId,
@@ -1707,14 +1707,14 @@ function AdminConsole({
                           await onUpdateAdminMemberFlags(m.applicationId, { member: e.target.checked })
                         } catch (error) {
                           setMemberActionError(
-                            error instanceof Error ? error.message : 'Could not update member flag.',
+                            error instanceof Error ? error.message : 'Could not update purchased membership.',
                           )
                         } finally {
                           setBusyId(null)
                         }
                       }}
                     />
-                    Member
+                    Purchased Membership
                     {m.adminMemberAt && (
                       <span className="admin-present-received-at">
                         · {new Date(m.adminMemberAt).toLocaleString('en-GB')}
@@ -1733,14 +1733,14 @@ function AdminConsole({
                           await onUpdateAdminMemberFlags(m.applicationId, { sendMicrosite: e.target.checked })
                         } catch (error) {
                           setMemberActionError(
-                            error instanceof Error ? error.message : 'Could not update send microsite flag.',
+                            error instanceof Error ? error.message : 'Could not update microsite registration.',
                           )
                         } finally {
                           setBusyId(null)
                         }
                       }}
                     />
-                    Send microsite
+                    Registered to Microsite
                     {m.adminSendMicrositeAt && (
                       <span className="admin-present-received-at">
                         · {new Date(m.adminSendMicrositeAt).toLocaleString('en-GB')}

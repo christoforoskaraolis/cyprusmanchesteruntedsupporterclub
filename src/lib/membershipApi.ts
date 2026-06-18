@@ -110,10 +110,10 @@ export type MemberRegistryEntry = {
   /** Admin: welcome/membership present handed to member. */
   presentReceived: boolean
   presentReceivedAt: string | null
-  /** Admin: member flag for microsite workflow. */
+  /** Admin: purchased membership tracked for active members. */
   adminMember: boolean
   adminMemberAt: string | null
-  /** Admin: send microsite flag. */
+  /** Admin: registered to microsite. */
   adminSendMicrosite: boolean
   adminSendMicrositeAt: string | null
 }
