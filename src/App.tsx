@@ -35,6 +35,7 @@ import {
   updateApplicationMemberId,
   updateApplicationMembershipNumber,
   updateApplicationPresentReceived,
+  updateApplicationAdminMemberFlags,
   updateFamilyMemberDetails,
   updateMyProfileDetails,
 } from './lib/membershipApi.ts'
@@ -997,6 +998,10 @@ type AdminConsoleProps = {
   ) => Promise<void>
   onUpdateMembershipNumber: (applicationId: string, membershipNumber: number | null) => Promise<void>
   onUpdatePresentReceived: (applicationId: string, presentReceived: boolean) => Promise<void>
+  onUpdateAdminMemberFlags: (
+    applicationId: string,
+    flags: { member?: boolean; sendMicrosite?: boolean },
+  ) => Promise<void>
   onCompleteRenewal: (row: PendingRenewalListRow) => Promise<void>
   onApproveTicketRequest: (row: AdminFixtureTicketRequest) => Promise<void>
   onCompleteTicketRequest: (row: AdminFixtureTicketRequest) => Promise<void>
@@ -1053,6 +1058,7 @@ function AdminConsole({
   onUpdateMemberId,
   onUpdateMembershipNumber,
   onUpdatePresentReceived,
+  onUpdateAdminMemberFlags,
   onCompleteRenewal,
   onApproveTicketRequest,
   onCompleteTicketRequest,
@@ -1224,6 +1230,10 @@ function AdminConsole({
       'Valid Until',
       'Present Received',
       'Present Received At',
+      'Member',
+      'Member At',
+      'Send Microsite',
+      'Send Microsite At',
     ]
     const rows = memberRegistry.map((m) => [
       m.applicationId,
@@ -1247,6 +1257,10 @@ function AdminConsole({
       m.validUntil ?? '',
       m.presentReceived ? 'yes' : 'no',
       m.presentReceivedAt ?? '',
+      m.adminMember ? 'yes' : 'no',
+      m.adminMemberAt ?? '',
+      m.adminSendMicrosite ? 'yes' : 'no',
+      m.adminSendMicrositeAt ?? '',
     ])
     downloadCsv(`members-report-${reportStamp()}.csv`, headers, rows)
   }
@@ -1654,32 +1668,86 @@ function AdminConsole({
                 )}
               </p>
               {m.status === 'active' && (
-                <label className="admin-present-received">
-                  <input
-                    type="checkbox"
-                    checked={m.presentReceived}
-                    disabled={busyId !== null}
-                    onChange={async (e) => {
-                      setMemberActionError(null)
-                      setBusyId(m.applicationId)
-                      try {
-                        await onUpdatePresentReceived(m.applicationId, e.target.checked)
-                      } catch (error) {
-                        setMemberActionError(
-                          error instanceof Error ? error.message : 'Could not update present status.',
-                        )
-                      } finally {
-                        setBusyId(null)
-                      }
-                    }}
-                  />
-                  Present received
-                  {m.presentReceivedAt && (
-                    <span className="admin-present-received-at">
-                      · {new Date(m.presentReceivedAt).toLocaleString('en-GB')}
-                    </span>
-                  )}
-                </label>
+                <div className="admin-member-flag-row">
+                  <label className="admin-present-received">
+                    <input
+                      type="checkbox"
+                      checked={m.presentReceived}
+                      disabled={busyId !== null}
+                      onChange={async (e) => {
+                        setMemberActionError(null)
+                        setBusyId(m.applicationId)
+                        try {
+                          await onUpdatePresentReceived(m.applicationId, e.target.checked)
+                        } catch (error) {
+                          setMemberActionError(
+                            error instanceof Error ? error.message : 'Could not update present status.',
+                          )
+                        } finally {
+                          setBusyId(null)
+                        }
+                      }}
+                    />
+                    Present received
+                    {m.presentReceivedAt && (
+                      <span className="admin-present-received-at">
+                        · {new Date(m.presentReceivedAt).toLocaleString('en-GB')}
+                      </span>
+                    )}
+                  </label>
+                  <label className="admin-present-received">
+                    <input
+                      type="checkbox"
+                      checked={m.adminMember}
+                      disabled={busyId !== null}
+                      onChange={async (e) => {
+                        setMemberActionError(null)
+                        setBusyId(m.applicationId)
+                        try {
+                          await onUpdateAdminMemberFlags(m.applicationId, { member: e.target.checked })
+                        } catch (error) {
+                          setMemberActionError(
+                            error instanceof Error ? error.message : 'Could not update member flag.',
+                          )
+                        } finally {
+                          setBusyId(null)
+                        }
+                      }}
+                    />
+                    Member
+                    {m.adminMemberAt && (
+                      <span className="admin-present-received-at">
+                        · {new Date(m.adminMemberAt).toLocaleString('en-GB')}
+                      </span>
+                    )}
+                  </label>
+                  <label className="admin-present-received">
+                    <input
+                      type="checkbox"
+                      checked={m.adminSendMicrosite}
+                      disabled={busyId !== null}
+                      onChange={async (e) => {
+                        setMemberActionError(null)
+                        setBusyId(m.applicationId)
+                        try {
+                          await onUpdateAdminMemberFlags(m.applicationId, { sendMicrosite: e.target.checked })
+                        } catch (error) {
+                          setMemberActionError(
+                            error instanceof Error ? error.message : 'Could not update send microsite flag.',
+                          )
+                        } finally {
+                          setBusyId(null)
+                        }
+                      }}
+                    />
+                    Send microsite
+                    {m.adminSendMicrositeAt && (
+                      <span className="admin-present-received-at">
+                        · {new Date(m.adminSendMicrositeAt).toLocaleString('en-GB')}
+                      </span>
+                    )}
+                  </label>
+                </div>
               )}
               <div className="admin-member-actions">
                 {m.status === 'pending' ? (
@@ -4393,6 +4461,10 @@ function App() {
       activationEmailError: null,
       presentReceived: false,
       presentReceivedAt: null,
+      adminMember: false,
+      adminMemberAt: null,
+      adminSendMicrosite: false,
+      adminSendMicrositeAt: null,
     })
     await refreshMyMembership()
     await loadMyOfficialRequests()
@@ -4483,6 +4555,31 @@ function App() {
             }
           : m,
       ),
+    )
+    void reloadMemberRegistryOnly()
+  }
+
+  async function applyUpdateAdminMemberFlags(
+    applicationId: string,
+    flags: { member?: boolean; sendMicrosite?: boolean },
+  ) {
+    const { error } = await updateApplicationAdminMemberFlags(applicationId, flags)
+    if (error) throw new Error(error.message)
+    const now = new Date().toISOString()
+    setMemberRegistry((prev) =>
+      prev.map((m) => {
+        if (m.applicationId !== applicationId) return m
+        const updated = { ...m }
+        if (flags.member !== undefined) {
+          updated.adminMember = flags.member
+          updated.adminMemberAt = flags.member ? now : null
+        }
+        if (flags.sendMicrosite !== undefined) {
+          updated.adminSendMicrosite = flags.sendMicrosite
+          updated.adminSendMicrositeAt = flags.sendMicrosite ? now : null
+        }
+        return updated
+      }),
     )
     void reloadMemberRegistryOnly()
   }
@@ -5125,6 +5222,7 @@ function App() {
               onUpdateMemberId={applyUpdateMemberId}
               onUpdateMembershipNumber={applyUpdateMembershipNumber}
               onUpdatePresentReceived={applyUpdatePresentReceived}
+              onUpdateAdminMemberFlags={applyUpdateAdminMemberFlags}
               onCompleteRenewal={applyCompleteRenewal}
               onApproveTicketRequest={applyApproveTicketRequest}
               onCompleteTicketRequest={applyCompleteTicketRequest}

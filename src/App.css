@@ -2607,6 +2607,14 @@
   font-size: 0.78rem;
 }
 
+.admin-member-flag-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem 1.35rem;
+  margin: 0.35rem 0 0.5rem;
+}
+
 .admin-member-actions {
   display: flex;
   flex-wrap: wrap;

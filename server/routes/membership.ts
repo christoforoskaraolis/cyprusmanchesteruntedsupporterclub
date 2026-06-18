@@ -587,6 +587,60 @@ membershipRouter.put(
 )
 
 membershipRouter.put(
+  '/applications/:applicationId/admin-member-flags',
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const applicationId = String(req.params.applicationId ?? '').trim()
+    if (!applicationId) throw badRequest('Application ID is required')
+
+    const body = req.body as { member?: unknown; sendMicrosite?: unknown }
+    const hasMember = Object.prototype.hasOwnProperty.call(body, 'member')
+    const hasSendMicrosite = Object.prototype.hasOwnProperty.call(body, 'sendMicrosite')
+    if (!hasMember && !hasSendMicrosite) {
+      throw badRequest('At least one of member or sendMicrosite is required')
+    }
+
+    const member = hasMember ? body.member === true : null
+    const sendMicrosite = hasSendMicrosite ? body.sendMicrosite === true : null
+
+    const { rows } = await query<{
+      application_id: string
+      admin_member: boolean
+      admin_member_at: string | null
+      admin_send_microsite: boolean
+      admin_send_microsite_at: string | null
+    }>(
+      `update public.membership_applications
+       set admin_member = coalesce($1, admin_member),
+           admin_member_at = case
+             when $1 is null then admin_member_at
+             when $1 then now()
+             else null
+           end,
+           admin_send_microsite = coalesce($2, admin_send_microsite),
+           admin_send_microsite_at = case
+             when $2 is null then admin_send_microsite_at
+             when $2 then now()
+             else null
+           end
+       where application_id = $3
+       returning application_id, admin_member, admin_member_at, admin_send_microsite, admin_send_microsite_at`,
+      [member, sendMicrosite, applicationId],
+    )
+    if (rows.length === 0) throw notFound('Membership request not found')
+
+    const row = rows[0]
+    res.json({
+      ok: true,
+      member: row.admin_member,
+      memberAt: row.admin_member_at,
+      sendMicrosite: row.admin_send_microsite,
+      sendMicrositeAt: row.admin_send_microsite_at,
+    })
+  }),
+)
+
+membershipRouter.put(
   '/applications/:applicationId/membership-number',
   requireAdmin,
   asyncHandler(async (req, res) => {

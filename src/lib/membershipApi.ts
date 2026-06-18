@@ -110,6 +110,12 @@ export type MemberRegistryEntry = {
   /** Admin: welcome/membership present handed to member. */
   presentReceived: boolean
   presentReceivedAt: string | null
+  /** Admin: member flag for microsite workflow. */
+  adminMember: boolean
+  adminMemberAt: string | null
+  /** Admin: send microsite flag. */
+  adminSendMicrosite: boolean
+  adminSendMicrositeAt: string | null
 }
 
 export function formatActivationEmailStatus(entry: {
@@ -153,6 +159,10 @@ export type MemberApplicationPayload = Omit<
   | 'activationEmailError'
   | 'presentReceived'
   | 'presentReceivedAt'
+  | 'adminMember'
+  | 'adminMemberAt'
+  | 'adminSendMicrosite'
+  | 'adminSendMicrositeAt'
 >
 
 export type DbMembershipApplication = {
@@ -186,6 +196,10 @@ export type DbMembershipApplication = {
   activation_email_error?: string | null
   present_received?: boolean | null
   present_received_at?: string | null
+  admin_member?: boolean | null
+  admin_member_at?: string | null
+  admin_send_microsite?: boolean | null
+  admin_send_microsite_at?: string | null
 }
 
 export type DbRenewalRequest = {
@@ -255,6 +269,10 @@ export function dbRowToMemberEntry(row: DbMembershipApplication): MemberRegistry
     activationEmailError: row.activation_email_error ?? null,
     presentReceived: row.present_received === true,
     presentReceivedAt: row.present_received_at ?? null,
+    adminMember: row.admin_member === true,
+    adminMemberAt: row.admin_member_at ?? null,
+    adminSendMicrosite: row.admin_send_microsite === true,
+    adminSendMicrositeAt: row.admin_send_microsite_at ?? null,
   }
 }
 
@@ -423,6 +441,18 @@ export async function updateApplicationMembershipNumber(applicationId: string, m
 export async function updateApplicationPresentReceived(applicationId: string, presentReceived: boolean) {
   try {
     await apiSend(`/api/membership/applications/${applicationId}/present-received`, 'PUT', { presentReceived })
+    return { error: undefined }
+  } catch (error) {
+    return { error: asError(error) }
+  }
+}
+
+export async function updateApplicationAdminMemberFlags(
+  applicationId: string,
+  flags: { member?: boolean; sendMicrosite?: boolean },
+) {
+  try {
+    await apiSend(`/api/membership/applications/${applicationId}/admin-member-flags`, 'PUT', flags)
     return { error: undefined }
   } catch (error) {
     return { error: asError(error) }
