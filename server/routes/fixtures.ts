@@ -6,6 +6,37 @@ import { requireAdmin, requireUser } from '../middleware/auth.ts'
 
 export const fixturesRouter = Router()
 const MANUTD_ICS_URL = 'https://www.manutd.com/en/Manchester_United.ics'
+const MU_TEAM_PATTERN = '(?:Manchester United|Man Utd)'
+
+type ParsedFixtureSummary = {
+  opponent: string
+  home: boolean
+  competition?: string
+}
+
+function parseFixtureFromSummary(summary: string): ParsedFixtureSummary | null {
+  const clean = summary.replace(/\s+/g, ' ').trim()
+  let mainPart = clean
+  let competitionFromSummary: string | undefined
+
+  const dashIdx = clean.lastIndexOf(' - ')
+  if (dashIdx > 0) {
+    mainPart = clean.slice(0, dashIdx).trim()
+    competitionFromSummary = clean.slice(dashIdx + 3).trim()
+  }
+
+  const homeMatch = mainPart.match(new RegExp(`^${MU_TEAM_PATTERN}\\s+v(?:s)?\\.?\\s+(.+)$`, 'i'))
+  if (homeMatch) {
+    return { opponent: homeMatch[1].trim(), home: true, competition: competitionFromSummary }
+  }
+
+  const awayMatch = mainPart.match(new RegExp(`^(.+?)\\s+v(?:s)?\\.?\\s+${MU_TEAM_PATTERN}$`, 'i'))
+  if (awayMatch) {
+    return { opponent: awayMatch[1].trim(), home: false, competition: competitionFromSummary }
+  }
+
+  return null
+}
 
 type UpcomingFixture = {
   kickoffIso: string
@@ -36,15 +67,6 @@ function parseIcsDateToIso(raw: string): string | null {
   return Number.isNaN(dt.getTime()) ? null : dt.toISOString()
 }
 
-function parseFixtureFromSummary(summary: string): { opponent: string; home: boolean } | null {
-  const clean = summary.replace(/\s+/g, ' ').trim()
-  const vsMatch = clean.match(/Manchester United\s+v(?:s)?\s+(.+)/i)
-  if (vsMatch) return { opponent: vsMatch[1].trim(), home: true }
-  const awayMatch = clean.match(/(.+)\s+v(?:s)?\s+Manchester United/i)
-  if (awayMatch) return { opponent: awayMatch[1].trim(), home: false }
-  return null
-}
-
 function parseManUtdIcsFixtures(ics: string): UpcomingFixture[] {
   const events = ics.split('BEGIN:VEVENT').slice(1)
   const fixtures: UpcomingFixture[] = []
@@ -64,9 +86,13 @@ function parseManUtdIcsFixtures(ics: string): UpcomingFixture[] {
     if (!kickoffIso) continue
     const parsed = parseFixtureFromSummary(summary)
     if (!parsed) continue
+    const resolvedCompetition =
+      parsed.competition ??
+      competition.replace(/\\,/g, ',').trim() ??
+      'Match'
     fixtures.push({
       kickoffIso,
-      competition: competition.replace(/\\,/g, ',').trim(),
+      competition: resolvedCompetition || 'Match',
       opponent: parsed.opponent,
       home: parsed.home,
       venue: location.replace(/\\,/g, ',').trim() || (parsed.home ? 'Old Trafford' : 'Away'),
@@ -109,14 +135,23 @@ fixturesRouter.post(
   '/sync',
   requireAdmin,
   asyncHandler(async (req, res) => {
-    const urls = [MANUTD_ICS_URL, `https://api.allorigins.win/raw?url=${encodeURIComponent(MANUTD_ICS_URL)}`]
+    const urls = [MANUTD_ICS_URL]
+    let lastError: string | null = null
     for (const url of urls) {
       try {
-        const response = await fetch(url)
-        if (!response.ok) continue
+        const response = await fetch(url, {
+          headers: { 'User-Agent': 'CyprusMUSC-FixturesSync/1.0' },
+        })
+        if (!response.ok) {
+          lastError = `HTTP ${response.status}`
+          continue
+        }
         const text = await response.text()
         const fixtures = parseManUtdIcsFixtures(text)
-        if (fixtures.length === 0) continue
+        if (fixtures.length === 0) {
+          lastError = 'Calendar fetched but no fixtures could be parsed'
+          continue
+        }
         await query(
           `insert into public.fixtures_cache (id, source_url, payload, updated_by)
            values (1, $1, $2::jsonb, $3)
@@ -124,10 +159,14 @@ fixturesRouter.post(
           [MANUTD_ICS_URL, JSON.stringify(fixtures), req.user!.id],
         )
         return res.json({ ok: true, count: fixtures.length })
-      } catch {
-        // Try next source.
+      } catch (error) {
+        lastError = error instanceof Error ? error.message : 'Fetch failed'
       }
     }
-    throw badRequest('Could not fetch fixtures from manutd.com right now.')
+    throw badRequest(
+      lastError
+        ? `Could not fetch fixtures from manutd.com right now (${lastError}).`
+        : 'Could not fetch fixtures from manutd.com right now.',
+    )
   }),
 )
