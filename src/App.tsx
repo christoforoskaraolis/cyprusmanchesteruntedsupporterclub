@@ -763,6 +763,12 @@ type AdminFilter = 'all' | 'pending' | 'active'
 type AdminTab = 'members' | 'tickets' | 'news' | 'merch' | 'official'
 type AdminTicketFilter = 'pending' | 'approved' | 'completed'
 
+function fixtureWindowStatusLabel(status: FixtureTicketWindowStatus): string {
+  if (status === 'open') return 'Open'
+  if (status === 'closed') return 'Closed'
+  return 'Disabled'
+}
+
 type TicketCompletionModalProps = {
   open: boolean
   onClose: () => void
@@ -5397,96 +5403,65 @@ function App() {
                           const status = ticketWindowByKey[key] ?? 'disabled'
                           const myRequest = myTicketRequestByKey[key]
                           const busy = ticketBusyKey === key
-                          if (isAdmin) {
-                            return (
-                              <div className="fixtures-admin-controls">
-                                <span className={`fixtures-ticket-pill fixtures-ticket-pill--${status}`}>
-                                  {status === 'open' ? 'Tickets open' : status === 'closed' ? 'Request closed' : 'Tickets disabled'}
-                                </span>
-                                <div className="fixtures-admin-btn-row">
-                                  <button
-                                    type="button"
-                                    className={`fixtures-admin-btn ${status === 'open' ? 'is-active' : ''}`}
-                                    onClick={() => void setFixtureTicketStatus(f, 'open')}
-                                    disabled={busy}
-                                  >
-                                    Open
-                                  </button>
-                                  <button
-                                    type="button"
-                                    className={`fixtures-admin-btn ${status === 'closed' ? 'is-active' : ''}`}
-                                    onClick={() => void setFixtureTicketStatus(f, 'closed')}
-                                    disabled={busy}
-                                  >
-                                    Close
-                                  </button>
-                                  <button
-                                    type="button"
-                                    className={`fixtures-admin-btn ${status === 'disabled' ? 'is-active' : ''}`}
-                                    onClick={() => void setFixtureTicketStatus(f, 'disabled')}
-                                    disabled={busy}
-                                  >
-                                    Disable
-                                  </button>
-                                </div>
-                              </div>
-                            )
-                          }
-                          if (myRequest === 'approved') {
-                            const formSubmitted = Boolean(ticketFormSubmittedByKey[key])
-                            return (
-                              <div className="fixtures-approved-actions">
-                                <span className="fixtures-ticket-pill fixtures-ticket-pill--approved">Accepted</span>
-                                {formSubmitted ? (
-                                  <span className="fixtures-ticket-pill fixtures-ticket-pill--pending">Form submitted</span>
-                                ) : (
-                                  <button
-                                    type="button"
-                                    className="fixtures-ticket-request-btn"
-                                    onClick={() => openTicketCompletionForm(f)}
-                                  >
-                                    Complete form
-                                  </button>
-                                )}
-                              </div>
-                            )
-                          }
-                          if (myRequest === 'completed') {
-                            return <span className="fixtures-ticket-pill fixtures-ticket-pill--completed">Completed</span>
-                          }
-                          if (status === 'open') {
-                            const canRequestTicket =
-                              membershipRecord?.status === 'active' &&
-                              Boolean(membershipRecord.officialMuMembershipId?.trim())
-                            return myRequest === 'pending' ? (
-                              <span className="fixtures-ticket-pill fixtures-ticket-pill--pending">Request pending</span>
-                            ) : !canRequestTicket ? (
-                              <p className="fixtures-ticket-eligibility-note">
-                                In order to request a ticket, you need to have active club and official Man UTD membership.
-                              </p>
-                            ) : (
-                              <button
-                                type="button"
-                                className="fixtures-ticket-request-btn"
-                                onClick={() => {
-                                  const yes = window.confirm(
-                                    'Are you sure you want to submit a match ticket request for this fixture?',
-                                  )
-                                  if (yes) void submitTicketRequestForMatch(f)
-                                }}
-                                disabled={busy}
-                              >
-                                {busy ? 'Sending…' : 'Tickets open'}
-                              </button>
-                            )
-                          }
-                          if (myRequest === 'cancelled') {
-                            return <span className="fixtures-ticket-pill fixtures-ticket-pill--closed">Request cancelled</span>
-                          }
-                          if (status === 'closed') {
-                            return <span className="fixtures-ticket-pill fixtures-ticket-pill--closed">Request closed</span>
-                          }
-                          return <span className="fixtures-ticket-pill fixtures-ticket-pill--disabled">Not open yet</span>
+                          const canRequestTicket =
+                            membershipRecord?.status === 'active' &&
+                            Boolean(membershipRecord.officialMuMembershipId?.trim())
+                          const formSubmitted = Boolean(ticketFormSubmittedByKey[key])
+
+                          return (
+                            <div className="fixtures-member-ticket-panel">
+                              <span className={`fixtures-ticket-pill fixtures-ticket-pill--${status}`}>
+                                {fixtureWindowStatusLabel(status)}
+                              </span>
+                              {myRequest === 'pending' && (
+                                <span className="fixtures-ticket-pill fixtures-ticket-pill--pending">Pending</span>
+                              )}
+                              {myRequest === 'approved' && (
+                                <>
+                                  <span className="fixtures-ticket-pill fixtures-ticket-pill--approved">Accepted</span>
+                                  {!formSubmitted && (
+                                    <button
+                                      type="button"
+                                      className="fixtures-ticket-request-btn"
+                                      onClick={() => openTicketCompletionForm(f)}
+                                    >
+                                      Complete form
+                                    </button>
+                                  )}
+                                </>
+                              )}
+                              {myRequest === 'completed' && (
+                                <span className="fixtures-ticket-pill fixtures-ticket-pill--completed">Completed</span>
+                              )}
+                              {myRequest === 'cancelled' && (
+                                <span className="fixtures-ticket-pill fixtures-ticket-pill--closed">Cancelled</span>
+                              )}
+                              {myRequest === 'rejected' && (
+                                <span className="fixtures-ticket-pill fixtures-ticket-pill--closed">Rejected</span>
+                              )}
+                              {status === 'open' && !myRequest && canRequestTicket && (
+                                <button
+                                  type="button"
+                                  className="fixtures-ticket-request-btn"
+                                  onClick={() => {
+                                    const yes = window.confirm(
+                                      'Are you sure you want to submit a match ticket request for this fixture?',
+                                    )
+                                    if (yes) void submitTicketRequestForMatch(f)
+                                  }}
+                                  disabled={busy}
+                                >
+                                  {busy ? 'Sending…' : 'Request'}
+                                </button>
+                              )}
+                              {status === 'open' && !myRequest && !canRequestTicket && (
+                                <p className="fixtures-ticket-eligibility-note">
+                                  In order to request a ticket, you need to have active club and official Man UTD
+                                  membership.
+                                </p>
+                              )}
+                            </div>
+                          )
                         })()}
                       </div>
                     </div>

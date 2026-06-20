@@ -497,6 +497,13 @@
   gap: 0.35rem;
 }
 
+.fixtures-member-ticket-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.35rem;
+}
+
 .fixtures-admin-btn-row {
   display: flex;
   gap: 0.25rem;
