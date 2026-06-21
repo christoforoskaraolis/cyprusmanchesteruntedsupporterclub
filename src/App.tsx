@@ -68,6 +68,7 @@ import {
   updateFixtureTicketRequestBalancePayment,
   updateFixtureTicketRequestTicketConfirmed,
   upsertFixtureTicketWindow,
+  updateFixtureTicketWindowMaxTickets,
 } from './lib/fixtureTicketsApi.ts'
 import {
   deleteMerchandiseProduct,
@@ -782,6 +783,14 @@ function formatTicketMatchTabLabel(matchKey: string): string {
   const parsed = parseFixtureMatchKey(matchKey)
   if (!parsed) return formatFixtureMatchKeyLabel(matchKey)
   return `${parsed.opponent} · ${formatFixtureKickoff(parsed.kickoffIso)}`
+}
+
+function parseMaxTicketsDraft(value: string): number | null {
+  const trimmed = value.trim()
+  if (!trimmed) return null
+  const parsed = Number(trimmed)
+  if (!Number.isInteger(parsed) || parsed <= 0) return null
+  return parsed
 }
 
 function fixtureWindowStatusLabel(status: FixtureTicketWindowStatus): string {
@@ -2018,7 +2027,9 @@ type AdminConsoleProps = {
   onReorderMerchandiseProducts: (ids: string[]) => Promise<void>
   ticketFixtures: UpcomingFixture[]
   ticketWindowByKey: Record<string, FixtureTicketWindowStatus>
+  ticketWindowDetailsByKey: Record<string, { maxTickets: number | null; activeRequestCount: number }>
   onSetFixtureTicketStatus: (fixture: UpcomingFixture, status: FixtureTicketWindowStatus) => Promise<void>
+  onUpdateFixtureTicketMaxTickets: (fixture: UpcomingFixture, maxTickets: number | null) => Promise<void>
   onSyncFixtures: () => Promise<void>
   fixturesSyncing: boolean
   adminUsers: AdminUserRow[]
@@ -2079,7 +2090,9 @@ function AdminConsole({
   onReorderMerchandiseProducts,
   ticketFixtures,
   ticketWindowByKey,
+  ticketWindowDetailsByKey,
   onSetFixtureTicketStatus,
+  onUpdateFixtureTicketMaxTickets,
   onSyncFixtures,
   fixturesSyncing,
   adminUsers,
@@ -2121,6 +2134,8 @@ function AdminConsole({
   const [officialRequestSearch, setOfficialRequestSearch] = useState('')
   const [merchSearch, setMerchSearch] = useState('')
   const [busyTicketWindowKey, setBusyTicketWindowKey] = useState<string | null>(null)
+  const [maxTicketsDraftByMatchKey, setMaxTicketsDraftByMatchKey] = useState<Record<string, string>>({})
+  const [ticketMaxTicketsError, setTicketMaxTicketsError] = useState<string | null>(null)
   const [adminMerchTitle, setAdminMerchTitle] = useState('')
   const [adminMerchPrice, setAdminMerchPrice] = useState('')
   const [adminMerchPhotos, setAdminMerchPhotos] = useState<string[]>([])
@@ -3148,6 +3163,7 @@ function AdminConsole({
               {fixturesSyncing ? 'Refreshing…' : 'Sync fixtures from manutd.com'}
             </button>
           </div>
+          {ticketMaxTicketsError && <p className="admin-empty" style={{ color: '#b91c1c' }}>{ticketMaxTicketsError}</p>}
           {ticketFixtures.length === 0 ? (
             <p className="admin-empty">No upcoming home fixtures right now.</p>
           ) : (
@@ -3155,6 +3171,14 @@ function AdminConsole({
               {ticketFixtures.map((fixture) => {
                 const key = fixtureMatchKey(fixture)
                 const status = ticketWindowByKey[key] ?? 'disabled'
+                const windowDetails = ticketWindowDetailsByKey[key]
+                const maxTickets = windowDetails?.maxTickets ?? null
+                const activeRequestCount = windowDetails?.activeRequestCount ?? 0
+                const maxTicketsDraft =
+                  maxTicketsDraftByMatchKey[key] ?? (maxTickets != null ? String(maxTickets) : '')
+                const parsedMaxTickets = parseMaxTicketsDraft(maxTicketsDraft)
+                const maxTicketsDraftInvalid = maxTicketsDraft.trim() !== '' && parsedMaxTickets == null
+                const atCapacity = maxTickets != null && activeRequestCount >= maxTickets
                 const busy = busyTicketWindowKey === key
                 return (
                   <li key={key} className="fixtures-card">
@@ -3174,6 +3198,56 @@ function AdminConsole({
                           <span className={`fixtures-ticket-pill fixtures-ticket-pill--${status}`}>
                             {status === 'open' ? 'Tickets open' : status === 'closed' ? 'Request closed' : 'Tickets disabled'}
                           </span>
+                          {maxTickets != null && (
+                            <p className={`admin-ticket-capacity-summary${atCapacity ? ' is-full' : ''}`}>
+                              {activeRequestCount} / {maxTickets} requests
+                              {atCapacity ? ' · Full' : ''}
+                            </p>
+                          )}
+                          <label className="admin-ticket-capacity-field">
+                            <span className="auth-label">Max tickets</span>
+                            <div className="admin-ticket-capacity-input-row">
+                              <input
+                                className="admin-merch-create-input admin-ticket-capacity-input"
+                                type="number"
+                                min="1"
+                                step="1"
+                                placeholder="No limit"
+                                value={maxTicketsDraft}
+                                onChange={(e) =>
+                                  setMaxTicketsDraftByMatchKey((prev) => ({
+                                    ...prev,
+                                    [key]: e.target.value,
+                                  }))
+                                }
+                                disabled={busy}
+                              />
+                              <button
+                                type="button"
+                                className="admin-merch-create-btn admin-ticket-capacity-save"
+                                disabled={busy || maxTicketsDraftInvalid}
+                                onClick={async () => {
+                                  setTicketMaxTicketsError(null)
+                                  setBusyTicketWindowKey(key)
+                                  try {
+                                    await onUpdateFixtureTicketMaxTickets(fixture, parsedMaxTickets)
+                                    setMaxTicketsDraftByMatchKey((prev) => ({
+                                      ...prev,
+                                      [key]: parsedMaxTickets != null ? String(parsedMaxTickets) : '',
+                                    }))
+                                  } catch (error) {
+                                    setTicketMaxTicketsError(
+                                      error instanceof Error ? error.message : 'Could not save ticket limit.',
+                                    )
+                                  } finally {
+                                    setBusyTicketWindowKey(null)
+                                  }
+                                }}
+                              >
+                                {busy ? 'Saving…' : 'Save'}
+                              </button>
+                            </div>
+                          </label>
                           <div className="fixtures-admin-btn-row">
                             {(['open', 'closed', 'disabled'] as const).map((nextStatus) => (
                               <button
@@ -5138,6 +5212,9 @@ function App() {
   const [fixturesError, setFixturesError] = useState<string | null>(null)
   const [fixturesUpdatedAt, setFixturesUpdatedAt] = useState<string | null>(null)
   const [ticketWindowByKey, setTicketWindowByKey] = useState<Record<string, FixtureTicketWindowStatus>>({})
+  const [ticketWindowDetailsByKey, setTicketWindowDetailsByKey] = useState<
+    Record<string, { maxTickets: number | null; activeRequestCount: number }>
+  >({})
   const [myTicketRequestByKey, setMyTicketRequestByKey] = useState<Record<string, MyFixtureTicketRequest>>({})
   const [ticketBusyKey, setTicketBusyKey] = useState<string | null>(null)
 
@@ -5295,6 +5372,7 @@ function App() {
     const keys = upcomingFixtures.map(fixtureMatchKey)
     if (keys.length === 0) {
       setTicketWindowByKey({})
+      setTicketWindowDetailsByKey({})
       setMyTicketRequestByKey({})
       return
     }
@@ -5306,8 +5384,16 @@ function App() {
       console.error(windowsRes.error)
     } else {
       const next: Record<string, FixtureTicketWindowStatus> = {}
-      for (const r of windowsRes.rows) next[r.matchKey] = r.requestStatus
+      const nextDetails: Record<string, { maxTickets: number | null; activeRequestCount: number }> = {}
+      for (const r of windowsRes.rows) {
+        next[r.matchKey] = r.requestStatus
+        nextDetails[r.matchKey] = {
+          maxTickets: r.maxTickets,
+          activeRequestCount: r.activeRequestCount,
+        }
+      }
       setTicketWindowByKey(next)
+      setTicketWindowDetailsByKey(nextDetails)
     }
     if (myReqRes.error) {
       console.error(myReqRes.error)
@@ -5321,6 +5407,7 @@ function App() {
   useEffect(() => {
     if (!showMatchTickets && !(isAdminRoute && isAdmin)) {
       setTicketWindowByKey({})
+      setTicketWindowDetailsByKey({})
       setMyTicketRequestByKey({})
       return
     }
@@ -5352,6 +5439,23 @@ function App() {
     if (error) {
       setFixturesError(`Could not update ticket status: ${error.message}`)
       return
+    }
+    await refreshFixtureTicketStates()
+  }
+
+  async function setFixtureTicketMaxTickets(fixture: UpcomingFixture, maxTickets: number | null) {
+    const { data, error } = await updateFixtureTicketWindowMaxTickets(fixture, maxTickets)
+    if (error) throw new Error(error.message)
+    if (data) {
+      const key = fixtureMatchKey(fixture)
+      setTicketWindowByKey((prev) => ({ ...prev, [key]: data.requestStatus }))
+      setTicketWindowDetailsByKey((prev) => ({
+        ...prev,
+        [key]: {
+          maxTickets: data.maxTickets,
+          activeRequestCount: data.activeRequestCount,
+        },
+      }))
     }
     await refreshFixtureTicketStates()
   }
@@ -6910,7 +7014,9 @@ function App() {
               onReorderMerchandiseProducts={applyReorderMerchandiseProductsFromAdmin}
               ticketFixtures={ticketFixtures}
               ticketWindowByKey={ticketWindowByKey}
+              ticketWindowDetailsByKey={ticketWindowDetailsByKey}
               onSetFixtureTicketStatus={setFixtureTicketStatus}
+              onUpdateFixtureTicketMaxTickets={setFixtureTicketMaxTickets}
               onSyncFixtures={refreshFixtures}
               fixturesSyncing={fixturesLoading}
               adminUsers={adminUsers}

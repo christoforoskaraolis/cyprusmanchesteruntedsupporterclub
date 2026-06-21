@@ -4,6 +4,11 @@ import { asyncHandler } from '../lib/asyncHandler.ts'
 import { badRequest, notFound } from '../lib/errors.ts'
 import { sendTicketDepositConfirmedEmail } from '../lib/ticketDepositConfirmedEmail.ts'
 import { sendTicketBalancePaymentEmail } from '../lib/ticketBalancePaymentEmail.ts'
+import {
+  assertFixtureTicketCapacityAvailable,
+  closeFixtureTicketWindowIfAtCapacity,
+  countActiveFixtureTicketRequestsByMatchKeys,
+} from '../lib/ticketWindowCapacity.ts'
 import { requireAdmin, requireUser } from '../middleware/auth.ts'
 
 const MAX_TRAVEL_COMPANIONS = 10
@@ -72,17 +77,25 @@ ticketsRouter.post(
     const { matchKeys } = req.body as { matchKeys?: string[] }
     const keys = Array.isArray(matchKeys) ? matchKeys : []
     if (keys.length === 0) return res.json({ rows: [] })
-    const { rows } = await query<{ match_key: string; request_status: string; updated_at: string }>(
-      `select match_key, request_status, updated_at
+    const { rows } = await query<{
+      match_key: string
+      request_status: string
+      updated_at: string
+      max_tickets: number | null
+    }>(
+      `select match_key, request_status, updated_at, max_tickets
        from public.fixture_ticket_windows
        where match_key = any($1::text[])`,
       [keys],
     )
+    const activeCounts = await countActiveFixtureTicketRequestsByMatchKeys(keys)
     res.json({
       rows: rows.map((r) => ({
         matchKey: r.match_key,
         requestStatus: r.request_status,
         updatedAt: r.updated_at,
+        maxTickets: r.max_tickets,
+        activeRequestCount: activeCounts.get(r.match_key) ?? 0,
       })),
     })
   }),
@@ -100,7 +113,73 @@ ticketsRouter.put(
        set kickoff_iso=excluded.kickoff_iso, competition=excluded.competition, opponent=excluded.opponent, venue=excluded.venue, home=excluded.home, request_status=excluded.request_status, updated_by=excluded.updated_by`,
       [req.params.matchKey, fixture.kickoffIso, fixture.competition, fixture.opponent, fixture.venue, fixture.home, status, req.user!.id],
     )
+    if (status === 'open') {
+      await closeFixtureTicketWindowIfAtCapacity(req.params.matchKey)
+    }
     res.json({ ok: true })
+  }),
+)
+
+ticketsRouter.put(
+  '/windows/:matchKey/max-tickets',
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const matchKey = String(req.params.matchKey ?? '').trim()
+    if (!matchKey) throw badRequest('Match key is required')
+
+    const raw = (req.body as { maxTickets?: unknown })?.maxTickets
+    let maxTickets: number | null = null
+    if (raw !== null && raw !== undefined && String(raw).trim() !== '') {
+      const parsed = Number(raw)
+      if (!Number.isInteger(parsed) || parsed <= 0) {
+        throw badRequest('Maximum tickets must be a positive whole number.')
+      }
+      maxTickets = parsed
+    }
+
+    const { fixture } = req.body as { fixture?: { kickoffIso?: string; competition?: string; opponent?: string; venue?: string; home?: boolean } }
+    if (!fixture?.kickoffIso) throw badRequest('Fixture details are required.')
+
+    await query(
+      `insert into public.fixture_ticket_windows (
+         match_key, kickoff_iso, competition, opponent, venue, home, request_status, max_tickets, updated_by
+       )
+       values ($1, $2, $3, $4, $5, $6, 'disabled', $7, $8)
+       on conflict (match_key) do update
+       set kickoff_iso = excluded.kickoff_iso,
+           competition = excluded.competition,
+           opponent = excluded.opponent,
+           venue = excluded.venue,
+           home = excluded.home,
+           max_tickets = excluded.max_tickets,
+           updated_at = now(),
+           updated_by = excluded.updated_by`,
+      [
+        matchKey,
+        fixture.kickoffIso,
+        fixture.competition,
+        fixture.opponent,
+        fixture.venue,
+        fixture.home,
+        maxTickets,
+        req.user!.id,
+      ],
+    )
+
+    await closeFixtureTicketWindowIfAtCapacity(matchKey)
+
+    const { rows } = await query<{ request_status: string; max_tickets: number | null }>(
+      `select request_status, max_tickets from public.fixture_ticket_windows where match_key = $1 limit 1`,
+      [matchKey],
+    )
+    const activeRequestCount = (await countActiveFixtureTicketRequestsByMatchKeys([matchKey])).get(matchKey) ?? 0
+
+    res.json({
+      ok: true,
+      requestStatus: rows[0]?.request_status ?? 'disabled',
+      maxTickets: rows[0]?.max_tickets ?? null,
+      activeRequestCount,
+    })
   }),
 )
 
@@ -171,6 +250,7 @@ ticketsRouter.post(
       `select id from public.fixture_ticket_requests where match_key = $1 and user_id = $2 order by requested_at desc limit 1`,
       [matchKey, req.user!.id],
     )
+    await assertFixtureTicketCapacityAvailable(matchKey, { existingRequestId: rows[0]?.id ?? null })
     if (rows[0]?.id) {
       await query(
         `update public.fixture_ticket_requests
@@ -197,6 +277,7 @@ ticketsRouter.post(
         [matchKey, req.user!.id, filteredTravelCompanions],
       )
     }
+    await closeFixtureTicketWindowIfAtCapacity(matchKey)
     res.json({ ok: true })
   }),
 )

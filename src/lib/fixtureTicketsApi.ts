@@ -8,6 +8,8 @@ export type FixtureTicketWindow = {
   matchKey: string
   requestStatus: FixtureTicketWindowStatus
   updatedAt: string
+  maxTickets: number | null
+  activeRequestCount: number
 }
 
 export type MyFixtureTicketRequest = {
@@ -104,6 +106,23 @@ export async function upsertFixtureTicketWindow(
     return { error: undefined }
   } catch (error) {
     return { error: asError(error) }
+  }
+}
+
+export async function updateFixtureTicketWindowMaxTickets(
+  fixture: UpcomingFixture,
+  maxTickets: number | null,
+) {
+  const matchKey = fixtureMatchKey(fixture)
+  try {
+    const data = await apiSend<{
+      requestStatus: FixtureTicketWindowStatus
+      maxTickets: number | null
+      activeRequestCount: number
+    }>(`/api/tickets/windows/${encodeURIComponent(matchKey)}/max-tickets`, 'PUT', { fixture, maxTickets })
+    return { data, error: undefined }
+  } catch (error) {
+    return { data: undefined, error: asError(error) }
   }
 }
 

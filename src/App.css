@@ -497,6 +497,44 @@
   gap: 0.35rem;
 }
 
+.admin-ticket-capacity-summary {
+  margin: 0;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.admin-ticket-capacity-summary.is-full {
+  color: #b45309;
+}
+
+.admin-ticket-capacity-field {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.25rem;
+  width: 100%;
+  max-width: 16rem;
+}
+
+.admin-ticket-capacity-input-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  width: 100%;
+}
+
+.admin-ticket-capacity-input {
+  width: 100%;
+  min-width: 0;
+  max-width: 7rem;
+}
+
+.admin-ticket-capacity-save {
+  flex-shrink: 0;
+  padding: 0.45rem 0.7rem;
+}
+
 .fixtures-member-ticket-panel {
   display: flex;
   flex-direction: column;
