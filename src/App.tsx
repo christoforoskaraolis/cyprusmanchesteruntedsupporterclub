@@ -2110,7 +2110,6 @@ function AdminConsole({
   const [newsError, setNewsError] = useState<string | null>(null)
   const [busyMerchOrderId, setBusyMerchOrderId] = useState<string | null>(null)
   const [memberSearch, setMemberSearch] = useState('')
-  const [ticketSearch, setTicketSearch] = useState('')
   const [officialRequestFilter, setOfficialRequestFilter] = useState<'pending' | 'completed' | 'rejected'>('pending')
   const [officialRequestSearch, setOfficialRequestSearch] = useState('')
   const [merchSearch, setMerchSearch] = useState('')
@@ -2204,18 +2203,6 @@ function AdminConsole({
   const filteredTicketRequests = pendingTicketRequests
     .filter((r) => r.status === ticketFilter)
     .filter((r) => ticketMatchFilter === 'all' || r.matchKey === ticketMatchFilter)
-    .filter((r) => {
-      const q = ticketSearch.trim().toLowerCase()
-      if (!q) return true
-      return (
-        r.matchKey.toLowerCase().includes(q) ||
-        r.userId.toLowerCase().includes(q) ||
-        (r.user.fullName ?? '').toLowerCase().includes(q) ||
-        (r.user.mobilePhone ?? '').toLowerCase().includes(q) ||
-        (r.user.officialMuMembershipId ?? '').toLowerCase().includes(q) ||
-        (r.user.applicationId ?? '').toLowerCase().includes(q)
-      )
-    })
 
   const filteredMerchOrders = merchandiseOrders.filter((o) => {
     const q = merchSearch.trim().toLowerCase()
@@ -3229,53 +3216,52 @@ function AdminConsole({
               Export Excel
             </button>
           </div>
-          <div className="admin-filter-row" role="tablist" aria-label="Filter ticket requests by status">
-            {(['pending', 'approved', 'completed'] as const).map((f) => (
-              <button
-                key={f}
-                type="button"
-                role="tab"
-                aria-selected={ticketFilter === f}
-                className={`admin-filter-btn ${ticketFilter === f ? 'is-active' : ''}`}
-                onClick={() => setTicketFilter(f)}
-              >
-                {f === 'pending' ? 'Pending' : f === 'approved' ? 'Accepted' : 'Completed'}
-              </button>
-            ))}
-          </div>
-          {ticketMatchTabKeys.length > 0 && (
-            <div className="admin-filter-row admin-filter-row--match-tabs" role="tablist" aria-label="Filter ticket requests by match">
-              <button
-                type="button"
-                role="tab"
-                aria-selected={ticketMatchFilter === 'all'}
-                className={`admin-filter-btn admin-filter-btn--match ${ticketMatchFilter === 'all' ? 'is-active' : ''}`}
-                onClick={() => setTicketMatchFilter('all')}
-              >
-                All matches
-              </button>
-              {ticketMatchTabKeys.map((matchKey) => (
-                <button
-                  key={matchKey}
-                  type="button"
-                  role="tab"
-                  aria-selected={ticketMatchFilter === matchKey}
-                  className={`admin-filter-btn admin-filter-btn--match ${ticketMatchFilter === matchKey ? 'is-active' : ''}`}
-                  onClick={() => setTicketMatchFilter(matchKey)}
-                >
-                  {formatTicketMatchTabLabel(matchKey)}
-                </button>
-              ))}
+          <div className="admin-ticket-request-filters">
+            <div className="admin-ticket-filter-group">
+              <span className="admin-ticket-filter-label">Status</span>
+              <div className="admin-ticket-status-tabs" role="tablist" aria-label="Filter ticket requests by status">
+                {(['pending', 'approved', 'completed'] as const).map((f) => (
+                  <button
+                    key={f}
+                    type="button"
+                    role="tab"
+                    aria-selected={ticketFilter === f}
+                    className={`admin-ticket-status-tab ${ticketFilter === f ? 'is-active' : ''}`}
+                    onClick={() => setTicketFilter(f)}
+                  >
+                    {f === 'pending' ? 'Pending' : f === 'approved' ? 'Accepted' : 'Completed'}
+                  </button>
+                ))}
+              </div>
             </div>
-          )}
-          <div className="admin-search-row">
-            <input
-              className="auth-input admin-search-input"
-              type="search"
-              placeholder="Search ticket requests by name, phone, MU ID, match, or ref"
-              value={ticketSearch}
-              onChange={(e) => setTicketSearch(e.target.value)}
-            />
+            {ticketMatchTabKeys.length > 0 && (
+              <div className="admin-ticket-filter-group">
+                <span className="admin-ticket-filter-label">Match</span>
+                <div className="admin-ticket-match-tabs" role="tablist" aria-label="Filter ticket requests by match">
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={ticketMatchFilter === 'all'}
+                    className={`admin-ticket-match-tab ${ticketMatchFilter === 'all' ? 'is-active' : ''}`}
+                    onClick={() => setTicketMatchFilter('all')}
+                  >
+                    All matches
+                  </button>
+                  {ticketMatchTabKeys.map((matchKey) => (
+                    <button
+                      key={matchKey}
+                      type="button"
+                      role="tab"
+                      aria-selected={ticketMatchFilter === matchKey}
+                      className={`admin-ticket-match-tab ${ticketMatchFilter === matchKey ? 'is-active' : ''}`}
+                      onClick={() => setTicketMatchFilter(matchKey)}
+                    >
+                      {formatTicketMatchTabLabel(matchKey)}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
           {ticketActionNotice && <p className="admin-member-action-notice">{ticketActionNotice}</p>}
           {ticketActionError && <p className="admin-empty" style={{ color: '#b91c1c' }}>{ticketActionError}</p>}
