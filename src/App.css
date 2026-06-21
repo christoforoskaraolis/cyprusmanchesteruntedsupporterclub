@@ -2923,6 +2923,13 @@
   margin: 0.85rem 0 0.25rem;
 }
 
+.ticket-request-travel-companions .renewal-modal-hint {
+  margin: 0.35rem 0 0.65rem;
+  font-size: 0.875rem;
+  line-height: 1.45;
+  color: var(--text-muted, #64748b);
+}
+
 .ticket-request-travel-companion-list {
   list-style: none;
   margin: 0.45rem 0 0.5rem;

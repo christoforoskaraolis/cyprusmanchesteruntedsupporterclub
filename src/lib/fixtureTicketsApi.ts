@@ -21,6 +21,8 @@ export type MyFixtureTicketRequest = {
   balancePaymentNotified: boolean
   balancePaymentDeadline: string | null
   ticketConfirmed: boolean
+  ticketSlotCount: number
+  travelCompanionCount: number
 }
 
 export type FixtureTicketTravelCompanion = {

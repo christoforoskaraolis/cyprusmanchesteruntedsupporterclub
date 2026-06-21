@@ -5,9 +5,13 @@ import { badRequest, notFound } from '../lib/errors.ts'
 import { sendTicketDepositConfirmedEmail } from '../lib/ticketDepositConfirmedEmail.ts'
 import { sendTicketBalancePaymentEmail } from '../lib/ticketBalancePaymentEmail.ts'
 import {
+  ticketSlotCountFromCompanionNumbers,
+  validateTravelCompanionMembershipNumbers,
+} from '../lib/ticketTravelCompanions.ts'
+import {
   assertFixtureTicketCapacityAvailable,
   closeFixtureTicketWindowIfAtCapacity,
-  countActiveFixtureTicketRequestsByMatchKeys,
+  countActiveFixtureTicketSlotsByMatchKeys,
 } from '../lib/ticketWindowCapacity.ts'
 import { requireAdmin, requireUser } from '../middleware/auth.ts'
 
@@ -88,7 +92,7 @@ ticketsRouter.post(
        where match_key = any($1::text[])`,
       [keys],
     )
-    const activeCounts = await countActiveFixtureTicketRequestsByMatchKeys(keys)
+    const activeCounts = await countActiveFixtureTicketSlotsByMatchKeys(keys)
     res.json({
       rows: rows.map((r) => ({
         matchKey: r.match_key,
@@ -172,7 +176,7 @@ ticketsRouter.put(
       `select request_status, max_tickets from public.fixture_ticket_windows where match_key = $1 limit 1`,
       [matchKey],
     )
-    const activeRequestCount = (await countActiveFixtureTicketRequestsByMatchKeys([matchKey])).get(matchKey) ?? 0
+    const activeRequestCount = (await countActiveFixtureTicketSlotsByMatchKeys([matchKey])).get(matchKey) ?? 0
 
     res.json({
       ok: true,
@@ -199,10 +203,11 @@ ticketsRouter.post(
       balance_payment_notified: boolean
       balance_payment_deadline: string | null
       ticket_confirmed: boolean
+      travel_companion_membership_numbers: number[] | null
     }>(
       `select distinct on (match_key) match_key, status, deposit_confirmed, user_cancelled_at,
               balance_remaining_amount_eur, balance_payment_notified, balance_payment_deadline,
-              ticket_confirmed
+              ticket_confirmed, travel_companion_membership_numbers
        from public.fixture_ticket_requests
        where user_id = $1 and match_key = any($2::text[])
        order by match_key, requested_at desc`,
@@ -219,6 +224,8 @@ ticketsRouter.post(
         balancePaymentNotified: r.balance_payment_notified,
         balancePaymentDeadline: r.balance_payment_deadline,
         ticketConfirmed: r.ticket_confirmed,
+        ticketSlotCount: ticketSlotCountFromCompanionNumbers(r.travel_companion_membership_numbers),
+        travelCompanionCount: r.travel_companion_membership_numbers?.length ?? 0,
       })),
     })
   }),
@@ -233,24 +240,42 @@ ticketsRouter.post(
       (req.body as { travelCompanionMembershipNumbers?: unknown })?.travelCompanionMembershipNumbers,
     )
 
-    const { rows: requesterRows } = await query<{ membership_number: number | null }>(
-      `select membership_number
+    const { rows: requesterRows } = await query<{
+      membership_number: number | null
+      official_mu_membership_status: string | null
+    }>(
+      `select membership_number, official_mu_membership_status
        from public.membership_applications
        where user_id = $1 and status = 'active'
        order by submitted_at desc
        limit 1`,
       [req.user!.id],
     )
-    const requesterMembershipNumber = requesterRows[0]?.membership_number ?? null
+    const requester = requesterRows[0]
+    if (!requester) {
+      throw badRequest('You must have an active Cyprus membership to request tickets.')
+    }
+    if (requester.official_mu_membership_status !== 'activated') {
+      throw badRequest('You must have active official Manchester United membership to request tickets.')
+    }
+
+    const requesterMembershipNumber = requester.membership_number ?? null
     const filteredTravelCompanions = travelCompanionMembershipNumbers.filter(
       (n) => requesterMembershipNumber == null || n !== requesterMembershipNumber,
     )
+
+    await validateTravelCompanionMembershipNumbers(filteredTravelCompanions)
+
+    const requestedSlotCount = ticketSlotCountFromCompanionNumbers(filteredTravelCompanions)
 
     const { rows } = await query<{ id: string }>(
       `select id from public.fixture_ticket_requests where match_key = $1 and user_id = $2 order by requested_at desc limit 1`,
       [matchKey, req.user!.id],
     )
-    await assertFixtureTicketCapacityAvailable(matchKey, { existingRequestId: rows[0]?.id ?? null })
+    await assertFixtureTicketCapacityAvailable(matchKey, {
+      existingRequestId: rows[0]?.id ?? null,
+      requestedSlotCount,
+    })
     if (rows[0]?.id) {
       await query(
         `update public.fixture_ticket_requests

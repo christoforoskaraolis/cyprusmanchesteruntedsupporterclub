@@ -130,6 +130,10 @@ const MEMBERSHIP_FEE_EUR = 15
 /** Ticket deposit via Revolut / bank transfer. Stripe adds {@link STRIPE_SERVICE_FEE_EUR}. */
 const TICKET_DEPOSIT_FEE_EUR = 50
 
+function ticketDepositAmountEur(ticketSlotCount: number): number {
+  return TICKET_DEPOSIT_FEE_EUR * Math.max(1, ticketSlotCount)
+}
+
 function formatLongDate(day: number, monthIndex: number, year: number): string {
   return new Date(year, monthIndex, day).toLocaleDateString('en-GB', {
     day: 'numeric',
@@ -844,6 +848,7 @@ type TicketDepositPaymentCardProps = {
   fixture: UpcomingFixture | null
   membershipNumber: string
   ticketReference: string
+  ticketSlotCount?: number
   returnPath?: string
   headingId?: string
   showFixtureSummary?: boolean
@@ -853,11 +858,13 @@ function TicketDepositPaymentCard({
   fixture,
   membershipNumber,
   ticketReference,
+  ticketSlotCount = 1,
   returnPath = '/tickets',
   headingId = 'ticket-deposit-payment-heading',
   showFixtureSummary = true,
 }: TicketDepositPaymentCardProps) {
-  const stripeTotalEur = TICKET_DEPOSIT_FEE_EUR + STRIPE_SERVICE_FEE_EUR
+  const depositEur = ticketDepositAmountEur(ticketSlotCount)
+  const stripeTotalEur = depositEur + STRIPE_SERVICE_FEE_EUR
 
   return (
     <div className="membership-payment-card renewal-modal-payment" role="region" aria-labelledby={headingId}>
@@ -873,10 +880,16 @@ function TicketDepositPaymentCard({
         </p>
       )}
       <p className="membership-payment-fee">
-        <strong>Revolut / Bank transfer:</strong> €{TICKET_DEPOSIT_FEE_EUR.toFixed(2)}
+        <strong>Revolut / Bank transfer:</strong> €{depositEur.toFixed(2)}
+        {ticketSlotCount > 1 && (
+          <>
+            {' '}
+            (€{TICKET_DEPOSIT_FEE_EUR.toFixed(2)} × {ticketSlotCount} tickets)
+          </>
+        )}
       </p>
       <p className="membership-payment-fee">
-        <strong>Stripe (card):</strong> €{stripeTotalEur.toFixed(2)} (€{TICKET_DEPOSIT_FEE_EUR.toFixed(2)} + €
+        <strong>Stripe (card):</strong> €{stripeTotalEur.toFixed(2)} (€{depositEur.toFixed(2)} + €
         {STRIPE_SERVICE_FEE_EUR.toFixed(2)} service charge)
       </p>
       <p className="membership-payment-intro">
@@ -885,7 +898,7 @@ function TicketDepositPaymentCard({
       </p>
       <ClubPaymentMethodFields
         stripe={{
-          amountEur: TICKET_DEPOSIT_FEE_EUR,
+          amountEur: depositEur,
           description: `Ticket deposit — ${ticketReference}`,
           paymentKind: 'ticket',
           referenceId: ticketReference,
@@ -1030,6 +1043,11 @@ function TicketRequestConfirmModal({
 
   if (!open || !fixture) return null
 
+  const travelCompanionNumbers = parseTicketTravelCompanionDrafts(travelCompanionRows)
+  const ticketSlotCount = 1 + travelCompanionNumbers.length
+  const depositEur = ticketDepositAmountEur(ticketSlotCount)
+  const stripeDepositEur = depositEur + STRIPE_SERVICE_FEE_EUR
+
   function updateTravelCompanionRow(index: number, value: string) {
     const digitsOnly = value.replace(/\D/g, '')
     setTravelCompanionRows((prev) => prev.map((row, rowIndex) => (rowIndex === index ? digitsOnly : row)))
@@ -1075,11 +1093,19 @@ function TicketRequestConfirmModal({
           ({formatFixtureKickoff(fixture.kickoffIso)})?
         </p>
         <p className="renewal-modal-lead">
-          After you confirm, you will proceed to pay the ticket deposit (€{TICKET_DEPOSIT_FEE_EUR.toFixed(2)} via
-          Revolut/bank, €{(TICKET_DEPOSIT_FEE_EUR + STRIPE_SERVICE_FEE_EUR).toFixed(2)} via Stripe).
+          After you confirm, you will proceed to pay the ticket deposit (€{depositEur.toFixed(2)} via Revolut/bank, €
+          {stripeDepositEur.toFixed(2)} via Stripe
+          {ticketSlotCount > 1
+            ? ` — €${TICKET_DEPOSIT_FEE_EUR.toFixed(2)} per ticket × ${ticketSlotCount} tickets`
+            : ''}
+          ).
         </p>
         <div className="ticket-request-travel-companions">
           <p className="auth-label">Add the MYCS of someone who will travel with you (optional)</p>
+          <p className="renewal-modal-hint">
+            Each travelling member counts as one ticket. They must have active Cyprus and official Manchester United
+            membership.
+          </p>
           {travelCompanionRows.length > 0 && (
             <ul className="ticket-request-travel-companion-list">
               {travelCompanionRows.map((row, index) => (
@@ -1130,7 +1156,7 @@ function TicketRequestConfirmModal({
           <button
             type="button"
             className="mycmusc-reg-btn mycmusc-reg-btn--primary"
-            onClick={() => onConfirm(parseTicketTravelCompanionDrafts(travelCompanionRows))}
+            onClick={() => onConfirm(travelCompanionNumbers)}
             disabled={submitting}
           >
             {submitting ? 'Submitting…' : 'Yes'}
@@ -1147,6 +1173,7 @@ type TicketDepositPaymentModalProps = {
   fixture: UpcomingFixture | null
   membershipNumber: string
   ticketReference: string
+  ticketSlotCount?: number
 }
 
 function TicketDepositPaymentModal({
@@ -1155,6 +1182,7 @@ function TicketDepositPaymentModal({
   fixture,
   membershipNumber,
   ticketReference,
+  ticketSlotCount = 1,
 }: TicketDepositPaymentModalProps) {
   if (!open || !fixture) return null
 
@@ -1188,6 +1216,7 @@ function TicketDepositPaymentModal({
           fixture={fixture}
           membershipNumber={membershipNumber}
           ticketReference={ticketReference}
+          ticketSlotCount={ticketSlotCount}
           returnPath="/tickets"
           headingId="ticket-deposit-modal-payment-heading"
         />
@@ -1538,6 +1567,7 @@ type TicketCompletionModalProps = {
   membershipNumber: string
   officialMuMembershipId: string
   ticketReference: string
+  ticketSlotCount?: number
 }
 
 function TicketCompletionModal({
@@ -1552,8 +1582,11 @@ function TicketCompletionModal({
   membershipNumber,
   officialMuMembershipId,
   ticketReference,
+  ticketSlotCount = 1,
 }: TicketCompletionModalProps) {
   const [confirmedPayment, setConfirmedPayment] = useState(false)
+  const depositEur = ticketDepositAmountEur(ticketSlotCount)
+  const stripeDepositEur = depositEur + STRIPE_SERVICE_FEE_EUR
 
   useEffect(() => {
     if (open) setConfirmedPayment(false)
@@ -1619,6 +1652,7 @@ function TicketCompletionModal({
           fixture={fixture}
           membershipNumber={membershipNumber}
           ticketReference={ticketReference}
+          ticketSlotCount={ticketSlotCount}
           returnPath="/"
           headingId="ticket-payment-heading"
           showFixtureSummary={false}
@@ -1631,8 +1665,8 @@ function TicketCompletionModal({
             onChange={(ev) => setConfirmedPayment(ev.target.checked)}
           />
           <span>
-            I confirm I will pay the ticket deposit (€{TICKET_DEPOSIT_FEE_EUR.toFixed(2)} via Revolut/bank, €
-            {(TICKET_DEPOSIT_FEE_EUR + STRIPE_SERVICE_FEE_EUR).toFixed(2)} via Stripe).
+            I confirm I will pay the ticket deposit (€{depositEur.toFixed(2)} via Revolut/bank, €
+            {stripeDepositEur.toFixed(2)} via Stripe).
           </span>
         </label>
 
@@ -2338,6 +2372,7 @@ function AdminConsole({
       'Balance Payment Notified',
       'Balance Payment Notified At',
       'Balance Payment Deadline',
+      'Ticket Slots',
       'Travel Companions',
     ]
     const rows = pendingTicketRequests.map((r) => [
@@ -2359,6 +2394,7 @@ function AdminConsole({
       r.balancePaymentNotified ? 'yes' : 'no',
       r.balancePaymentNotifiedAt ?? '',
       r.balancePaymentDeadline ?? '',
+      String(1 + r.travelCompanions.length),
       r.travelCompanions
         .map((c) => `${formatMembershipNumber(c.membershipNumber)}${c.fullName ? ` (${c.fullName})` : ''}`)
         .join(' | '),
@@ -3200,7 +3236,7 @@ function AdminConsole({
                           </span>
                           {maxTickets != null && (
                             <p className={`admin-ticket-capacity-summary${atCapacity ? ' is-full' : ''}`}>
-                              {activeRequestCount} / {maxTickets} requests
+                              {activeRequestCount} / {maxTickets} tickets
                               {atCapacity ? ' · Full' : ''}
                             </p>
                           )}
@@ -3403,6 +3439,8 @@ function AdminConsole({
                     )}
                     <p className="admin-renewal-meta">
                       Requested: {new Date(r.requestedAt).toLocaleString('en-GB')}
+                      {' · '}
+                      Ticket slots: {1 + r.travelCompanions.length}
                     </p>
                     {r.travelCompanions.length > 0 && (
                       <div className="admin-ticket-travel-with">
@@ -5272,6 +5310,7 @@ function App() {
   const [ticketRequestConfirmSubmitting, setTicketRequestConfirmSubmitting] = useState(false)
   const [ticketRequestConfirmError, setTicketRequestConfirmError] = useState<string | null>(null)
   const [ticketDepositPaymentFixture, setTicketDepositPaymentFixture] = useState<UpcomingFixture | null>(null)
+  const [ticketDepositSlotCount, setTicketDepositSlotCount] = useState(1)
   const [ticketBalancePaymentFixture, setTicketBalancePaymentFixture] = useState<UpcomingFixture | null>(null)
   const [ticketCancelConfirmFixture, setTicketCancelConfirmFixture] = useState<UpcomingFixture | null>(null)
   const [ticketCancelConfirmSubmitting, setTicketCancelConfirmSubmitting] = useState(false)
@@ -5476,10 +5515,14 @@ function App() {
     }
     await refreshFixtureTicketStates()
     setTicketRequestConfirmFixture(null)
+    const slotCount = 1 + travelCompanionMembershipNumbers.length
+    setTicketDepositSlotCount(slotCount)
     setTicketDepositPaymentFixture(fixture)
   }
 
   function openTicketDepositPayment(fixture: UpcomingFixture) {
+    const key = fixtureMatchKey(fixture)
+    setTicketDepositSlotCount(myTicketRequestByKey[key]?.ticketSlotCount ?? 1)
     setTicketDepositPaymentFixture(fixture)
   }
 
@@ -7177,7 +7220,7 @@ function App() {
                           const busy = ticketBusyKey === key
                           const canRequestTicket =
                             membershipRecord?.status === 'active' &&
-                            Boolean(membershipRecord.officialMuMembershipId?.trim())
+                            membershipRecord.officialMuMembershipStatus === 'activated'
                           const canSubmitNewRequest =
                             !myRequestStatus || userCancelled || myRequestStatus === 'cancelled'
                           const formSubmitted = Boolean(ticketFormSubmittedByKey[key])
@@ -7363,6 +7406,7 @@ function App() {
           ticketReference={
             ticketDepositPaymentFixture ? fixtureMatchKey(ticketDepositPaymentFixture) : 'match-ticket'
           }
+          ticketSlotCount={ticketDepositSlotCount}
         />
         <TicketBalancePaymentModal
           open={ticketBalancePaymentFixture !== null}
@@ -7408,6 +7452,11 @@ function App() {
           officialMuMembershipId={membershipRecord?.officialMuMembershipId?.trim() ?? ''}
           ticketReference={
             ticketFormFixture ? fixtureMatchKey(ticketFormFixture) : 'match-ticket'
+          }
+          ticketSlotCount={
+            ticketFormFixture
+              ? (myTicketRequestByKey[fixtureMatchKey(ticketFormFixture)]?.ticketSlotCount ?? 1)
+              : 1
           }
         />
         <NewsDetailModal
