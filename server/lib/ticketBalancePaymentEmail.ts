@@ -8,13 +8,40 @@ function formatAmountEur(amountEur: number): string {
   return amountEur.toFixed(2)
 }
 
-function formatPaymentDeadlineGreek(deadlineIso: string): string {
-  const dt = new Date(`${deadlineIso}T12:00:00`)
-  if (Number.isNaN(dt.getTime())) return deadlineIso
-  return dt.toLocaleDateString('el-GR', {
-    weekday: 'long',
+function normalizePaymentDeadlineInput(value: string | Date): string {
+  if (value instanceof Date) {
+    if (Number.isNaN(value.getTime())) return ''
+    const year = value.getUTCFullYear()
+    const month = String(value.getUTCMonth() + 1).padStart(2, '0')
+    const day = String(value.getUTCDate()).padStart(2, '0')
+    return `${year}-${month}-${day}`
+  }
+
+  const trimmed = String(value).trim()
+  const isoPrefix = trimmed.match(/^(\d{4}-\d{2}-\d{2})/)
+  if (isoPrefix) return isoPrefix[1]!
+
+  const parsed = new Date(trimmed)
+  if (!Number.isNaN(parsed.getTime())) {
+    const year = parsed.getUTCFullYear()
+    const month = String(parsed.getUTCMonth() + 1).padStart(2, '0')
+    const day = String(parsed.getUTCDate()).padStart(2, '0')
+    return `${year}-${month}-${day}`
+  }
+
+  return trimmed
+}
+
+function formatPaymentDeadlineGreek(deadline: string | Date): string {
+  const iso = normalizePaymentDeadlineInput(deadline)
+  if (!iso || !/^\d{4}-\d{2}-\d{2}$/.test(iso)) return String(deadline)
+
+  const dt = new Date(`${iso}T12:00:00`)
+  if (Number.isNaN(dt.getTime())) return iso
+
+  return dt.toLocaleDateString('en-GB', {
     day: 'numeric',
-    month: 'long',
+    month: 'short',
     year: 'numeric',
   })
 }
@@ -22,7 +49,7 @@ function formatPaymentDeadlineGreek(deadlineIso: string): string {
 function buildText(options: {
   matchKey: string
   balanceRemainingAmountEur: number
-  paymentDeadlineIso: string
+  paymentDeadlineIso: string | Date
 }): string {
   const { matchName, matchDate } = formatFixtureMatchKeyForEmail(options.matchKey)
   const amount = formatAmountEur(options.balanceRemainingAmountEur)
@@ -67,7 +94,7 @@ One United. One Family. One Club.`
 function buildHtml(options: {
   matchKey: string
   balanceRemainingAmountEur: number
-  paymentDeadlineIso: string
+  paymentDeadlineIso: string | Date
 }): string {
   const { matchName, matchDate } = formatFixtureMatchKeyForEmail(options.matchKey)
   const amount = formatAmountEur(options.balanceRemainingAmountEur)
@@ -98,7 +125,7 @@ export async function sendTicketBalancePaymentEmail(options: {
   to: string
   matchKey: string
   balanceRemainingAmountEur: number
-  paymentDeadlineIso: string
+  paymentDeadlineIso: string | Date
 }): Promise<void> {
   const text = buildText(options)
   const html = buildHtml(options)

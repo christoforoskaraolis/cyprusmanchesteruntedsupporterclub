@@ -504,6 +504,10 @@
   gap: 0.35rem;
 }
 
+.fixtures-member-ticket-panel--confirmed-only {
+  gap: 0.45rem;
+}
+
 .fixtures-ticket-accepted-msg {
   margin: 0;
   font-size: 0.88rem;
@@ -2557,6 +2561,16 @@
   margin-bottom: 1.25rem;
 }
 
+.admin-filter-row--match-tabs {
+  margin-top: -0.65rem;
+  margin-bottom: 1rem;
+}
+
+.admin-filter-btn--match {
+  font-size: 0.75rem;
+  padding: 0.4rem 0.7rem;
+}
+
 .admin-filter-btn {
   font: inherit;
   font-size: 0.8125rem;
@@ -2749,6 +2763,83 @@
   font-size: 0.82rem;
   font-weight: 700;
   color: #15803d;
+}
+
+.admin-ticket-travel-with {
+  margin-top: 0.55rem;
+}
+
+.admin-ticket-travel-with-table {
+  width: 100%;
+  max-width: 22rem;
+  border-collapse: collapse;
+  font-size: 0.8rem;
+}
+
+.admin-ticket-travel-with-table th,
+.admin-ticket-travel-with-table td {
+  padding: 0.35rem 0.5rem;
+  border: 1px solid var(--admin-border);
+  text-align: left;
+}
+
+.admin-ticket-travel-with-table th {
+  font-weight: 700;
+  background: var(--surface-2);
+}
+
+.ticket-request-travel-companions {
+  margin: 0.85rem 0 0.25rem;
+}
+
+.ticket-request-travel-companion-list {
+  list-style: none;
+  margin: 0.45rem 0 0.5rem;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.ticket-request-travel-companion-row {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.ticket-request-travel-companion-input {
+  max-width: 9rem;
+}
+
+.ticket-request-travel-companion-remove {
+  font: inherit;
+  width: 2rem;
+  height: 2rem;
+  border: 1px solid var(--admin-border);
+  border-radius: 8px;
+  background: #fff;
+  color: #b91c1c;
+  cursor: pointer;
+}
+
+.ticket-request-travel-companion-remove:hover:not(:disabled) {
+  background: rgba(185, 28, 28, 0.08);
+}
+
+.ticket-request-travel-companion-add {
+  font: inherit;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  padding: 0.4rem 0.7rem;
+  border: 1px dashed var(--admin-border);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--mu-red);
+  cursor: pointer;
+}
+
+.ticket-request-travel-companion-add:hover:not(:disabled) {
+  background: rgba(218, 41, 28, 0.06);
 }
 
 .admin-member-flag-row {

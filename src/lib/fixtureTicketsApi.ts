@@ -21,6 +21,11 @@ export type MyFixtureTicketRequest = {
   ticketConfirmed: boolean
 }
 
+export type FixtureTicketTravelCompanion = {
+  membershipNumber: number
+  fullName: string | null
+}
+
 export type AdminFixtureTicketRequest = {
   id: string
   matchKey: string
@@ -36,6 +41,7 @@ export type AdminFixtureTicketRequest = {
   balancePaymentDeadline: string | null
   ticketConfirmed: boolean
   ticketConfirmedAt: string | null
+  travelCompanions: FixtureTicketTravelCompanion[]
   user: {
     fullName: string | null
     mobilePhone: string | null
@@ -114,10 +120,14 @@ export async function fetchMyFixtureTicketRequests(matchKeys: string[], userId: 
   }
 }
 
-export async function requestFixtureTicket(matchKey: string, userId: string) {
+export async function requestFixtureTicket(
+  matchKey: string,
+  userId: string,
+  options?: { travelCompanionMembershipNumbers?: number[] },
+) {
   void userId
   try {
-    await apiSend(`/api/tickets/requests/my/${encodeURIComponent(matchKey)}`, 'POST')
+    await apiSend(`/api/tickets/requests/my/${encodeURIComponent(matchKey)}`, 'POST', options ?? {})
     return { error: undefined }
   } catch (error) {
     return { error: asError(error) }

@@ -6,6 +6,63 @@ import { sendTicketDepositConfirmedEmail } from '../lib/ticketDepositConfirmedEm
 import { sendTicketBalancePaymentEmail } from '../lib/ticketBalancePaymentEmail.ts'
 import { requireAdmin, requireUser } from '../middleware/auth.ts'
 
+const MAX_TRAVEL_COMPANIONS = 10
+
+function parseTravelCompanionMembershipNumbers(raw: unknown): number[] {
+  if (!Array.isArray(raw)) return []
+  const out: number[] = []
+  const seen = new Set<number>()
+  for (const item of raw) {
+    const parsed = Number(item)
+    if (!Number.isInteger(parsed) || parsed < 1) continue
+    if (seen.has(parsed)) continue
+    seen.add(parsed)
+    out.push(parsed)
+    if (out.length >= MAX_TRAVEL_COMPANIONS) break
+  }
+  return out
+}
+
+async function resolveTravelCompanionsByRequestId(
+  requests: { id: string; travel_companion_membership_numbers: number[] | null }[],
+): Promise<Map<string, { membershipNumber: number; fullName: string | null }[]>> {
+  const allNumbers = new Set<number>()
+  for (const request of requests) {
+    for (const number of request.travel_companion_membership_numbers ?? []) {
+      allNumbers.add(number)
+    }
+  }
+
+  const nameByNumber = new Map<number, string | null>()
+  if (allNumbers.size > 0) {
+    const { rows } = await query<{
+      membership_number: number
+      first_name: string | null
+      last_name: string | null
+    }>(
+      `select distinct on (membership_number) membership_number, first_name, last_name
+       from public.membership_applications
+       where membership_number = any($1::int[])
+       order by membership_number, case when status = 'active' then 0 else 1 end, submitted_at desc`,
+      [[...allNumbers]],
+    )
+    for (const row of rows) {
+      const fullName = [row.first_name, row.last_name].filter(Boolean).join(' ').trim() || null
+      nameByNumber.set(row.membership_number, fullName)
+    }
+  }
+
+  return new Map(
+    requests.map((request) => [
+      request.id,
+      (request.travel_companion_membership_numbers ?? []).map((membershipNumber) => ({
+        membershipNumber,
+        fullName: nameByNumber.get(membershipNumber) ?? null,
+      })),
+    ]),
+  )
+}
+
 export const ticketsRouter = Router()
 
 ticketsRouter.post(
@@ -93,19 +150,42 @@ ticketsRouter.post(
   requireUser,
   asyncHandler(async (req, res) => {
     const matchKey = req.params.matchKey
+    const travelCompanionMembershipNumbers = parseTravelCompanionMembershipNumbers(
+      (req.body as { travelCompanionMembershipNumbers?: unknown })?.travelCompanionMembershipNumbers,
+    )
+
+    const { rows: requesterRows } = await query<{ membership_number: number | null }>(
+      `select membership_number
+       from public.membership_applications
+       where user_id = $1 and status = 'active'
+       order by submitted_at desc
+       limit 1`,
+      [req.user!.id],
+    )
+    const requesterMembershipNumber = requesterRows[0]?.membership_number ?? null
+    const filteredTravelCompanions = travelCompanionMembershipNumbers.filter(
+      (n) => requesterMembershipNumber == null || n !== requesterMembershipNumber,
+    )
+
     const { rows } = await query<{ id: string }>(
       `select id from public.fixture_ticket_requests where match_key = $1 and user_id = $2 order by requested_at desc limit 1`,
       [matchKey, req.user!.id],
     )
     if (rows[0]?.id) {
-      await query(`update public.fixture_ticket_requests set status = 'pending', updated_at = now() where id = $1`, [
-        rows[0].id,
-      ])
+      await query(
+        `update public.fixture_ticket_requests
+         set status = 'pending',
+             travel_companion_membership_numbers = $2,
+             updated_at = now()
+         where id = $1`,
+        [rows[0].id, filteredTravelCompanions],
+      )
     } else {
-      await query(`insert into public.fixture_ticket_requests (match_key, user_id, status) values ($1, $2, 'pending')`, [
-        matchKey,
-        req.user!.id,
-      ])
+      await query(
+        `insert into public.fixture_ticket_requests (match_key, user_id, status, travel_companion_membership_numbers)
+         values ($1, $2, 'pending', $3)`,
+        [matchKey, req.user!.id, filteredTravelCompanions],
+      )
     }
     res.json({ ok: true })
   }),
@@ -137,12 +217,13 @@ ticketsRouter.get(
       balance_payment_deadline: string | null
       ticket_confirmed: boolean
       ticket_confirmed_at: string | null
+      travel_companion_membership_numbers: number[] | null
     }>(
       `select ftr.id, ftr.match_key, ftr.user_id, ftr.status, ftr.requested_at,
               ftr.deposit_confirmed, ftr.deposit_confirmed_at, ftr.user_cancelled_at,
               ftr.balance_remaining_amount_eur, ftr.balance_payment_notified,
               ftr.balance_payment_notified_at, ftr.balance_payment_deadline,
-              ftr.ticket_confirmed, ftr.ticket_confirmed_at,
+              ftr.ticket_confirmed, ftr.ticket_confirmed_at, ftr.travel_companion_membership_numbers,
               m.first_name, m.last_name, p.full_name as profile_full_name,
               m.mobile_phone, m.official_mu_membership_id, m.official_mu_membership_status, m.application_id
        from public.fixture_ticket_requests ftr
@@ -156,6 +237,12 @@ ticketsRouter.get(
          limit 1
        ) m on true
        order by ftr.requested_at desc`,
+    )
+    const travelCompanionsByRequestId = await resolveTravelCompanionsByRequestId(
+      rows.map((r) => ({
+        id: r.id,
+        travel_companion_membership_numbers: r.travel_companion_membership_numbers,
+      })),
     )
     res.json({
       rows: rows.map((r) => {
@@ -177,6 +264,7 @@ ticketsRouter.get(
           balancePaymentDeadline: r.balance_payment_deadline,
           ticketConfirmed: r.ticket_confirmed,
           ticketConfirmedAt: r.ticket_confirmed_at,
+          travelCompanions: travelCompanionsByRequestId.get(r.id) ?? [],
           user: {
             fullName,
             mobilePhone: r.mobile_phone,
@@ -404,7 +492,11 @@ ticketsRouter.put(
         throw badRequest('No email address on file for this member.')
       }
       const amountForEmail = resolvedAmount!
-      const deadlineForEmail = rows[0].balance_payment_deadline ?? resolvedDeadline!
+      const rawDeadline = rows[0].balance_payment_deadline ?? resolvedDeadline!
+      const deadlineForEmail =
+        rawDeadline instanceof Date
+          ? `${rawDeadline.getUTCFullYear()}-${String(rawDeadline.getUTCMonth() + 1).padStart(2, '0')}-${String(rawDeadline.getUTCDate()).padStart(2, '0')}`
+          : String(rawDeadline).slice(0, 10)
       await sendTicketBalancePaymentEmail({
         to,
         matchKey: existing.match_key,

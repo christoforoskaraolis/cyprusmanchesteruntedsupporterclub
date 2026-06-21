@@ -61,6 +61,7 @@ import {
   type MyFixtureTicketRequest,
   fixtureMatchKey,
   formatFixtureMatchKeyLabel,
+  parseFixtureMatchKey,
   requestFixtureTicket,
   setFixtureTicketRequestStatus,
   updateFixtureTicketRequestDepositConfirmed,
@@ -770,6 +771,12 @@ type AdminFilter = 'all' | 'pending' | 'active'
 type AdminTab = 'members' | 'tickets' | 'ticketRequests' | 'news' | 'merch' | 'official'
 type AdminTicketFilter = 'pending' | 'approved' | 'completed'
 
+function formatTicketMatchTabLabel(matchKey: string): string {
+  const parsed = parseFixtureMatchKey(matchKey)
+  if (!parsed) return formatFixtureMatchKeyLabel(matchKey)
+  return `${parsed.opponent} · ${formatFixtureKickoff(parsed.kickoffIso)}`
+}
+
 function fixtureWindowStatusLabel(status: FixtureTicketWindowStatus): string {
   if (status === 'open') return 'Open'
   if (status === 'closed') return 'Closed'
@@ -787,15 +794,34 @@ function parseTicketBalanceAmountDraft(value: string): number | null {
 function parseTicketPaymentDeadlineDraft(value: string): string | null {
   const trimmed = value.trim()
   if (!trimmed) return null
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return null
-  const dt = new Date(`${trimmed}T12:00:00`)
+
+  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+    const dt = new Date(`${trimmed}T12:00:00`)
+    if (Number.isNaN(dt.getTime())) return null
+    return trimmed
+  }
+
+  const match = trimmed.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/)
+  if (!match) return null
+
+  const day = Number(match[1])
+  const month = Number(match[2])
+  const year = Number(match[3])
+  if (month < 1 || month > 12 || day < 1 || day > 31) return null
+
+  const iso = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+  const dt = new Date(`${iso}T12:00:00`)
   if (Number.isNaN(dt.getTime())) return null
-  return trimmed
+  if (dt.getFullYear() !== year || dt.getMonth() + 1 !== month || dt.getDate() !== day) return null
+  return iso
 }
 
 function formatTicketBalancePaymentDeadlineForInput(deadlineIso: string | null | undefined): string {
   if (!deadlineIso) return ''
-  return String(deadlineIso).slice(0, 10)
+  const iso = String(deadlineIso).slice(0, 10)
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(iso)) return iso
+  const [year, month, day] = iso.split('-')
+  return `${day}/${month}/${year}`
 }
 
 type TicketDepositPaymentCardProps = {
@@ -954,7 +980,22 @@ type TicketRequestConfirmModalProps = {
   submitting: boolean
   error: string | null
   onClose: () => void
-  onConfirm: () => void
+  onConfirm: (travelCompanionMembershipNumbers: number[]) => void
+}
+
+function parseTicketTravelCompanionDrafts(rows: string[]): number[] {
+  const out: number[] = []
+  const seen = new Set<number>()
+  for (const row of rows) {
+    const trimmed = row.trim()
+    if (!trimmed) continue
+    const parsed = Number(trimmed)
+    if (!Number.isInteger(parsed) || parsed < 1) continue
+    if (seen.has(parsed)) continue
+    seen.add(parsed)
+    out.push(parsed)
+  }
+  return out
 }
 
 function TicketRequestConfirmModal({
@@ -965,7 +1006,26 @@ function TicketRequestConfirmModal({
   onClose,
   onConfirm,
 }: TicketRequestConfirmModalProps) {
+  const [travelCompanionRows, setTravelCompanionRows] = useState<string[]>([])
+
+  useEffect(() => {
+    if (open) setTravelCompanionRows([])
+  }, [open, fixture?.kickoffIso, fixture?.opponent])
+
   if (!open || !fixture) return null
+
+  function updateTravelCompanionRow(index: number, value: string) {
+    const digitsOnly = value.replace(/\D/g, '')
+    setTravelCompanionRows((prev) => prev.map((row, rowIndex) => (rowIndex === index ? digitsOnly : row)))
+  }
+
+  function addTravelCompanionRow() {
+    setTravelCompanionRows((prev) => [...prev, ''])
+  }
+
+  function removeTravelCompanionRow(index: number) {
+    setTravelCompanionRows((prev) => prev.filter((_, rowIndex) => rowIndex !== index))
+  }
 
   return (
     <div
@@ -1002,6 +1062,45 @@ function TicketRequestConfirmModal({
           After you confirm, you will proceed to pay the ticket deposit (€{TICKET_DEPOSIT_FEE_EUR.toFixed(2)} via
           Revolut/bank, €{(TICKET_DEPOSIT_FEE_EUR + STRIPE_SERVICE_FEE_EUR).toFixed(2)} via Stripe).
         </p>
+        <div className="ticket-request-travel-companions">
+          <p className="auth-label">Add the MYCS of someone who will travel with you (optional)</p>
+          {travelCompanionRows.length > 0 && (
+            <ul className="ticket-request-travel-companion-list">
+              {travelCompanionRows.map((row, index) => (
+                <li key={`travel-companion-${index}`} className="ticket-request-travel-companion-row">
+                  <input
+                    className="auth-input ticket-request-travel-companion-input"
+                    type="text"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    placeholder="MYCS number"
+                    value={row}
+                    onChange={(e) => updateTravelCompanionRow(index, e.target.value)}
+                    disabled={submitting}
+                    aria-label={`Travel companion MYCS ${index + 1}`}
+                  />
+                  <button
+                    type="button"
+                    className="ticket-request-travel-companion-remove"
+                    onClick={() => removeTravelCompanionRow(index)}
+                    disabled={submitting}
+                    aria-label={`Remove travel companion ${index + 1}`}
+                  >
+                    −
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+          <button
+            type="button"
+            className="ticket-request-travel-companion-add"
+            onClick={addTravelCompanionRow}
+            disabled={submitting || travelCompanionRows.length >= 10}
+          >
+            + Add travelling member
+          </button>
+        </div>
         {error && <p className="auth-message is-error renewal-modal-error">{error}</p>}
         <div className="renewal-modal-actions">
           <button
@@ -1015,7 +1114,7 @@ function TicketRequestConfirmModal({
           <button
             type="button"
             className="mycmusc-reg-btn mycmusc-reg-btn--primary"
-            onClick={() => void onConfirm()}
+            onClick={() => onConfirm(parseTicketTravelCompanionDrafts(travelCompanionRows))}
             disabled={submitting}
           >
             {submitting ? 'Submitting…' : 'Yes'}
@@ -1999,6 +2098,7 @@ function AdminConsole({
   const [busyRenewalId, setBusyRenewalId] = useState<string | null>(null)
   const [busyTicketRequestId, setBusyTicketRequestId] = useState<string | null>(null)
   const [ticketFilter, setTicketFilter] = useState<AdminTicketFilter>('pending')
+  const [ticketMatchFilter, setTicketMatchFilter] = useState<string>('all')
   const [newsTitle, setNewsTitle] = useState('')
   const [newsBody, setNewsBody] = useState('')
   const [newsImageUrl, setNewsImageUrl] = useState('')
@@ -2089,8 +2189,21 @@ function AdminConsole({
       return new Date(b.submittedAt).getTime() - new Date(a.submittedAt).getTime()
     })
 
+  const ticketMatchTabKeys = useMemo(() => {
+    const keys = new Set<string>()
+    for (const fixture of ticketFixtures) keys.add(fixtureMatchKey(fixture))
+    for (const request of pendingTicketRequests) keys.add(request.matchKey)
+    return [...keys].sort((a, b) => {
+      const parsedA = parseFixtureMatchKey(a)
+      const parsedB = parseFixtureMatchKey(b)
+      if (!parsedA || !parsedB) return a.localeCompare(b)
+      return new Date(parsedA.kickoffIso).getTime() - new Date(parsedB.kickoffIso).getTime()
+    })
+  }, [ticketFixtures, pendingTicketRequests])
+
   const filteredTicketRequests = pendingTicketRequests
     .filter((r) => r.status === ticketFilter)
+    .filter((r) => ticketMatchFilter === 'all' || r.matchKey === ticketMatchFilter)
     .filter((r) => {
       const q = ticketSearch.trim().toLowerCase()
       if (!q) return true
@@ -2212,6 +2325,7 @@ function AdminConsole({
       'Balance Payment Notified',
       'Balance Payment Notified At',
       'Balance Payment Deadline',
+      'Travel Companions',
     ]
     const rows = pendingTicketRequests.map((r) => [
       r.id,
@@ -2232,6 +2346,9 @@ function AdminConsole({
       r.balancePaymentNotified ? 'yes' : 'no',
       r.balancePaymentNotifiedAt ?? '',
       r.balancePaymentDeadline ?? '',
+      r.travelCompanions
+        .map((c) => `${formatMembershipNumber(c.membershipNumber)}${c.fullName ? ` (${c.fullName})` : ''}`)
+        .join(' | '),
     ])
     downloadCsv(`tickets-report-${reportStamp()}.csv`, headers, rows)
   }
@@ -3126,6 +3243,31 @@ function AdminConsole({
               </button>
             ))}
           </div>
+          {ticketMatchTabKeys.length > 0 && (
+            <div className="admin-filter-row admin-filter-row--match-tabs" role="tablist" aria-label="Filter ticket requests by match">
+              <button
+                type="button"
+                role="tab"
+                aria-selected={ticketMatchFilter === 'all'}
+                className={`admin-filter-btn admin-filter-btn--match ${ticketMatchFilter === 'all' ? 'is-active' : ''}`}
+                onClick={() => setTicketMatchFilter('all')}
+              >
+                All matches
+              </button>
+              {ticketMatchTabKeys.map((matchKey) => (
+                <button
+                  key={matchKey}
+                  type="button"
+                  role="tab"
+                  aria-selected={ticketMatchFilter === matchKey}
+                  className={`admin-filter-btn admin-filter-btn--match ${ticketMatchFilter === matchKey ? 'is-active' : ''}`}
+                  onClick={() => setTicketMatchFilter(matchKey)}
+                >
+                  {formatTicketMatchTabLabel(matchKey)}
+                </button>
+              ))}
+            </div>
+          )}
           <div className="admin-search-row">
             <input
               className="auth-input admin-search-input"
@@ -3138,7 +3280,10 @@ function AdminConsole({
           {ticketActionNotice && <p className="admin-member-action-notice">{ticketActionNotice}</p>}
           {ticketActionError && <p className="admin-empty" style={{ color: '#b91c1c' }}>{ticketActionError}</p>}
           {filteredTicketRequests.length === 0 ? (
-            <p className="admin-empty">No {ticketFilter === 'approved' ? 'accepted' : ticketFilter} ticket requests.</p>
+            <p className="admin-empty">
+              No {ticketFilter === 'approved' ? 'accepted' : ticketFilter} ticket requests
+              {ticketMatchFilter !== 'all' ? ` for ${formatTicketMatchTabLabel(ticketMatchFilter)}` : ''}.
+            </p>
           ) : (
             <ul className="admin-ticket-request-list">
               {filteredTicketRequests.map((r) => {
@@ -3176,6 +3321,27 @@ function AdminConsole({
                     <p className="admin-renewal-meta">
                       Requested: {new Date(r.requestedAt).toLocaleString('en-GB')}
                     </p>
+                    {r.travelCompanions.length > 0 && (
+                      <div className="admin-ticket-travel-with">
+                        <p className="auth-label">Travel with</p>
+                        <table className="admin-ticket-travel-with-table">
+                          <thead>
+                            <tr>
+                              <th scope="col">MYCS</th>
+                              <th scope="col">Name</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {r.travelCompanions.map((companion) => (
+                              <tr key={`${r.id}-${companion.membershipNumber}`}>
+                                <td>{formatMembershipNumber(companion.membershipNumber)}</td>
+                                <td>{companion.fullName ?? '—'}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
                     <span className={`fixtures-ticket-pill fixtures-ticket-pill--${r.status}`}>
                       {r.status === 'approved' ? 'Accepted' : r.status[0].toUpperCase() + r.status.slice(1)}
                     </span>
@@ -3256,7 +3422,10 @@ function AdminConsole({
                         <span className="auth-label">Payment deadline</span>
                         <input
                           className="admin-merch-create-input admin-ticket-balance-payment-date"
-                          type="date"
+                          type="text"
+                          inputMode="numeric"
+                          placeholder="dd/mm/yyyy"
+                          autoComplete="off"
                           value={deadlineDraft}
                           onChange={(e) =>
                             setBalanceDeadlineDraftByRequestId((prev) => ({
@@ -4681,7 +4850,9 @@ function AdminConsole({
             }))
             setBalanceDeadlineDraftByRequestId((prev) => ({
               ...prev,
-              [ticketBalancePaymentTarget.request.id]: ticketBalancePaymentTarget.paymentDeadline,
+              [ticketBalancePaymentTarget.request.id]: formatTicketBalancePaymentDeadlineForInput(
+                ticketBalancePaymentTarget.paymentDeadline,
+              ),
             }))
             setTicketBalancePaymentTarget(null)
           } catch (error) {
@@ -5176,14 +5347,14 @@ function App() {
     await refreshFixtureTicketStates()
   }
 
-  async function confirmTicketRequestAndOpenPayment() {
+  async function confirmTicketRequestAndOpenPayment(travelCompanionMembershipNumbers: number[]) {
     if (!ticketRequestConfirmFixture || !user?.id) return
     const fixture = ticketRequestConfirmFixture
     const key = fixtureMatchKey(fixture)
     setTicketRequestConfirmSubmitting(true)
     setTicketRequestConfirmError(null)
     setTicketBusyKey(key)
-    const { error } = await requestFixtureTicket(key, user.id)
+    const { error } = await requestFixtureTicket(key, user.id, { travelCompanionMembershipNumbers })
     setTicketBusyKey(null)
     setTicketRequestConfirmSubmitting(false)
     if (error) {
@@ -6911,10 +7082,30 @@ function App() {
                           const showDepositAccepted =
                             depositConfirmed &&
                             !showBalancePaymentPending &&
+                            !showTicketConfirmed &&
                             !userCancelled &&
                             myRequestStatus !== 'cancelled' &&
                             myRequestStatus !== 'rejected' &&
                             myRequestStatus !== 'completed'
+
+                          if (showTicketConfirmed) {
+                            return (
+                              <div className="fixtures-member-ticket-panel fixtures-member-ticket-panel--confirmed-only">
+                                <p className="fixtures-ticket-confirmed-msg">Ticket Confirmed</p>
+                                <button
+                                  type="button"
+                                  className="fixtures-ticket-cancel-btn"
+                                  onClick={() => {
+                                    setTicketCancelConfirmError(null)
+                                    setTicketCancelConfirmFixture(f)
+                                  }}
+                                  disabled={busy || ticketCancelConfirmSubmitting}
+                                >
+                                  Cancel request
+                                </button>
+                              </div>
+                            )
+                          }
 
                           return (
                             <div className="fixtures-member-ticket-panel">
@@ -6962,22 +7153,6 @@ function App() {
                                 >
                                   Ticket payment pending
                                 </button>
-                              )}
-                              {showTicketConfirmed && (
-                                <>
-                                  <p className="fixtures-ticket-confirmed-msg">Ticket Confirmed</p>
-                                  <button
-                                    type="button"
-                                    className="fixtures-ticket-cancel-btn"
-                                    onClick={() => {
-                                      setTicketCancelConfirmError(null)
-                                      setTicketCancelConfirmFixture(f)
-                                    }}
-                                    disabled={busy || ticketCancelConfirmSubmitting}
-                                  >
-                                    Cancel request
-                                  </button>
-                                </>
                               )}
                               {!userCancelled && myRequestStatus === 'approved' && !showBalancePaymentPending && (
                                 <>
@@ -7059,7 +7234,9 @@ function App() {
             setTicketRequestConfirmFixture(null)
             setTicketRequestConfirmError(null)
           }}
-          onConfirm={() => void confirmTicketRequestAndOpenPayment()}
+          onConfirm={(travelCompanionMembershipNumbers) =>
+            void confirmTicketRequestAndOpenPayment(travelCompanionMembershipNumbers)
+          }
         />
         <TicketDepositPaymentModal
           open={ticketDepositPaymentFixture !== null}

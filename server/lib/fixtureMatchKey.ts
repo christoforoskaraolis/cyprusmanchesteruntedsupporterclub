@@ -28,14 +28,25 @@ export function formatFixtureMatchLabel(parsed: ParsedFixtureMatchKey): string {
 export function formatFixtureMatchDateGreek(kickoffIso: string): string {
   const dt = new Date(kickoffIso)
   if (Number.isNaN(dt.getTime())) return kickoffIso
-  return dt.toLocaleString('el-GR', {
-    weekday: 'long',
-    day: 'numeric',
-    month: 'long',
-    year: 'numeric',
+
+  const datePart = dt
+    .toLocaleDateString('el-GR', {
+      weekday: 'long',
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric',
+      timeZone: 'Europe/London',
+    })
+    .replace(/,\s*/g, ' ')
+
+  const timePart = dt.toLocaleTimeString('en-GB', {
     hour: '2-digit',
     minute: '2-digit',
+    hour12: false,
+    timeZone: 'Europe/London',
   })
+
+  return `${datePart} στις ${timePart}`
 }
 
 export function formatFixtureMatchKeyForEmail(matchKey: string): { matchName: string; matchDate: string } {
