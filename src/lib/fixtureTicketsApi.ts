@@ -28,6 +28,10 @@ export type MyFixtureTicketRequest = {
 export type FixtureTicketTravelCompanion = {
   membershipNumber: number
   fullName: string | null
+  mobilePhone: string | null
+  email: string | null
+  officialMuMembershipId: string | null
+  officialMuMembershipStatus: OfficialMuMembershipStatus | null
 }
 
 export type AdminFixtureTicketRequest = {

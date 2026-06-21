@@ -34,7 +34,19 @@ function parseTravelCompanionMembershipNumbers(raw: unknown): number[] {
 
 async function resolveTravelCompanionsByRequestId(
   requests: { id: string; travel_companion_membership_numbers: number[] | null }[],
-): Promise<Map<string, { membershipNumber: number; fullName: string | null }[]>> {
+): Promise<
+  Map<
+    string,
+    {
+      membershipNumber: number
+      fullName: string | null
+      mobilePhone: string | null
+      email: string | null
+      officialMuMembershipId: string | null
+      officialMuMembershipStatus: 'activated' | 'pending' | null
+    }[]
+  >
+> {
   const allNumbers = new Set<number>()
   for (const request of requests) {
     for (const number of request.travel_companion_membership_numbers ?? []) {
@@ -42,32 +54,69 @@ async function resolveTravelCompanionsByRequestId(
     }
   }
 
-  const nameByNumber = new Map<number, string | null>()
+  const companionByNumber = new Map<
+    number,
+    {
+      fullName: string | null
+      mobilePhone: string | null
+      email: string | null
+      officialMuMembershipId: string | null
+      officialMuMembershipStatus: 'activated' | 'pending' | null
+    }
+  >()
   if (allNumbers.size > 0) {
     const { rows } = await query<{
       membership_number: number
       first_name: string | null
       last_name: string | null
+      mobile_phone: string | null
+      official_mu_membership_id: string | null
+      official_mu_membership_status: string | null
+      profile_email: string | null
+      auth_email: string | null
     }>(
-      `select distinct on (membership_number) membership_number, first_name, last_name
-       from public.membership_applications
-       where membership_number = any($1::int[])
-       order by membership_number, case when status = 'active' then 0 else 1 end, submitted_at desc`,
+      `select distinct on (ma.membership_number)
+              ma.membership_number, ma.first_name, ma.last_name, ma.mobile_phone,
+              ma.official_mu_membership_id, ma.official_mu_membership_status,
+              p.email as profile_email, au.email as auth_email
+       from public.membership_applications ma
+       left join public.profiles p on p.id = ma.user_id
+       left join public.auth_users au on au.user_id = ma.user_id
+       where ma.membership_number = any($1::int[])
+       order by ma.membership_number, case when ma.status = 'active' then 0 else 1 end, ma.submitted_at desc`,
       [[...allNumbers]],
     )
     for (const row of rows) {
       const fullName = [row.first_name, row.last_name].filter(Boolean).join(' ').trim() || null
-      nameByNumber.set(row.membership_number, fullName)
+      const email = (row.profile_email || row.auth_email || '').trim() || null
+      const officialStatus =
+        row.official_mu_membership_status === 'activated' || row.official_mu_membership_status === 'pending'
+          ? row.official_mu_membership_status
+          : null
+      companionByNumber.set(row.membership_number, {
+        fullName,
+        mobilePhone: row.mobile_phone?.trim() || null,
+        email,
+        officialMuMembershipId: row.official_mu_membership_id?.trim() || null,
+        officialMuMembershipStatus: officialStatus,
+      })
     }
   }
 
   return new Map(
     requests.map((request) => [
       request.id,
-      (request.travel_companion_membership_numbers ?? []).map((membershipNumber) => ({
-        membershipNumber,
-        fullName: nameByNumber.get(membershipNumber) ?? null,
-      })),
+      (request.travel_companion_membership_numbers ?? []).map((membershipNumber) => {
+        const details = companionByNumber.get(membershipNumber)
+        return {
+          membershipNumber,
+          fullName: details?.fullName ?? null,
+          mobilePhone: details?.mobilePhone ?? null,
+          email: details?.email ?? null,
+          officialMuMembershipId: details?.officialMuMembershipId ?? null,
+          officialMuMembershipStatus: details?.officialMuMembershipStatus ?? null,
+        }
+      }),
     ]),
   )
 }

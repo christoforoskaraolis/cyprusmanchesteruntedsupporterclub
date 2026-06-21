@@ -2396,7 +2396,20 @@ function AdminConsole({
       r.balancePaymentDeadline ?? '',
       String(1 + r.travelCompanions.length),
       r.travelCompanions
-        .map((c) => `${formatMembershipNumber(c.membershipNumber)}${c.fullName ? ` (${c.fullName})` : ''}`)
+        .map((c) => {
+          const officialMu = `${formatOfficialMuMembershipId(c.officialMuMembershipId)}${
+            c.officialMuMembershipStatus
+              ? ` (${formatOfficialMuMembershipStatus(c.officialMuMembershipStatus)})`
+              : ''
+          }`
+          return [
+            formatMembershipNumber(c.membershipNumber),
+            c.fullName ?? '',
+            c.mobilePhone ?? '',
+            c.email ?? '',
+            officialMu,
+          ].join(' / ')
+        })
         .join(' | '),
     ])
     downloadCsv(`tickets-report-${reportStamp()}.csv`, headers, rows)
@@ -3450,6 +3463,9 @@ function AdminConsole({
                             <tr>
                               <th scope="col">MYCS</th>
                               <th scope="col">Name</th>
+                              <th scope="col">Phone</th>
+                              <th scope="col">Email</th>
+                              <th scope="col">Official MU</th>
                             </tr>
                           </thead>
                           <tbody>
@@ -3457,6 +3473,14 @@ function AdminConsole({
                               <tr key={`${r.id}-${companion.membershipNumber}`}>
                                 <td>{formatMembershipNumber(companion.membershipNumber)}</td>
                                 <td>{companion.fullName ?? '—'}</td>
+                                <td>{companion.mobilePhone ?? '—'}</td>
+                                <td>{companion.email ?? '—'}</td>
+                                <td>
+                                  {formatOfficialMuMembershipId(companion.officialMuMembershipId)}
+                                  {companion.officialMuMembershipStatus
+                                    ? ` (${formatOfficialMuMembershipStatus(companion.officialMuMembershipStatus)})`
+                                    : ''}
+                                </td>
                               </tr>
                             ))}
                           </tbody>
