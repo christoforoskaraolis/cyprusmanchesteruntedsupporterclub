@@ -988,6 +988,168 @@ function PaymentReminderConfirmModal({
   )
 }
 
+type PresentReceivedConfirmModalProps = {
+  open: boolean
+  memberLabel: string | null
+  submitting: boolean
+  error: string | null
+  onClose: () => void
+  onConfirm: () => void
+}
+
+function PresentReceivedConfirmModal({
+  open,
+  memberLabel,
+  submitting,
+  error,
+  onClose,
+  onConfirm,
+}: PresentReceivedConfirmModalProps) {
+  if (!open) return null
+
+  return (
+    <div
+      className="renewal-modal-root"
+      role="presentation"
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget && !submitting) onClose()
+      }}
+    >
+      <div
+        className="renewal-modal-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="present-received-modal-title"
+      >
+        <div className="renewal-modal-head">
+          <h2 id="present-received-modal-title" className="renewal-modal-title">
+            Present received
+          </h2>
+          <button
+            type="button"
+            className="renewal-modal-close"
+            onClick={onClose}
+            disabled={submitting}
+            aria-label="Close"
+          >
+            ×
+          </button>
+        </div>
+        <p className="renewal-modal-lead">
+          Are you sure you want to send email to the user that he received the present
+          {memberLabel ? (
+            <>
+              {' '}
+              (<strong>{memberLabel}</strong>)
+            </>
+          ) : null}
+          ?
+        </p>
+        {error && <p className="auth-message is-error renewal-modal-error">{error}</p>}
+        <div className="renewal-modal-actions">
+          <button
+            type="button"
+            className="mycmusc-reg-btn mycmusc-reg-btn--secondary"
+            onClick={onClose}
+            disabled={submitting}
+          >
+            No
+          </button>
+          <button
+            type="button"
+            className="mycmusc-reg-btn mycmusc-reg-btn--primary"
+            onClick={() => void onConfirm()}
+            disabled={submitting}
+          >
+            {submitting ? 'Sending…' : 'Yes'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+type PurchasedMembershipConfirmModalProps = {
+  open: boolean
+  memberLabel: string | null
+  submitting: boolean
+  error: string | null
+  onClose: () => void
+  onConfirm: () => void
+}
+
+function PurchasedMembershipConfirmModal({
+  open,
+  memberLabel,
+  submitting,
+  error,
+  onClose,
+  onConfirm,
+}: PurchasedMembershipConfirmModalProps) {
+  if (!open) return null
+
+  return (
+    <div
+      className="renewal-modal-root"
+      role="presentation"
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget && !submitting) onClose()
+      }}
+    >
+      <div
+        className="renewal-modal-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="purchased-membership-modal-title"
+      >
+        <div className="renewal-modal-head">
+          <h2 id="purchased-membership-modal-title" className="renewal-modal-title">
+            Purchased Membership
+          </h2>
+          <button
+            type="button"
+            className="renewal-modal-close"
+            onClick={onClose}
+            disabled={submitting}
+            aria-label="Close"
+          >
+            ×
+          </button>
+        </div>
+        <p className="renewal-modal-lead">
+          Are you sure you want to send email to the user about their Official Manchester United membership
+          {memberLabel ? (
+            <>
+              {' '}
+              (<strong>{memberLabel}</strong>)
+            </>
+          ) : null}
+          ?
+        </p>
+        {error && <p className="auth-message is-error renewal-modal-error">{error}</p>}
+        <div className="renewal-modal-actions">
+          <button
+            type="button"
+            className="mycmusc-reg-btn mycmusc-reg-btn--secondary"
+            onClick={onClose}
+            disabled={submitting}
+          >
+            No
+          </button>
+          <button
+            type="button"
+            className="mycmusc-reg-btn mycmusc-reg-btn--primary"
+            onClick={() => void onConfirm()}
+            disabled={submitting}
+          >
+            {submitting ? 'Sending…' : 'Yes'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 type AdminConsoleProps = {
   memberRegistry: MemberRegistryEntry[]
   loading: boolean
@@ -1154,6 +1316,12 @@ function AdminConsole({
   const [paymentReminderTarget, setPaymentReminderTarget] = useState<MemberRegistryEntry | null>(null)
   const [paymentReminderSubmitting, setPaymentReminderSubmitting] = useState(false)
   const [paymentReminderError, setPaymentReminderError] = useState<string | null>(null)
+  const [presentReceivedTarget, setPresentReceivedTarget] = useState<MemberRegistryEntry | null>(null)
+  const [presentReceivedSubmitting, setPresentReceivedSubmitting] = useState(false)
+  const [presentReceivedError, setPresentReceivedError] = useState<string | null>(null)
+  const [purchasedMembershipTarget, setPurchasedMembershipTarget] = useState<MemberRegistryEntry | null>(null)
+  const [purchasedMembershipSubmitting, setPurchasedMembershipSubmitting] = useState(false)
+  const [purchasedMembershipError, setPurchasedMembershipError] = useState<string | null>(null)
   const pendingMembersCount = memberRegistry.filter((member) => member.status === 'pending').length
   const activeMembersCount = memberRegistry.filter((member) => member.status === 'active').length
   const pendingOrdersCount = merchandiseOrders.filter((order) => order.status === 'pending').length
@@ -1679,12 +1847,18 @@ function AdminConsole({
                     <input
                       type="checkbox"
                       checked={m.presentReceived}
-                      disabled={busyId !== null}
+                      disabled={busyId !== null || presentReceivedSubmitting}
                       onChange={async (e) => {
                         setMemberActionError(null)
+                        const checked = e.target.checked
+                        if (checked) {
+                          setPresentReceivedError(null)
+                          setPresentReceivedTarget(m)
+                          return
+                        }
                         setBusyId(m.applicationId)
                         try {
-                          await onUpdatePresentReceived(m.applicationId, e.target.checked)
+                          await onUpdatePresentReceived(m.applicationId, false)
                         } catch (error) {
                           setMemberActionError(
                             error instanceof Error ? error.message : 'Could not update present status.',
@@ -1705,12 +1879,18 @@ function AdminConsole({
                     <input
                       type="checkbox"
                       checked={m.adminMember}
-                      disabled={busyId !== null}
+                      disabled={busyId !== null || purchasedMembershipSubmitting}
                       onChange={async (e) => {
                         setMemberActionError(null)
+                        const checked = e.target.checked
+                        if (checked) {
+                          setPurchasedMembershipError(null)
+                          setPurchasedMembershipTarget(m)
+                          return
+                        }
                         setBusyId(m.applicationId)
                         try {
-                          await onUpdateAdminMemberFlags(m.applicationId, { member: e.target.checked })
+                          await onUpdateAdminMemberFlags(m.applicationId, { member: false })
                         } catch (error) {
                           setMemberActionError(
                             error instanceof Error ? error.message : 'Could not update purchased membership.',
@@ -3289,6 +3469,78 @@ function AdminConsole({
             )
           } finally {
             setPaymentReminderSubmitting(false)
+          }
+        }}
+      />
+      <PresentReceivedConfirmModal
+        open={presentReceivedTarget !== null}
+        memberLabel={
+          presentReceivedTarget
+            ? [presentReceivedTarget.firstName, presentReceivedTarget.lastName].filter(Boolean).join(' ') ||
+              presentReceivedTarget.email ||
+              null
+            : null
+        }
+        submitting={presentReceivedSubmitting}
+        error={presentReceivedError}
+        onClose={() => {
+          if (presentReceivedSubmitting) return
+          setPresentReceivedTarget(null)
+          setPresentReceivedError(null)
+        }}
+        onConfirm={async () => {
+          if (!presentReceivedTarget) return
+          setMemberActionError(null)
+          setMemberActionNotice(null)
+          setPresentReceivedSubmitting(true)
+          setPresentReceivedError(null)
+          try {
+            await onUpdatePresentReceived(presentReceivedTarget.applicationId, true)
+            const recipient = presentReceivedTarget.email || 'the member'
+            setMemberActionNotice(`Present received confirmation email sent to ${recipient}.`)
+            setPresentReceivedTarget(null)
+          } catch (error) {
+            setPresentReceivedError(
+              error instanceof Error ? error.message : 'Could not send present received email.',
+            )
+          } finally {
+            setPresentReceivedSubmitting(false)
+          }
+        }}
+      />
+      <PurchasedMembershipConfirmModal
+        open={purchasedMembershipTarget !== null}
+        memberLabel={
+          purchasedMembershipTarget
+            ? [purchasedMembershipTarget.firstName, purchasedMembershipTarget.lastName].filter(Boolean).join(' ') ||
+              purchasedMembershipTarget.email ||
+              null
+            : null
+        }
+        submitting={purchasedMembershipSubmitting}
+        error={purchasedMembershipError}
+        onClose={() => {
+          if (purchasedMembershipSubmitting) return
+          setPurchasedMembershipTarget(null)
+          setPurchasedMembershipError(null)
+        }}
+        onConfirm={async () => {
+          if (!purchasedMembershipTarget) return
+          setMemberActionError(null)
+          setMemberActionNotice(null)
+          setPurchasedMembershipSubmitting(true)
+          setPurchasedMembershipError(null)
+          try {
+            await onUpdateAdminMemberFlags(purchasedMembershipTarget.applicationId, { member: true })
+            const recipient = purchasedMembershipTarget.email || 'the member'
+            setMemberActionNotice(`Official membership confirmation email sent to ${recipient}.`)
+            setPurchasedMembershipTarget(null)
+          } catch (error) {
+            setPurchasedMembershipError(
+              error instanceof Error ? error.message : 'Could not send purchased membership email.',
+            )
+          } finally {
+            setPurchasedMembershipSubmitting(false)
           }
         }}
       />

@@ -5,6 +5,8 @@ import { asyncHandler } from '../lib/asyncHandler.ts'
 import { HttpError, badRequest, notFound } from '../lib/errors.ts'
 import { sendMembershipActivationEmail } from '../lib/membershipActivationEmail.ts'
 import { sendMembershipPaymentReminderEmail } from '../lib/membershipPaymentReminderEmail.ts'
+import { sendMembershipPresentReceivedEmail } from '../lib/membershipPresentReceivedEmail.ts'
+import { sendMembershipPurchasedMembershipEmail } from '../lib/membershipPurchasedMembershipEmail.ts'
 import { parseOfficialMuMembershipFields } from '../lib/officialMuMembership.ts'
 import { requireAdmin, requireUser } from '../middleware/auth.ts'
 
@@ -573,6 +575,22 @@ membershipRouter.put(
     const presentReceived = (req.body as { presentReceived?: unknown })?.presentReceived === true
     if (!applicationId) throw badRequest('Application ID is required')
 
+    const { rows: existingRows } = await query<{
+      present_received: boolean
+      profile_email: string | null
+      auth_email: string | null
+    }>(
+      `select ma.present_received, p.email as profile_email, au.email as auth_email
+       from public.membership_applications ma
+       left join public.profiles p on p.id = ma.user_id
+       left join public.auth_users au on au.user_id = ma.user_id
+       where ma.application_id = $1
+       limit 1`,
+      [applicationId],
+    )
+    const existing = existingRows[0]
+    if (!existing) throw notFound('Membership request not found')
+
     const { rows } = await query<{ application_id: string }>(
       `update public.membership_applications
        set present_received = $1,
@@ -582,6 +600,15 @@ membershipRouter.put(
       [presentReceived, applicationId],
     )
     if (rows.length === 0) throw notFound('Membership request not found')
+
+    if (presentReceived && !existing.present_received) {
+      const to = (existing.profile_email || existing.auth_email || '').trim()
+      if (!to) {
+        throw badRequest('No email address on file for this member.')
+      }
+      await sendMembershipPresentReceivedEmail({ to })
+    }
+
     res.json({ ok: true, presentReceived })
   }),
 )
@@ -602,6 +629,22 @@ membershipRouter.put(
 
     const member = hasMember ? body.member === true : null
     const sendMicrosite = hasSendMicrosite ? body.sendMicrosite === true : null
+
+    const { rows: existingRows } = await query<{
+      admin_member: boolean
+      profile_email: string | null
+      auth_email: string | null
+    }>(
+      `select ma.admin_member, p.email as profile_email, au.email as auth_email
+       from public.membership_applications ma
+       left join public.profiles p on p.id = ma.user_id
+       left join public.auth_users au on au.user_id = ma.user_id
+       where ma.application_id = $1
+       limit 1`,
+      [applicationId],
+    )
+    const existing = existingRows[0]
+    if (!existing) throw notFound('Membership request not found')
 
     const { rows } = await query<{
       application_id: string
@@ -628,6 +671,14 @@ membershipRouter.put(
       [member, sendMicrosite, applicationId],
     )
     if (rows.length === 0) throw notFound('Membership request not found')
+
+    if (member === true && !existing.admin_member) {
+      const to = (existing.profile_email || existing.auth_email || '').trim()
+      if (!to) {
+        throw badRequest('No email address on file for this member.')
+      }
+      await sendMembershipPurchasedMembershipEmail({ to })
+    }
 
     const row = rows[0]
     res.json({
