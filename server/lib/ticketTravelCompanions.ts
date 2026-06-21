@@ -1,6 +1,8 @@
 import { query } from '../db.ts'
 import { badRequest } from './errors.ts'
 
+export const TICKET_DEPOSIT_FEE_EUR = 50
+
 function formatMycs(membershipNumber: number): string {
   return String(membershipNumber).padStart(2, '0')
 }
@@ -9,6 +11,12 @@ export function ticketSlotCountFromCompanionNumbers(
   travelCompanionMembershipNumbers: number[] | null | undefined,
 ): number {
   return 1 + (travelCompanionMembershipNumbers?.length ?? 0)
+}
+
+export function ticketDepositAmountEurFromCompanionNumbers(
+  travelCompanionMembershipNumbers: number[] | null | undefined,
+): number {
+  return TICKET_DEPOSIT_FEE_EUR * ticketSlotCountFromCompanionNumbers(travelCompanionMembershipNumbers)
 }
 
 export async function validateTravelCompanionMembershipNumbers(

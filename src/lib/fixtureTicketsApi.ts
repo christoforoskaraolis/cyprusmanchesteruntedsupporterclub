@@ -23,6 +23,7 @@ export type MyFixtureTicketRequest = {
   ticketConfirmed: boolean
   ticketSlotCount: number
   travelCompanionCount: number
+  depositAmountEur: number
 }
 
 export type FixtureTicketTravelCompanion = {
@@ -152,10 +153,18 @@ export async function requestFixtureTicket(
 ) {
   void userId
   try {
-    await apiSend(`/api/tickets/requests/my/${encodeURIComponent(matchKey)}`, 'POST', options ?? {})
-    return { error: undefined }
+    const data = await apiSend<{
+      ok: boolean
+      ticketSlotCount: number
+      depositAmountEur: number
+    }>(`/api/tickets/requests/my/${encodeURIComponent(matchKey)}`, 'POST', options ?? {})
+    return {
+      ticketSlotCount: data.ticketSlotCount,
+      depositAmountEur: data.depositAmountEur,
+      error: undefined,
+    }
   } catch (error) {
-    return { error: asError(error) }
+    return { ticketSlotCount: undefined, depositAmountEur: undefined, error: asError(error) }
   }
 }
 

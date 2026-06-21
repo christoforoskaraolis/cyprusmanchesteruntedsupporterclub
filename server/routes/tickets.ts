@@ -5,6 +5,7 @@ import { badRequest, notFound } from '../lib/errors.ts'
 import { sendTicketDepositConfirmedEmail } from '../lib/ticketDepositConfirmedEmail.ts'
 import { sendTicketBalancePaymentEmail } from '../lib/ticketBalancePaymentEmail.ts'
 import {
+  ticketDepositAmountEurFromCompanionNumbers,
   ticketSlotCountFromCompanionNumbers,
   validateTravelCompanionMembershipNumbers,
 } from '../lib/ticketTravelCompanions.ts'
@@ -275,6 +276,7 @@ ticketsRouter.post(
         ticketConfirmed: r.ticket_confirmed,
         ticketSlotCount: ticketSlotCountFromCompanionNumbers(r.travel_companion_membership_numbers),
         travelCompanionCount: r.travel_companion_membership_numbers?.length ?? 0,
+        depositAmountEur: ticketDepositAmountEurFromCompanionNumbers(r.travel_companion_membership_numbers),
       })),
     })
   }),
@@ -352,7 +354,11 @@ ticketsRouter.post(
       )
     }
     await closeFixtureTicketWindowIfAtCapacity(matchKey)
-    res.json({ ok: true })
+    res.json({
+      ok: true,
+      ticketSlotCount: requestedSlotCount,
+      depositAmountEur: ticketDepositAmountEurFromCompanionNumbers(filteredTravelCompanions),
+    })
   }),
 )
 
@@ -472,8 +478,10 @@ ticketsRouter.put(
       match_key: string
       profile_email: string | null
       auth_email: string | null
+      travel_companion_membership_numbers: number[] | null
     }>(
-      `select ftr.deposit_confirmed, ftr.match_key, p.email as profile_email, au.email as auth_email
+      `select ftr.deposit_confirmed, ftr.match_key, ftr.travel_companion_membership_numbers,
+              p.email as profile_email, au.email as auth_email
        from public.fixture_ticket_requests ftr
        left join public.profiles p on p.id = ftr.user_id
        left join public.auth_users au on au.user_id = ftr.user_id
@@ -504,7 +512,14 @@ ticketsRouter.put(
       if (!to) {
         throw badRequest('No email address on file for this member.')
       }
-      await sendTicketDepositConfirmedEmail({ to, matchKey: existing.match_key })
+      const ticketSlotCount = ticketSlotCountFromCompanionNumbers(existing.travel_companion_membership_numbers)
+      const depositAmountEur = ticketDepositAmountEurFromCompanionNumbers(existing.travel_companion_membership_numbers)
+      await sendTicketDepositConfirmedEmail({
+        to,
+        matchKey: existing.match_key,
+        depositAmountEur,
+        ticketSlotCount,
+      })
     }
 
     const row = rows[0]

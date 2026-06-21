@@ -1186,6 +1186,9 @@ function TicketDepositPaymentModal({
 }: TicketDepositPaymentModalProps) {
   if (!open || !fixture) return null
 
+  const depositEur = ticketDepositAmountEur(ticketSlotCount)
+  const stripeDepositEur = depositEur + STRIPE_SERVICE_FEE_EUR
+
   return (
     <div
       className="renewal-modal-root"
@@ -1209,10 +1212,15 @@ function TicketDepositPaymentModal({
           </button>
         </div>
         <p className="renewal-modal-lead">
-          Your ticket request has been submitted and is <strong>pending</strong> committee review. Please pay the deposit
-          below to complete your application.
+          Your ticket request has been submitted and is <strong>pending</strong> committee review. Please pay the
+          deposit of <strong>€{depositEur.toFixed(2)}</strong> below to complete your application
+          {ticketSlotCount > 1
+            ? ` (€${TICKET_DEPOSIT_FEE_EUR.toFixed(2)} per ticket × ${ticketSlotCount} tickets — €${depositEur.toFixed(2)} via Revolut/bank, €${stripeDepositEur.toFixed(2)} via Stripe)`
+            : ` (€${depositEur.toFixed(2)} via Revolut/bank, €${stripeDepositEur.toFixed(2)} via Stripe)`}
+          .
         </p>
         <TicketDepositPaymentCard
+          key={`${ticketReference}-${ticketSlotCount}`}
           fixture={fixture}
           membershipNumber={membershipNumber}
           ticketReference={ticketReference}
@@ -1649,6 +1657,7 @@ function TicketCompletionModal({
         </dl>
 
         <TicketDepositPaymentCard
+          key={`${ticketReference}-${ticketSlotCount}`}
           fixture={fixture}
           membershipNumber={membershipNumber}
           ticketReference={ticketReference}
@@ -5334,7 +5343,7 @@ function App() {
   const [ticketRequestConfirmSubmitting, setTicketRequestConfirmSubmitting] = useState(false)
   const [ticketRequestConfirmError, setTicketRequestConfirmError] = useState<string | null>(null)
   const [ticketDepositPaymentFixture, setTicketDepositPaymentFixture] = useState<UpcomingFixture | null>(null)
-  const [ticketDepositSlotCount, setTicketDepositSlotCount] = useState(1)
+  const [pendingTicketDepositSlotCount, setPendingTicketDepositSlotCount] = useState<number | null>(null)
   const [ticketBalancePaymentFixture, setTicketBalancePaymentFixture] = useState<UpcomingFixture | null>(null)
   const [ticketCancelConfirmFixture, setTicketCancelConfirmFixture] = useState<UpcomingFixture | null>(null)
   const [ticketCancelConfirmSubmitting, setTicketCancelConfirmSubmitting] = useState(false)
@@ -5530,28 +5539,33 @@ function App() {
     setTicketRequestConfirmSubmitting(true)
     setTicketRequestConfirmError(null)
     setTicketBusyKey(key)
-    const { error } = await requestFixtureTicket(key, user.id, { travelCompanionMembershipNumbers })
+    const { ticketSlotCount, error } = await requestFixtureTicket(key, user.id, { travelCompanionMembershipNumbers })
     setTicketBusyKey(null)
     setTicketRequestConfirmSubmitting(false)
     if (error) {
       setTicketRequestConfirmError(error.message)
       return
     }
+    const resolvedSlotCount = ticketSlotCount ?? 1 + travelCompanionMembershipNumbers.length
+    setPendingTicketDepositSlotCount(resolvedSlotCount)
     await refreshFixtureTicketStates()
     setTicketRequestConfirmFixture(null)
-    const slotCount = 1 + travelCompanionMembershipNumbers.length
-    setTicketDepositSlotCount(slotCount)
     setTicketDepositPaymentFixture(fixture)
   }
 
-  function openTicketDepositPayment(fixture: UpcomingFixture) {
+  function resolveTicketDepositSlotCount(fixture: UpcomingFixture | null): number {
+    if (!fixture) return 1
     const key = fixtureMatchKey(fixture)
-    setTicketDepositSlotCount(myTicketRequestByKey[key]?.ticketSlotCount ?? 1)
+    return myTicketRequestByKey[key]?.ticketSlotCount ?? pendingTicketDepositSlotCount ?? 1
+  }
+
+  function openTicketDepositPayment(fixture: UpcomingFixture) {
     setTicketDepositPaymentFixture(fixture)
   }
 
   function closeTicketDepositPayment() {
     setTicketDepositPaymentFixture(null)
+    setPendingTicketDepositSlotCount(null)
   }
 
   function openTicketBalancePayment(fixture: UpcomingFixture) {
@@ -7430,7 +7444,7 @@ function App() {
           ticketReference={
             ticketDepositPaymentFixture ? fixtureMatchKey(ticketDepositPaymentFixture) : 'match-ticket'
           }
-          ticketSlotCount={ticketDepositSlotCount}
+          ticketSlotCount={resolveTicketDepositSlotCount(ticketDepositPaymentFixture)}
         />
         <TicketBalancePaymentModal
           open={ticketBalancePaymentFixture !== null}
