@@ -51,15 +51,21 @@ import {
   updateNewsPost,
 } from './lib/newsApi.ts'
 import {
+  cancelMyFixtureTicketRequest,
   completeMyAcceptedTicketRequest,
   type AdminFixtureTicketRequest,
   type FixtureTicketWindowStatus,
   fetchPendingFixtureTicketRequests,
   fetchFixtureTicketWindows,
   fetchMyFixtureTicketRequests,
+  type MyFixtureTicketRequest,
   fixtureMatchKey,
+  formatFixtureMatchKeyLabel,
   requestFixtureTicket,
   setFixtureTicketRequestStatus,
+  updateFixtureTicketRequestDepositConfirmed,
+  updateFixtureTicketRequestBalancePayment,
+  updateFixtureTicketRequestTicketConfirmed,
   upsertFixtureTicketWindow,
 } from './lib/fixtureTicketsApi.ts'
 import {
@@ -106,7 +112,7 @@ import {
   nextSeasonPeriodLabels,
   nextSeasonValidUntilIso,
 } from './lib/membershipSeason.ts'
-import { ClubPaymentMethodFields, ClubPaymentMethodsBlock } from './components/ClubPaymentMethods.tsx'
+import { ClubPaymentMethodFields, ClubPaymentMethodsBlock, STRIPE_SERVICE_FEE_EUR } from './components/ClubPaymentMethods.tsx'
 import {
   MembershipPendingView,
   OptionalOfficialMembershipPicker,
@@ -119,7 +125,8 @@ import { AdminNewsPostPreview } from './components/AdminNewsPostPreview.tsx'
 import { NewsFeed } from './components/NewsFeed.tsx'
 
 const MEMBERSHIP_FEE_EUR = 15
-const TICKET_RESERVATION_FEE_EUR = 20
+/** Ticket deposit via Revolut / bank transfer. Stripe adds {@link STRIPE_SERVICE_FEE_EUR}. */
+const TICKET_DEPOSIT_FEE_EUR = 50
 
 function formatLongDate(day: number, monthIndex: number, year: number): string {
   return new Date(year, monthIndex, day).toLocaleDateString('en-GB', {
@@ -760,13 +767,648 @@ function NewsDetailModal({ post, open, onClose }: NewsDetailModalProps) {
 }
 
 type AdminFilter = 'all' | 'pending' | 'active'
-type AdminTab = 'members' | 'tickets' | 'news' | 'merch' | 'official'
+type AdminTab = 'members' | 'tickets' | 'ticketRequests' | 'news' | 'merch' | 'official'
 type AdminTicketFilter = 'pending' | 'approved' | 'completed'
 
 function fixtureWindowStatusLabel(status: FixtureTicketWindowStatus): string {
   if (status === 'open') return 'Open'
   if (status === 'closed') return 'Closed'
   return 'Disabled'
+}
+
+function parseTicketBalanceAmountDraft(value: string): number | null {
+  const trimmed = value.trim()
+  if (!trimmed) return null
+  const parsed = Number(trimmed.replace(',', '.'))
+  if (!Number.isFinite(parsed) || parsed <= 0) return null
+  return Math.round(parsed * 100) / 100
+}
+
+function parseTicketPaymentDeadlineDraft(value: string): string | null {
+  const trimmed = value.trim()
+  if (!trimmed) return null
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return null
+  const dt = new Date(`${trimmed}T12:00:00`)
+  if (Number.isNaN(dt.getTime())) return null
+  return trimmed
+}
+
+function formatTicketBalancePaymentDeadlineForInput(deadlineIso: string | null | undefined): string {
+  if (!deadlineIso) return ''
+  return String(deadlineIso).slice(0, 10)
+}
+
+type TicketDepositPaymentCardProps = {
+  fixture: UpcomingFixture | null
+  membershipNumber: string
+  ticketReference: string
+  returnPath?: string
+  headingId?: string
+  showFixtureSummary?: boolean
+}
+
+function TicketDepositPaymentCard({
+  fixture,
+  membershipNumber,
+  ticketReference,
+  returnPath = '/tickets',
+  headingId = 'ticket-deposit-payment-heading',
+  showFixtureSummary = true,
+}: TicketDepositPaymentCardProps) {
+  const stripeTotalEur = TICKET_DEPOSIT_FEE_EUR + STRIPE_SERVICE_FEE_EUR
+
+  return (
+    <div className="membership-payment-card renewal-modal-payment" role="region" aria-labelledby={headingId}>
+      <h3 id={headingId} className="membership-payment-title">
+        Προκαταβολή για την αγωρά εισητηρίου / Ticket deposit payment
+      </h3>
+      {showFixtureSummary && fixture && (
+        <p className="membership-payment-intro">
+          <strong>Match:</strong>{' '}
+          {fixture.home ? 'Manchester United vs ' : ''}
+          {!fixture.home ? `${fixture.opponent} vs Manchester United` : fixture.opponent} ·{' '}
+          {formatFixtureKickoff(fixture.kickoffIso)} · {fixture.venue}
+        </p>
+      )}
+      <p className="membership-payment-fee">
+        <strong>Revolut / Bank transfer:</strong> €{TICKET_DEPOSIT_FEE_EUR.toFixed(2)}
+      </p>
+      <p className="membership-payment-fee">
+        <strong>Stripe (card):</strong> €{stripeTotalEur.toFixed(2)} (€{TICKET_DEPOSIT_FEE_EUR.toFixed(2)} + €
+        {STRIPE_SERVICE_FEE_EUR.toFixed(2)} service charge)
+      </p>
+      <p className="membership-payment-intro">
+        Use bank transfer, Revolut, or Stripe below. For manual transfers, include your <strong>full name</strong> and{' '}
+        <strong>membership number {membershipNumber}</strong> in the payment reference.
+      </p>
+      <ClubPaymentMethodFields
+        stripe={{
+          amountEur: TICKET_DEPOSIT_FEE_EUR,
+          description: `Ticket deposit — ${ticketReference}`,
+          paymentKind: 'ticket',
+          referenceId: ticketReference,
+          returnPath,
+        }}
+      />
+      <div className="ticket-deposit-notes">
+        <p className="ticket-deposit-notes-lead">Παρακαλούμε σημειώστε τα ακόλουθα:</p>
+        <ul className="ticket-deposit-notes-list">
+          <li>
+            Η υποβολή αιτήματος και η καταβολή προκαταβολής δεν εγγυώνται την εξασφάλιση εισιτηρίου.
+          </li>
+          <li>
+            Σε περίπτωση που ο Σύνδεσμος δεν λάβει επαρκή αριθμό εισιτηρίων για να καλύψει όλα τα αιτήματα, θα
+            σας επιστραφεί ολόκληρο το ποσό της προκαταβολής σας.
+          </li>
+          <li>
+            Σε περίπτωση που επιθυμείτε να ακυρώσετε το αίτημά σας, η προκαταβολή σας θα επιστραφεί μόνο εφόσον το
+            συγκεκριμένο εισιτήριο διατεθεί σε άλλο μέλος. Σε αυτή την περίπτωση θα παρακρατείται ποσό €10 ως
+            διοικητικό κόστος ακύρωσης.
+          </li>
+          <li>
+            Κατά τη διαδικασία κατανομής εισιτηρίων, προτεραιότητα δίνεται πάντοτε στα μέλη που δεν έχουν
+            προηγουμένως παρακολουθήσει αγώνα της Manchester United στο Old Trafford μέσω του Συνδέσμου μας.
+          </li>
+        </ul>
+      </div>
+    </div>
+  )
+}
+
+type TicketBalancePaymentCardProps = {
+  fixture: UpcomingFixture | null
+  membershipNumber: string
+  ticketReference: string
+  balanceRemainingAmountEur: number
+  balancePaymentDeadline: string | null
+  returnPath?: string
+  headingId?: string
+  showFixtureSummary?: boolean
+}
+
+function formatTicketPaymentDeadlineLabel(deadlineIso: string | null | undefined): string {
+  if (!deadlineIso) return '—'
+  const dt = new Date(`${deadlineIso}T12:00:00`)
+  if (Number.isNaN(dt.getTime())) return deadlineIso
+  return dt.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })
+}
+
+function TicketBalancePaymentCard({
+  fixture,
+  membershipNumber,
+  ticketReference,
+  balanceRemainingAmountEur,
+  balancePaymentDeadline,
+  returnPath = '/tickets',
+  headingId = 'ticket-balance-payment-heading',
+  showFixtureSummary = true,
+}: TicketBalancePaymentCardProps) {
+  const stripeTotalEur = balanceRemainingAmountEur + STRIPE_SERVICE_FEE_EUR
+
+  return (
+    <div className="membership-payment-card renewal-modal-payment" role="region" aria-labelledby={headingId}>
+      <h3 id={headingId} className="membership-payment-title">
+        Υπόλοιπο πληρωμής εισιτηρίου / Ticket balance payment
+      </h3>
+      {showFixtureSummary && fixture && (
+        <p className="membership-payment-intro">
+          <strong>Match:</strong>{' '}
+          {fixture.home ? 'Manchester United vs ' : ''}
+          {!fixture.home ? `${fixture.opponent} vs Manchester United` : fixture.opponent} ·{' '}
+          {formatFixtureKickoff(fixture.kickoffIso)} · {fixture.venue}
+        </p>
+      )}
+      <p className="membership-payment-fee">
+        <strong>Remaining amount:</strong> €{balanceRemainingAmountEur.toFixed(2)}
+      </p>
+      <p className="membership-payment-fee">
+        <strong>Payment deadline:</strong> {formatTicketPaymentDeadlineLabel(balancePaymentDeadline)}
+      </p>
+      <p className="membership-payment-fee">
+        <strong>Revolut / Bank transfer:</strong> €{balanceRemainingAmountEur.toFixed(2)}
+      </p>
+      <p className="membership-payment-fee">
+        <strong>Stripe (card):</strong> €{stripeTotalEur.toFixed(2)} (€{balanceRemainingAmountEur.toFixed(2)} + €
+        {STRIPE_SERVICE_FEE_EUR.toFixed(2)} service charge)
+      </p>
+      <p className="membership-payment-intro">
+        Use bank transfer, Revolut, or Stripe below. For manual transfers, include your <strong>full name</strong> and{' '}
+        <strong>membership number {membershipNumber}</strong> in the payment reference.
+      </p>
+      <ClubPaymentMethodFields
+        stripe={{
+          amountEur: balanceRemainingAmountEur,
+          description: `Ticket balance — ${ticketReference}`,
+          paymentKind: 'ticket',
+          referenceId: `${ticketReference}|balance`,
+          returnPath,
+        }}
+      />
+    </div>
+  )
+}
+
+type TicketRequestConfirmModalProps = {
+  open: boolean
+  fixture: UpcomingFixture | null
+  submitting: boolean
+  error: string | null
+  onClose: () => void
+  onConfirm: () => void
+}
+
+function TicketRequestConfirmModal({
+  open,
+  fixture,
+  submitting,
+  error,
+  onClose,
+  onConfirm,
+}: TicketRequestConfirmModalProps) {
+  if (!open || !fixture) return null
+
+  return (
+    <div
+      className="renewal-modal-root"
+      role="presentation"
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget && !submitting) onClose()
+      }}
+    >
+      <div className="renewal-modal-dialog" role="dialog" aria-modal="true" aria-labelledby="ticket-request-modal-title">
+        <div className="renewal-modal-head">
+          <h2 id="ticket-request-modal-title" className="renewal-modal-title">
+            Match ticket request
+          </h2>
+          <button
+            type="button"
+            className="renewal-modal-close"
+            onClick={onClose}
+            disabled={submitting}
+            aria-label="Close"
+          >
+            ×
+          </button>
+        </div>
+        <p className="renewal-modal-lead">
+          Are you sure you want to submit a match ticket request for{' '}
+          <strong>
+            {fixture.home ? 'Manchester United vs ' : ''}
+            {!fixture.home ? `${fixture.opponent} vs Manchester United` : fixture.opponent}
+          </strong>{' '}
+          ({formatFixtureKickoff(fixture.kickoffIso)})?
+        </p>
+        <p className="renewal-modal-lead">
+          After you confirm, you will proceed to pay the ticket deposit (€{TICKET_DEPOSIT_FEE_EUR.toFixed(2)} via
+          Revolut/bank, €{(TICKET_DEPOSIT_FEE_EUR + STRIPE_SERVICE_FEE_EUR).toFixed(2)} via Stripe).
+        </p>
+        {error && <p className="auth-message is-error renewal-modal-error">{error}</p>}
+        <div className="renewal-modal-actions">
+          <button
+            type="button"
+            className="mycmusc-reg-btn mycmusc-reg-btn--secondary"
+            onClick={onClose}
+            disabled={submitting}
+          >
+            No
+          </button>
+          <button
+            type="button"
+            className="mycmusc-reg-btn mycmusc-reg-btn--primary"
+            onClick={() => void onConfirm()}
+            disabled={submitting}
+          >
+            {submitting ? 'Submitting…' : 'Yes'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+type TicketDepositPaymentModalProps = {
+  open: boolean
+  onClose: () => void
+  fixture: UpcomingFixture | null
+  membershipNumber: string
+  ticketReference: string
+}
+
+function TicketDepositPaymentModal({
+  open,
+  onClose,
+  fixture,
+  membershipNumber,
+  ticketReference,
+}: TicketDepositPaymentModalProps) {
+  if (!open || !fixture) return null
+
+  return (
+    <div
+      className="renewal-modal-root"
+      role="presentation"
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget) onClose()
+      }}
+    >
+      <div
+        className="renewal-modal-dialog renewal-modal-dialog--wide"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="ticket-deposit-modal-title"
+      >
+        <div className="renewal-modal-head">
+          <h2 id="ticket-deposit-modal-title" className="renewal-modal-title">
+            Προκαταβολή για την αγωρά εισητηρίου / Ticket deposit payment
+          </h2>
+          <button type="button" className="renewal-modal-close" onClick={onClose} aria-label="Close">
+            ×
+          </button>
+        </div>
+        <p className="renewal-modal-lead">
+          Your ticket request has been submitted and is <strong>pending</strong> committee review. Please pay the deposit
+          below to complete your application.
+        </p>
+        <TicketDepositPaymentCard
+          fixture={fixture}
+          membershipNumber={membershipNumber}
+          ticketReference={ticketReference}
+          returnPath="/tickets"
+          headingId="ticket-deposit-modal-payment-heading"
+        />
+        <div className="renewal-modal-actions">
+          <button type="button" className="mycmusc-reg-btn mycmusc-reg-btn--primary" onClick={onClose}>
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+type TicketBalancePaymentModalProps = {
+  open: boolean
+  onClose: () => void
+  fixture: UpcomingFixture | null
+  membershipNumber: string
+  ticketReference: string
+  balanceRemainingAmountEur: number | null
+  balancePaymentDeadline: string | null
+}
+
+function TicketBalancePaymentModal({
+  open,
+  onClose,
+  fixture,
+  membershipNumber,
+  ticketReference,
+  balanceRemainingAmountEur,
+  balancePaymentDeadline,
+}: TicketBalancePaymentModalProps) {
+  if (!open || !fixture || balanceRemainingAmountEur == null || balanceRemainingAmountEur <= 0) return null
+
+  return (
+    <div
+      className="renewal-modal-root"
+      role="presentation"
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget) onClose()
+      }}
+    >
+      <div
+        className="renewal-modal-dialog renewal-modal-dialog--wide"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="ticket-balance-payment-modal-title"
+      >
+        <div className="renewal-modal-head">
+          <h2 id="ticket-balance-payment-modal-title" className="renewal-modal-title">
+            Υπόλοιπο πληρωμής εισιτηρίου / Ticket balance payment
+          </h2>
+          <button type="button" className="renewal-modal-close" onClick={onClose} aria-label="Close">
+            ×
+          </button>
+        </div>
+        <p className="renewal-modal-lead">
+          Your ticket has been secured. Please pay the remaining balance below by the stated deadline.
+        </p>
+        <TicketBalancePaymentCard
+          fixture={fixture}
+          membershipNumber={membershipNumber}
+          ticketReference={ticketReference}
+          balanceRemainingAmountEur={balanceRemainingAmountEur}
+          balancePaymentDeadline={balancePaymentDeadline}
+          returnPath="/tickets"
+          headingId="ticket-balance-payment-modal-card-heading"
+        />
+        <div className="renewal-modal-actions">
+          <button type="button" className="mycmusc-reg-btn mycmusc-reg-btn--primary" onClick={onClose}>
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+type TicketCancelConfirmModalProps = {
+  open: boolean
+  fixture: UpcomingFixture | null
+  submitting: boolean
+  error: string | null
+  onClose: () => void
+  onConfirm: () => void
+}
+
+function TicketCancelConfirmModal({
+  open,
+  fixture,
+  submitting,
+  error,
+  onClose,
+  onConfirm,
+}: TicketCancelConfirmModalProps) {
+  if (!open || !fixture) return null
+
+  return (
+    <div
+      className="renewal-modal-root"
+      role="presentation"
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget && !submitting) onClose()
+      }}
+    >
+      <div className="renewal-modal-dialog" role="dialog" aria-modal="true" aria-labelledby="ticket-cancel-modal-title">
+        <div className="renewal-modal-head">
+          <h2 id="ticket-cancel-modal-title" className="renewal-modal-title">
+            Cancel ticket request
+          </h2>
+          <button
+            type="button"
+            className="renewal-modal-close"
+            onClick={onClose}
+            disabled={submitting}
+            aria-label="Close"
+          >
+            ×
+          </button>
+        </div>
+        <p className="renewal-modal-lead">
+          Are you sure you want to cancel your ticket request for{' '}
+          <strong>
+            {fixture.home ? 'Manchester United vs ' : ''}
+            {!fixture.home ? `${fixture.opponent} vs Manchester United` : fixture.opponent}
+          </strong>{' '}
+          ({formatFixtureKickoff(fixture.kickoffIso)})?
+        </p>
+        {error && <p className="auth-message is-error renewal-modal-error">{error}</p>}
+        <div className="renewal-modal-actions">
+          <button
+            type="button"
+            className="mycmusc-reg-btn mycmusc-reg-btn--secondary"
+            onClick={onClose}
+            disabled={submitting}
+          >
+            No
+          </button>
+          <button
+            type="button"
+            className="mycmusc-reg-btn mycmusc-reg-btn--primary"
+            onClick={() => void onConfirm()}
+            disabled={submitting}
+          >
+            {submitting ? 'Cancelling…' : 'Yes'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+type TicketBalancePaymentConfirmModalProps = {
+  open: boolean
+  memberLabel: string | null
+  matchLabel: string | null
+  amountEur: number | null
+  paymentDeadline: string | null
+  submitting: boolean
+  error: string | null
+  onClose: () => void
+  onConfirm: () => void
+}
+
+function TicketBalancePaymentConfirmModal({
+  open,
+  memberLabel,
+  matchLabel,
+  amountEur,
+  paymentDeadline,
+  submitting,
+  error,
+  onClose,
+  onConfirm,
+}: TicketBalancePaymentConfirmModalProps) {
+  if (!open) return null
+
+  return (
+    <div
+      className="renewal-modal-root"
+      role="presentation"
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget && !submitting) onClose()
+      }}
+    >
+      <div
+        className="renewal-modal-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="ticket-balance-payment-modal-title"
+      >
+        <div className="renewal-modal-head">
+          <h2 id="ticket-balance-payment-modal-title" className="renewal-modal-title">
+            Ticket payment
+          </h2>
+          <button
+            type="button"
+            className="renewal-modal-close"
+            onClick={onClose}
+            disabled={submitting}
+            aria-label="Close"
+          >
+            ×
+          </button>
+        </div>
+        <p className="renewal-modal-lead">
+          Are you sure you want to send ticket payment email to the user
+          {memberLabel ? (
+            <>
+              {' '}
+              (<strong>{memberLabel}</strong>)
+            </>
+          ) : null}
+          {matchLabel ? (
+            <>
+              {' '}
+              for <strong>{matchLabel}</strong>
+            </>
+          ) : null}
+          {amountEur != null ? (
+            <>
+              {' '}
+              with remaining amount <strong>€{amountEur.toFixed(2)}</strong>
+            </>
+          ) : null}
+          {paymentDeadline ? (
+            <>
+              {' '}
+              and payment deadline <strong>{formatTicketPaymentDeadlineLabel(paymentDeadline)}</strong>
+            </>
+          ) : null}
+          ?
+        </p>
+        {error && <p className="auth-message is-error renewal-modal-error">{error}</p>}
+        <div className="renewal-modal-actions">
+          <button
+            type="button"
+            className="mycmusc-reg-btn mycmusc-reg-btn--secondary"
+            onClick={onClose}
+            disabled={submitting}
+          >
+            No
+          </button>
+          <button
+            type="button"
+            className="mycmusc-reg-btn mycmusc-reg-btn--primary"
+            onClick={() => void onConfirm()}
+            disabled={submitting}
+          >
+            {submitting ? 'Sending…' : 'Yes'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+type TicketConfirmModalProps = {
+  open: boolean
+  requestLabel: string | null
+  submitting: boolean
+  error: string | null
+  onClose: () => void
+  onConfirm: () => void
+}
+
+function TicketConfirmModal({
+  open,
+  requestLabel,
+  submitting,
+  error,
+  onClose,
+  onConfirm,
+}: TicketConfirmModalProps) {
+  if (!open) return null
+
+  return (
+    <div
+      className="renewal-modal-root"
+      role="presentation"
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget && !submitting) onClose()
+      }}
+    >
+      <div
+        className="renewal-modal-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="ticket-confirm-modal-title"
+      >
+        <div className="renewal-modal-head">
+          <h2 id="ticket-confirm-modal-title" className="renewal-modal-title">
+            Confirm tickets
+          </h2>
+          <button
+            type="button"
+            className="renewal-modal-close"
+            onClick={onClose}
+            disabled={submitting}
+            aria-label="Close"
+          >
+            ×
+          </button>
+        </div>
+        <p className="renewal-modal-lead">
+          Are you sure you want to confirm this ticket
+          {requestLabel ? (
+            <>
+              {' '}
+              for <strong>{requestLabel}</strong>
+            </>
+          ) : null}
+          ?
+        </p>
+        {error && <p className="auth-message is-error renewal-modal-error">{error}</p>}
+        <div className="renewal-modal-actions">
+          <button
+            type="button"
+            className="mycmusc-reg-btn mycmusc-reg-btn--secondary"
+            onClick={onClose}
+            disabled={submitting}
+          >
+            No
+          </button>
+          <button
+            type="button"
+            className="mycmusc-reg-btn mycmusc-reg-btn--primary"
+            onClick={() => void onConfirm()}
+            disabled={submitting}
+          >
+            {submitting ? 'Confirming…' : 'Yes'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
 }
 
 type TicketCompletionModalProps = {
@@ -858,27 +1500,14 @@ function TicketCompletionModal({
           </div>
         </dl>
 
-        <div className="membership-payment-card renewal-modal-payment" role="region" aria-labelledby="ticket-payment-heading">
-          <h3 id="ticket-payment-heading" className="membership-payment-title">
-            Payment details
-          </h3>
-          <p className="membership-payment-fee">
-            <strong>Amount to reserve ticket:</strong> €{TICKET_RESERVATION_FEE_EUR}
-          </p>
-          <p className="membership-payment-intro">
-            Use bank transfer, Revolut, or Stripe below. For manual transfers, include your <strong>full name</strong> and{' '}
-            <strong>membership number</strong> in the payment reference.
-          </p>
-          <ClubPaymentMethodFields
-            stripe={{
-              amountEur: TICKET_RESERVATION_FEE_EUR,
-              description: `Match ticket reservation — ${ticketReference}`,
-              paymentKind: 'ticket',
-              referenceId: ticketReference,
-              returnPath: '/',
-            }}
-          />
-        </div>
+        <TicketDepositPaymentCard
+          fixture={fixture}
+          membershipNumber={membershipNumber}
+          ticketReference={ticketReference}
+          returnPath="/"
+          headingId="ticket-payment-heading"
+          showFixtureSummary={false}
+        />
 
         <label className="membership-checkbox-row renewal-modal-checkbox">
           <input
@@ -886,7 +1515,10 @@ function TicketCompletionModal({
             checked={confirmedPayment}
             onChange={(ev) => setConfirmedPayment(ev.target.checked)}
           />
-          <span>I confirm I will pay the ticket reservation amount (bank, Revolut, or Stripe).</span>
+          <span>
+            I confirm I will pay the ticket deposit (€{TICKET_DEPOSIT_FEE_EUR.toFixed(2)} via Revolut/bank, €
+            {(TICKET_DEPOSIT_FEE_EUR + STRIPE_SERVICE_FEE_EUR).toFixed(2)} via Stripe).
+          </span>
         </label>
 
         <div className="renewal-modal-actions">
@@ -1150,6 +1782,87 @@ function PurchasedMembershipConfirmModal({
   )
 }
 
+type TicketDepositConfirmModalProps = {
+  open: boolean
+  requestLabel: string | null
+  submitting: boolean
+  error: string | null
+  onClose: () => void
+  onConfirm: () => void
+}
+
+function TicketDepositConfirmModal({
+  open,
+  requestLabel,
+  submitting,
+  error,
+  onClose,
+  onConfirm,
+}: TicketDepositConfirmModalProps) {
+  if (!open) return null
+
+  return (
+    <div
+      className="renewal-modal-root"
+      role="presentation"
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget && !submitting) onClose()
+      }}
+    >
+      <div
+        className="renewal-modal-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="ticket-deposit-confirm-modal-title"
+      >
+        <div className="renewal-modal-head">
+          <h2 id="ticket-deposit-confirm-modal-title" className="renewal-modal-title">
+            Deposit confirmation
+          </h2>
+          <button
+            type="button"
+            className="renewal-modal-close"
+            onClick={onClose}
+            disabled={submitting}
+            aria-label="Close"
+          >
+            ×
+          </button>
+        </div>
+        <p className="renewal-modal-lead">
+          Are you sure you want to confirm this request
+          {requestLabel ? (
+            <>
+              {' '}
+              for <strong>{requestLabel}</strong>
+            </>
+          ) : null}
+          ?
+        </p>
+        {error && <p className="auth-message is-error renewal-modal-error">{error}</p>}
+        <div className="renewal-modal-actions">
+          <button
+            type="button"
+            className="mycmusc-reg-btn mycmusc-reg-btn--secondary"
+            onClick={onClose}
+            disabled={submitting}
+          >
+            No
+          </button>
+          <button
+            type="button"
+            className="mycmusc-reg-btn mycmusc-reg-btn--primary"
+            onClick={() => void onConfirm()}
+            disabled={submitting}
+          >
+            {submitting ? 'Confirming…' : 'Yes'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 type AdminConsoleProps = {
   memberRegistry: MemberRegistryEntry[]
   loading: boolean
@@ -1174,6 +1887,17 @@ type AdminConsoleProps = {
   onApproveTicketRequest: (row: AdminFixtureTicketRequest) => Promise<void>
   onCompleteTicketRequest: (row: AdminFixtureTicketRequest) => Promise<void>
   onCancelTicketRequest: (row: AdminFixtureTicketRequest) => Promise<void>
+  onUpdateTicketDepositConfirmed: (requestId: string, depositConfirmed: boolean) => Promise<void>
+  onUpdateTicketBalancePayment: (
+    requestId: string,
+    options: {
+      balanceRemainingAmountEur: number
+      balancePaymentDeadline?: string
+      balancePaymentNotified: boolean
+    },
+  ) => Promise<void>
+  onUpdateTicketConfirmed: (requestId: string) => Promise<void>
+  onRefreshTicketRequests: () => Promise<void>
   newsPosts: NewsPost[]
   newsLoading: boolean
   onCreateNews: (payload: NewsPostPayload) => Promise<void>
@@ -1231,6 +1955,10 @@ function AdminConsole({
   onApproveTicketRequest,
   onCompleteTicketRequest,
   onCancelTicketRequest,
+  onUpdateTicketDepositConfirmed,
+  onUpdateTicketBalancePayment,
+  onUpdateTicketConfirmed,
+  onRefreshTicketRequests,
   newsPosts,
   newsLoading,
   onCreateNews,
@@ -1264,6 +1992,7 @@ function AdminConsole({
   onDeleteOfficialRequest,
 }: AdminConsoleProps) {
   const [adminTab, setAdminTab] = useState<AdminTab>('members')
+  const [ticketRequestsRefreshing, setTicketRequestsRefreshing] = useState(false)
   const [filter, setFilter] = useState<AdminFilter>('all')
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [busyId, setBusyId] = useState<string | null>(null)
@@ -1322,6 +2051,23 @@ function AdminConsole({
   const [purchasedMembershipTarget, setPurchasedMembershipTarget] = useState<MemberRegistryEntry | null>(null)
   const [purchasedMembershipSubmitting, setPurchasedMembershipSubmitting] = useState(false)
   const [purchasedMembershipError, setPurchasedMembershipError] = useState<string | null>(null)
+  const [ticketDepositConfirmTarget, setTicketDepositConfirmTarget] = useState<AdminFixtureTicketRequest | null>(null)
+  const [ticketDepositConfirmSubmitting, setTicketDepositConfirmSubmitting] = useState(false)
+  const [ticketDepositConfirmError, setTicketDepositConfirmError] = useState<string | null>(null)
+  const [ticketBalancePaymentTarget, setTicketBalancePaymentTarget] = useState<{
+    request: AdminFixtureTicketRequest
+    amountEur: number
+    paymentDeadline: string
+  } | null>(null)
+  const [ticketBalancePaymentSubmitting, setTicketBalancePaymentSubmitting] = useState(false)
+  const [ticketBalancePaymentError, setTicketBalancePaymentError] = useState<string | null>(null)
+  const [ticketConfirmTarget, setTicketConfirmTarget] = useState<AdminFixtureTicketRequest | null>(null)
+  const [ticketConfirmSubmitting, setTicketConfirmSubmitting] = useState(false)
+  const [ticketConfirmError, setTicketConfirmError] = useState<string | null>(null)
+  const [balanceAmountDraftByRequestId, setBalanceAmountDraftByRequestId] = useState<Record<string, string>>({})
+  const [balanceDeadlineDraftByRequestId, setBalanceDeadlineDraftByRequestId] = useState<Record<string, string>>({})
+  const [ticketActionNotice, setTicketActionNotice] = useState<string | null>(null)
+  const [ticketActionError, setTicketActionError] = useState<string | null>(null)
   const pendingMembersCount = memberRegistry.filter((member) => member.status === 'pending').length
   const activeMembersCount = memberRegistry.filter((member) => member.status === 'active').length
   const pendingOrdersCount = merchandiseOrders.filter((order) => order.status === 'pending').length
@@ -1348,7 +2094,14 @@ function AdminConsole({
     .filter((r) => {
       const q = ticketSearch.trim().toLowerCase()
       if (!q) return true
-      return r.matchKey.toLowerCase().includes(q) || r.userId.toLowerCase().includes(q)
+      return (
+        r.matchKey.toLowerCase().includes(q) ||
+        r.userId.toLowerCase().includes(q) ||
+        (r.user.fullName ?? '').toLowerCase().includes(q) ||
+        (r.user.mobilePhone ?? '').toLowerCase().includes(q) ||
+        (r.user.officialMuMembershipId ?? '').toLowerCase().includes(q) ||
+        (r.user.applicationId ?? '').toLowerCase().includes(q)
+      )
     })
 
   const filteredMerchOrders = merchandiseOrders.filter((o) => {
@@ -1440,8 +2193,46 @@ function AdminConsole({
   }
 
   function exportTicketsReport() {
-    const headers = ['Request ID', 'Match Key', 'User ID', 'Status', 'Requested At']
-    const rows = pendingTicketRequests.map((r) => [r.id, r.matchKey, r.userId, r.status, r.requestedAt])
+    const headers = [
+      'Request ID',
+      'Match Key',
+      'Full Name',
+      'Mobile Phone',
+      'Official MU ID',
+      'Official MU Status',
+      'Application ID',
+      'User ID',
+      'Status',
+      'Requested At',
+      'Deposit Confirmed',
+      'Deposit Confirmed At',
+      'User Cancelled',
+      'User Cancelled At',
+      'Balance Remaining EUR',
+      'Balance Payment Notified',
+      'Balance Payment Notified At',
+      'Balance Payment Deadline',
+    ]
+    const rows = pendingTicketRequests.map((r) => [
+      r.id,
+      r.matchKey,
+      r.user.fullName ?? '',
+      r.user.mobilePhone ?? '',
+      r.user.officialMuMembershipId ?? '',
+      formatOfficialMuMembershipStatus(r.user.officialMuMembershipStatus),
+      r.user.applicationId ?? '',
+      r.userId,
+      r.status,
+      r.requestedAt,
+      r.depositConfirmed ? 'yes' : 'no',
+      r.depositConfirmedAt ?? '',
+      r.userCancelledAt ? 'yes' : 'no',
+      r.userCancelledAt ?? '',
+      r.balanceRemainingAmountEur != null ? r.balanceRemainingAmountEur.toFixed(2) : '',
+      r.balancePaymentNotified ? 'yes' : 'no',
+      r.balancePaymentNotifiedAt ?? '',
+      r.balancePaymentDeadline ?? '',
+    ])
     downloadCsv(`tickets-report-${reportStamp()}.csv`, headers, rows)
   }
 
@@ -1585,7 +2376,9 @@ function AdminConsole({
           </div>
           <div className="admin-kpi-card" role="listitem">
             <span className="admin-kpi-label">Pending ticket requests</span>
-            <strong className="admin-kpi-value">{pendingTicketRequests.filter((request) => request.status === 'pending').length}</strong>
+            <strong className="admin-kpi-value">
+              {pendingTicketRequests.filter((request) => request.status === 'pending').length}
+            </strong>
           </div>
           <div className="admin-kpi-card" role="listitem">
             <span className="admin-kpi-label">Pending merch orders</span>
@@ -1618,6 +2411,24 @@ function AdminConsole({
               onClick={() => setAdminTab('tickets')}
             >
               Tickets
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={adminTab === 'ticketRequests'}
+              className={`admin-main-tab ${adminTab === 'ticketRequests' ? 'is-active' : ''}`}
+              onClick={() => {
+                setAdminTab('ticketRequests')
+                setTicketRequestsRefreshing(true)
+                void onRefreshTicketRequests().finally(() => setTicketRequestsRefreshing(false))
+              }}
+            >
+              Ticket requests
+              {pendingTicketRequests.filter((r) => r.status === 'pending').length > 0 && (
+                <span className="admin-tab-badge">
+                  {pendingTicketRequests.filter((r) => r.status === 'pending').length}
+                </span>
+              )}
             </button>
             <button
               type="button"
@@ -2214,77 +3025,93 @@ function AdminConsole({
       )}
 
       {adminTab === 'tickets' && (
+        <section className="admin-panel-block" aria-label="Match ticket availability">
+          <div className="admin-block-head">
+            <h2 className="admin-block-title">Match ticket availability</h2>
+            <p className="admin-block-lead">Open, close, or disable ticket requests for each home fixture.</p>
+            <button type="button" className="fixtures-refresh-btn" onClick={() => void onSyncFixtures()} disabled={fixturesSyncing}>
+              {fixturesSyncing ? 'Refreshing…' : 'Sync fixtures from manutd.com'}
+            </button>
+          </div>
+          {ticketFixtures.length === 0 ? (
+            <p className="admin-empty">No upcoming home fixtures right now.</p>
+          ) : (
+            <ul className="fixtures-list">
+              {ticketFixtures.map((fixture) => {
+                const key = fixtureMatchKey(fixture)
+                const status = ticketWindowByKey[key] ?? 'disabled'
+                const busy = busyTicketWindowKey === key
+                return (
+                  <li key={key} className="fixtures-card">
+                    <div className="fixtures-card-main">
+                      <div className="fixtures-card-left">
+                        <p className="fixtures-kickoff">{formatFixtureKickoff(fixture.kickoffIso)}</p>
+                        <p className="fixtures-opponent">
+                          {fixture.home ? 'Manchester United vs ' : ''}
+                          {!fixture.home ? `${fixture.opponent} vs Manchester United` : fixture.opponent}
+                        </p>
+                        <p className="fixtures-meta">
+                          {fixture.competition} · {fixture.venue}
+                        </p>
+                      </div>
+                      <div className="fixtures-card-right">
+                        <div className="fixtures-admin-controls">
+                          <span className={`fixtures-ticket-pill fixtures-ticket-pill--${status}`}>
+                            {status === 'open' ? 'Tickets open' : status === 'closed' ? 'Request closed' : 'Tickets disabled'}
+                          </span>
+                          <div className="fixtures-admin-btn-row">
+                            {(['open', 'closed', 'disabled'] as const).map((nextStatus) => (
+                              <button
+                                key={nextStatus}
+                                type="button"
+                                className={`fixtures-admin-btn ${status === nextStatus ? 'is-active' : ''}`}
+                                disabled={busy}
+                                onClick={async () => {
+                                  setBusyTicketWindowKey(key)
+                                  try {
+                                    await onSetFixtureTicketStatus(fixture, nextStatus)
+                                  } finally {
+                                    setBusyTicketWindowKey(null)
+                                  }
+                                }}
+                              >
+                                {nextStatus === 'open' ? 'Open' : nextStatus === 'closed' ? 'Close' : 'Disable'}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </li>
+                )
+              })}
+            </ul>
+          )}
+        </section>
+      )}
+
+      {adminTab === 'ticketRequests' && (
         <section className="admin-ticket-requests-block admin-panel-block" aria-label="Ticket requests">
           <div className="admin-block-head">
             <h2 className="admin-block-title">Ticket requests</h2>
-            <p className="admin-block-lead">Track requests through pending, accepted, and completed stages.</p>
+            <p className="admin-block-lead">
+              Member match ticket requests appear here when they click Request on an open fixture.
+            </p>
+            <button
+              type="button"
+              className="admin-merch-create-btn"
+              onClick={() => {
+                setTicketRequestsRefreshing(true)
+                void onRefreshTicketRequests().finally(() => setTicketRequestsRefreshing(false))
+              }}
+              disabled={ticketRequestsRefreshing}
+            >
+              {ticketRequestsRefreshing ? 'Refreshing…' : 'Refresh list'}
+            </button>
             <button type="button" className="admin-merch-create-btn" onClick={exportTicketsReport}>
               Export Excel
             </button>
           </div>
-          <section className="admin-panel-block" aria-label="Match ticket availability">
-            <div className="admin-block-head">
-              <h3 className="admin-block-title">Match ticket availability</h3>
-              <p className="admin-block-lead">Open, close, or disable ticket requests for each home fixture.</p>
-              <button type="button" className="fixtures-refresh-btn" onClick={() => void onSyncFixtures()} disabled={fixturesSyncing}>
-                {fixturesSyncing ? 'Refreshing…' : 'Sync fixtures from manutd.com'}
-              </button>
-            </div>
-            {ticketFixtures.length === 0 ? (
-              <p className="admin-empty">No upcoming home fixtures right now.</p>
-            ) : (
-              <ul className="fixtures-list">
-                {ticketFixtures.map((fixture) => {
-                  const key = fixtureMatchKey(fixture)
-                  const status = ticketWindowByKey[key] ?? 'disabled'
-                  const busy = busyTicketWindowKey === key
-                  return (
-                    <li key={key} className="fixtures-card">
-                      <div className="fixtures-card-main">
-                        <div className="fixtures-card-left">
-                          <p className="fixtures-kickoff">{formatFixtureKickoff(fixture.kickoffIso)}</p>
-                          <p className="fixtures-opponent">
-                            {fixture.home ? 'Manchester United vs ' : ''}
-                            {!fixture.home ? `${fixture.opponent} vs Manchester United` : fixture.opponent}
-                          </p>
-                          <p className="fixtures-meta">
-                            {fixture.competition} · {fixture.venue}
-                          </p>
-                        </div>
-                        <div className="fixtures-card-right">
-                          <div className="fixtures-admin-controls">
-                            <span className={`fixtures-ticket-pill fixtures-ticket-pill--${status}`}>
-                              {status === 'open' ? 'Tickets open' : status === 'closed' ? 'Request closed' : 'Tickets disabled'}
-                            </span>
-                            <div className="fixtures-admin-btn-row">
-                              {(['open', 'closed', 'disabled'] as const).map((nextStatus) => (
-                                <button
-                                  key={nextStatus}
-                                  type="button"
-                                  className={`fixtures-admin-btn ${status === nextStatus ? 'is-active' : ''}`}
-                                  disabled={busy}
-                                  onClick={async () => {
-                                    setBusyTicketWindowKey(key)
-                                    try {
-                                      await onSetFixtureTicketStatus(fixture, nextStatus)
-                                    } finally {
-                                      setBusyTicketWindowKey(null)
-                                    }
-                                  }}
-                                >
-                                  {nextStatus === 'open' ? 'Open' : nextStatus === 'closed' ? 'Close' : 'Disable'}
-                                </button>
-                              ))}
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    </li>
-                  )
-                })}
-              </ul>
-            )}
-          </section>
           <div className="admin-filter-row" role="tablist" aria-label="Filter ticket requests by status">
             {(['pending', 'approved', 'completed'] as const).map((f) => (
               <button
@@ -2303,26 +3130,232 @@ function AdminConsole({
             <input
               className="auth-input admin-search-input"
               type="search"
-              placeholder="Search ticket requests by match key or user ID"
+              placeholder="Search ticket requests by name, phone, MU ID, match, or ref"
               value={ticketSearch}
               onChange={(e) => setTicketSearch(e.target.value)}
             />
           </div>
+          {ticketActionNotice && <p className="admin-member-action-notice">{ticketActionNotice}</p>}
+          {ticketActionError && <p className="admin-empty" style={{ color: '#b91c1c' }}>{ticketActionError}</p>}
           {filteredTicketRequests.length === 0 ? (
             <p className="admin-empty">No {ticketFilter === 'approved' ? 'accepted' : ticketFilter} ticket requests.</p>
           ) : (
             <ul className="admin-ticket-request-list">
-              {filteredTicketRequests.map((r) => (
+              {filteredTicketRequests.map((r) => {
+                const amountDraft =
+                  balanceAmountDraftByRequestId[r.id] ??
+                  (r.balanceRemainingAmountEur != null ? String(r.balanceRemainingAmountEur) : '')
+                const deadlineDraft =
+                  balanceDeadlineDraftByRequestId[r.id] ??
+                  formatTicketBalancePaymentDeadlineForInput(r.balancePaymentDeadline)
+                const amountEur = parseTicketBalanceAmountDraft(amountDraft)
+                const paymentDeadline = parseTicketPaymentDeadlineDraft(deadlineDraft)
+                const canNotifyBalancePayment = amountEur != null && paymentDeadline != null
+
+                return (
                 <li key={r.id} className="admin-ticket-request-card">
                   <div className="admin-ticket-request-main">
+                    <p className="admin-renewal-name">{r.user.fullName ?? 'Unknown member'}</p>
+                    <p className="admin-member-meta">
+                      <strong>{formatFixtureMatchKeyLabel(r.matchKey)}</strong>
+                    </p>
                     <code className="admin-member-ref">{r.matchKey}</code>
-                    <p className="admin-member-meta">User: {r.userId}</p>
+                    <p className="admin-member-meta">
+                      Phone: {r.user.mobilePhone ?? '—'}
+                      {' · '}
+                      Official MU: {formatOfficialMuMembershipId(r.user.officialMuMembershipId)}
+                      {r.user.officialMuMembershipStatus
+                        ? ` (${formatOfficialMuMembershipStatus(r.user.officialMuMembershipStatus)})`
+                        : ''}
+                    </p>
+                    {r.user.applicationId && (
+                      <p className="admin-member-meta">
+                        Ref: <code className="admin-inline-code">{r.user.applicationId}</code>
+                      </p>
+                    )}
                     <p className="admin-renewal-meta">
                       Requested: {new Date(r.requestedAt).toLocaleString('en-GB')}
                     </p>
                     <span className={`fixtures-ticket-pill fixtures-ticket-pill--${r.status}`}>
                       {r.status === 'approved' ? 'Accepted' : r.status[0].toUpperCase() + r.status.slice(1)}
                     </span>
+                    {r.userCancelledAt && (
+                      <span className="fixtures-ticket-pill fixtures-ticket-pill--user-cancelled">
+                        User cancelled request
+                        <span className="admin-present-received-at">
+                          · {new Date(r.userCancelledAt).toLocaleString('en-GB')}
+                        </span>
+                      </span>
+                    )}
+                    <label className="admin-present-received admin-ticket-deposit-confirm">
+                      <input
+                        type="checkbox"
+                        checked={r.depositConfirmed}
+                        disabled={busyTicketRequestId !== null || ticketDepositConfirmSubmitting}
+                        onChange={async (e) => {
+                          setTicketActionError(null)
+                          setTicketActionNotice(null)
+                          const checked = e.target.checked
+                          if (checked) {
+                            setTicketDepositConfirmError(null)
+                            setTicketDepositConfirmTarget(r)
+                            return
+                          }
+                          setBusyTicketRequestId(r.id)
+                          try {
+                            await onUpdateTicketDepositConfirmed(r.id, false)
+                          } catch (error) {
+                            setTicketActionError(
+                              error instanceof Error ? error.message : 'Could not update deposit confirmation.',
+                            )
+                          } finally {
+                            setBusyTicketRequestId(null)
+                          }
+                        }}
+                      />
+                      Deposit confirmation
+                      {r.depositConfirmedAt && (
+                        <span className="admin-present-received-at">
+                          · {new Date(r.depositConfirmedAt).toLocaleString('en-GB')}
+                        </span>
+                      )}
+                    </label>
+                    <div className="admin-ticket-balance-payment">
+                      <label className="admin-ticket-balance-payment-field">
+                        <span className="auth-label">Ticket payment (remaining €)</span>
+                        <div className="admin-ticket-balance-payment-input-wrap">
+                          <span className="admin-ticket-balance-payment-currency" aria-hidden="true">
+                            €
+                          </span>
+                          <input
+                            className="admin-merch-create-input admin-ticket-balance-payment-input"
+                            type="number"
+                            min="0.01"
+                            step="0.01"
+                            inputMode="decimal"
+                            placeholder="0.00"
+                            value={
+                              balanceAmountDraftByRequestId[r.id] ??
+                              (r.balanceRemainingAmountEur != null ? String(r.balanceRemainingAmountEur) : '')
+                            }
+                            onChange={(e) =>
+                              setBalanceAmountDraftByRequestId((prev) => ({
+                                ...prev,
+                                [r.id]: e.target.value,
+                              }))
+                            }
+                            disabled={
+                              r.balancePaymentNotified ||
+                              busyTicketRequestId !== null ||
+                              ticketBalancePaymentSubmitting
+                            }
+                          />
+                        </div>
+                      </label>
+                      <label className="admin-ticket-balance-payment-field">
+                        <span className="auth-label">Payment deadline</span>
+                        <input
+                          className="admin-merch-create-input admin-ticket-balance-payment-date"
+                          type="date"
+                          value={deadlineDraft}
+                          onChange={(e) =>
+                            setBalanceDeadlineDraftByRequestId((prev) => ({
+                              ...prev,
+                              [r.id]: e.target.value,
+                            }))
+                          }
+                          disabled={
+                            r.balancePaymentNotified ||
+                            busyTicketRequestId !== null ||
+                            ticketBalancePaymentSubmitting
+                          }
+                        />
+                      </label>
+                      <label className="admin-present-received admin-ticket-deposit-confirm">
+                        <input
+                          type="checkbox"
+                          checked={r.balancePaymentNotified}
+                          disabled={
+                            busyTicketRequestId !== null ||
+                            ticketBalancePaymentSubmitting ||
+                            (!r.balancePaymentNotified && !canNotifyBalancePayment)
+                          }
+                          onChange={async (e) => {
+                            setTicketActionError(null)
+                            setTicketActionNotice(null)
+                            const checked = e.target.checked
+                            if (checked) {
+                              if (amountEur == null || paymentDeadline == null) return
+                              setTicketBalancePaymentError(null)
+                              setTicketBalancePaymentTarget({
+                                request: r,
+                                amountEur,
+                                paymentDeadline,
+                              })
+                              return
+                            }
+                            setBusyTicketRequestId(r.id)
+                            try {
+                              await onUpdateTicketBalancePayment(r.id, {
+                                balanceRemainingAmountEur: amountEur ?? r.balanceRemainingAmountEur ?? 0,
+                                balancePaymentDeadline:
+                                  paymentDeadline ??
+                                  formatTicketBalancePaymentDeadlineForInput(r.balancePaymentDeadline),
+                                balancePaymentNotified: false,
+                              })
+                            } catch (error) {
+                              setTicketActionError(
+                                error instanceof Error ? error.message : 'Could not update ticket payment.',
+                              )
+                            } finally {
+                              setBusyTicketRequestId(null)
+                            }
+                          }}
+                        />
+                        Ticket payment
+                        {r.balancePaymentNotifiedAt && (
+                          <span className="admin-present-received-at">
+                            · {new Date(r.balancePaymentNotifiedAt).toLocaleString('en-GB')}
+                            {r.balanceRemainingAmountEur != null
+                              ? ` · €${r.balanceRemainingAmountEur.toFixed(2)}`
+                              : ''}
+                            {r.balancePaymentDeadline
+                              ? ` · deadline ${new Date(r.balancePaymentDeadline).toLocaleDateString('en-GB')}`
+                              : ''}
+                          </span>
+                        )}
+                      </label>
+                      {r.balancePaymentNotified && !r.ticketConfirmed && (
+                        <button
+                          type="button"
+                          className="admin-revoke-btn admin-ticket-confirm-btn"
+                          disabled={
+                            busyTicketRequestId !== null ||
+                            ticketBalancePaymentSubmitting ||
+                            ticketConfirmSubmitting
+                          }
+                          onClick={() => {
+                            setTicketActionError(null)
+                            setTicketActionNotice(null)
+                            setTicketConfirmError(null)
+                            setTicketConfirmTarget(r)
+                          }}
+                        >
+                          Confirm tickets
+                        </button>
+                      )}
+                      {r.ticketConfirmed && (
+                        <p className="admin-ticket-confirmed-note">
+                          Ticket confirmed
+                          {r.ticketConfirmedAt && (
+                            <span className="admin-present-received-at">
+                              {' '}
+                              · {new Date(r.ticketConfirmedAt).toLocaleString('en-GB')}
+                            </span>
+                          )}
+                        </p>
+                      )}
+                    </div>
                   </div>
                   <div className="admin-ticket-request-actions">
                     {r.status === 'pending' && (
@@ -2378,7 +3411,8 @@ function AdminConsole({
                     )}
                   </div>
                 </li>
-              ))}
+                )
+              })}
             </ul>
           )}
         </section>
@@ -3544,6 +4578,121 @@ function AdminConsole({
           }
         }}
       />
+      <TicketDepositConfirmModal
+        open={ticketDepositConfirmTarget !== null}
+        requestLabel={
+          ticketDepositConfirmTarget
+            ? `${ticketDepositConfirmTarget.user.fullName ?? 'Member'} · ${formatFixtureMatchKeyLabel(ticketDepositConfirmTarget.matchKey)}`
+            : null
+        }
+        submitting={ticketDepositConfirmSubmitting}
+        error={ticketDepositConfirmError}
+        onClose={() => {
+          if (ticketDepositConfirmSubmitting) return
+          setTicketDepositConfirmTarget(null)
+          setTicketDepositConfirmError(null)
+        }}
+        onConfirm={async () => {
+          if (!ticketDepositConfirmTarget) return
+          setTicketActionError(null)
+          setTicketActionNotice(null)
+          setTicketDepositConfirmSubmitting(true)
+          setTicketDepositConfirmError(null)
+          try {
+            await onUpdateTicketDepositConfirmed(ticketDepositConfirmTarget.id, true)
+            const recipient = ticketDepositConfirmTarget.user.fullName || 'the member'
+            setTicketActionNotice(`Deposit confirmation email sent to ${recipient}.`)
+            setTicketDepositConfirmTarget(null)
+          } catch (error) {
+            setTicketDepositConfirmError(
+              error instanceof Error ? error.message : 'Could not confirm deposit and send email.',
+            )
+          } finally {
+            setTicketDepositConfirmSubmitting(false)
+          }
+        }}
+      />
+      <TicketConfirmModal
+        open={ticketConfirmTarget !== null}
+        requestLabel={
+          ticketConfirmTarget
+            ? `${ticketConfirmTarget.user.fullName ?? 'Member'} · ${formatFixtureMatchKeyLabel(ticketConfirmTarget.matchKey)}`
+            : null
+        }
+        submitting={ticketConfirmSubmitting}
+        error={ticketConfirmError}
+        onClose={() => {
+          if (ticketConfirmSubmitting) return
+          setTicketConfirmTarget(null)
+          setTicketConfirmError(null)
+        }}
+        onConfirm={async () => {
+          if (!ticketConfirmTarget) return
+          setTicketActionError(null)
+          setTicketActionNotice(null)
+          setTicketConfirmSubmitting(true)
+          setTicketConfirmError(null)
+          try {
+            await onUpdateTicketConfirmed(ticketConfirmTarget.id)
+            const recipient = ticketConfirmTarget.user.fullName || 'the member'
+            setTicketActionNotice(`Ticket confirmed for ${recipient}.`)
+            setTicketConfirmTarget(null)
+          } catch (error) {
+            setTicketConfirmError(
+              error instanceof Error ? error.message : 'Could not confirm ticket.',
+            )
+          } finally {
+            setTicketConfirmSubmitting(false)
+          }
+        }}
+      />
+      <TicketBalancePaymentConfirmModal
+        open={ticketBalancePaymentTarget !== null}
+        memberLabel={ticketBalancePaymentTarget?.request.user.fullName ?? null}
+        matchLabel={
+          ticketBalancePaymentTarget ? formatFixtureMatchKeyLabel(ticketBalancePaymentTarget.request.matchKey) : null
+        }
+        amountEur={ticketBalancePaymentTarget?.amountEur ?? null}
+        paymentDeadline={ticketBalancePaymentTarget?.paymentDeadline ?? null}
+        submitting={ticketBalancePaymentSubmitting}
+        error={ticketBalancePaymentError}
+        onClose={() => {
+          if (ticketBalancePaymentSubmitting) return
+          setTicketBalancePaymentTarget(null)
+          setTicketBalancePaymentError(null)
+        }}
+        onConfirm={async () => {
+          if (!ticketBalancePaymentTarget) return
+          setTicketActionError(null)
+          setTicketActionNotice(null)
+          setTicketBalancePaymentSubmitting(true)
+          setTicketBalancePaymentError(null)
+          try {
+            await onUpdateTicketBalancePayment(ticketBalancePaymentTarget.request.id, {
+              balanceRemainingAmountEur: ticketBalancePaymentTarget.amountEur,
+              balancePaymentDeadline: ticketBalancePaymentTarget.paymentDeadline,
+              balancePaymentNotified: true,
+            })
+            const recipient = ticketBalancePaymentTarget.request.user.fullName || 'the member'
+            setTicketActionNotice(`Ticket payment email sent to ${recipient}.`)
+            setBalanceAmountDraftByRequestId((prev) => ({
+              ...prev,
+              [ticketBalancePaymentTarget.request.id]: ticketBalancePaymentTarget.amountEur.toFixed(2),
+            }))
+            setBalanceDeadlineDraftByRequestId((prev) => ({
+              ...prev,
+              [ticketBalancePaymentTarget.request.id]: ticketBalancePaymentTarget.paymentDeadline,
+            }))
+            setTicketBalancePaymentTarget(null)
+          } catch (error) {
+            setTicketBalancePaymentError(
+              error instanceof Error ? error.message : 'Could not send ticket payment email.',
+            )
+          } finally {
+            setTicketBalancePaymentSubmitting(false)
+          }
+        }}
+      />
     </div>
   )
 }
@@ -3809,7 +4958,7 @@ function App() {
   const [fixturesError, setFixturesError] = useState<string | null>(null)
   const [fixturesUpdatedAt, setFixturesUpdatedAt] = useState<string | null>(null)
   const [ticketWindowByKey, setTicketWindowByKey] = useState<Record<string, FixtureTicketWindowStatus>>({})
-  const [myTicketRequestByKey, setMyTicketRequestByKey] = useState<Record<string, string>>({})
+  const [myTicketRequestByKey, setMyTicketRequestByKey] = useState<Record<string, MyFixtureTicketRequest>>({})
   const [ticketBusyKey, setTicketBusyKey] = useState<string | null>(null)
 
   const [mode, setMode] = useState<Mode>('sign-in')
@@ -3862,6 +5011,14 @@ function App() {
   const [ticketFormFixture, setTicketFormFixture] = useState<UpcomingFixture | null>(null)
   const [ticketFormSubmitting, setTicketFormSubmitting] = useState(false)
   const [ticketFormSubmittedByKey, setTicketFormSubmittedByKey] = useState<Record<string, boolean>>({})
+  const [ticketRequestConfirmFixture, setTicketRequestConfirmFixture] = useState<UpcomingFixture | null>(null)
+  const [ticketRequestConfirmSubmitting, setTicketRequestConfirmSubmitting] = useState(false)
+  const [ticketRequestConfirmError, setTicketRequestConfirmError] = useState<string | null>(null)
+  const [ticketDepositPaymentFixture, setTicketDepositPaymentFixture] = useState<UpcomingFixture | null>(null)
+  const [ticketBalancePaymentFixture, setTicketBalancePaymentFixture] = useState<UpcomingFixture | null>(null)
+  const [ticketCancelConfirmFixture, setTicketCancelConfirmFixture] = useState<UpcomingFixture | null>(null)
+  const [ticketCancelConfirmSubmitting, setTicketCancelConfirmSubmitting] = useState(false)
+  const [ticketCancelConfirmError, setTicketCancelConfirmError] = useState<string | null>(null)
   const [myPendingRenewal, setMyPendingRenewal] = useState<DbRenewalRequest | null>(null)
   const [renewalModalOpen, setRenewalModalOpen] = useState(false)
   const [renewalSubmitting, setRenewalSubmitting] = useState(false)
@@ -3975,8 +5132,8 @@ function App() {
     if (myReqRes.error) {
       console.error(myReqRes.error)
     } else {
-      const next: Record<string, string> = {}
-      for (const r of myReqRes.rows) next[r.matchKey] = r.status
+      const next: Record<string, MyFixtureTicketRequest> = {}
+      for (const r of myReqRes.rows) next[r.matchKey] = r
       setMyTicketRequestByKey(next)
     }
   }, [upcomingFixtures, user?.id])
@@ -4019,16 +5176,55 @@ function App() {
     await refreshFixtureTicketStates()
   }
 
-  async function submitTicketRequestForMatch(fixture: UpcomingFixture) {
-    if (!user?.id) return
+  async function confirmTicketRequestAndOpenPayment() {
+    if (!ticketRequestConfirmFixture || !user?.id) return
+    const fixture = ticketRequestConfirmFixture
     const key = fixtureMatchKey(fixture)
+    setTicketRequestConfirmSubmitting(true)
+    setTicketRequestConfirmError(null)
     setTicketBusyKey(key)
     const { error } = await requestFixtureTicket(key, user.id)
     setTicketBusyKey(null)
+    setTicketRequestConfirmSubmitting(false)
     if (error) {
-      setFixturesError(`Could not request ticket: ${error.message}`)
+      setTicketRequestConfirmError(error.message)
       return
     }
+    await refreshFixtureTicketStates()
+    setTicketRequestConfirmFixture(null)
+    setTicketDepositPaymentFixture(fixture)
+  }
+
+  function openTicketDepositPayment(fixture: UpcomingFixture) {
+    setTicketDepositPaymentFixture(fixture)
+  }
+
+  function closeTicketDepositPayment() {
+    setTicketDepositPaymentFixture(null)
+  }
+
+  function openTicketBalancePayment(fixture: UpcomingFixture) {
+    setTicketBalancePaymentFixture(fixture)
+  }
+
+  function closeTicketBalancePayment() {
+    setTicketBalancePaymentFixture(null)
+  }
+
+  async function confirmCancelTicketRequest() {
+    if (!ticketCancelConfirmFixture || !user?.id) return
+    const key = fixtureMatchKey(ticketCancelConfirmFixture)
+    setTicketCancelConfirmSubmitting(true)
+    setTicketCancelConfirmError(null)
+    setTicketBusyKey(key)
+    const { error } = await cancelMyFixtureTicketRequest(key, user.id)
+    setTicketBusyKey(null)
+    setTicketCancelConfirmSubmitting(false)
+    if (error) {
+      setTicketCancelConfirmError(error.message)
+      return
+    }
+    setTicketCancelConfirmFixture(null)
     await refreshFixtureTicketStates()
   }
 
@@ -4077,6 +5273,37 @@ function App() {
     const { error } = await setFixtureTicketRequestStatus(row.id, 'cancelled')
     if (error) throw new Error(error.message)
     await loadAdminRegistry()
+  }
+
+  async function applyUpdateTicketDepositConfirmed(requestId: string, depositConfirmed: boolean) {
+    const { error } = await updateFixtureTicketRequestDepositConfirmed(requestId, depositConfirmed)
+    if (error) throw new Error(error.message)
+    await refreshTicketRequestsOnly()
+  }
+
+  async function applyUpdateTicketBalancePayment(
+    requestId: string,
+    options: {
+      balanceRemainingAmountEur: number
+      balancePaymentDeadline?: string
+      balancePaymentNotified: boolean
+    },
+  ) {
+    const { error } = await updateFixtureTicketRequestBalancePayment(requestId, options)
+    if (error) throw new Error(error.message)
+    await refreshTicketRequestsOnly()
+  }
+
+  async function applyUpdateTicketConfirmed(requestId: string) {
+    const { error } = await updateFixtureTicketRequestTicketConfirmed(requestId)
+    if (error) throw new Error(error.message)
+    await refreshTicketRequestsOnly()
+  }
+
+  async function refreshTicketRequestsOnly() {
+    const { rows, error } = await fetchPendingFixtureTicketRequests()
+    if (error) throw new Error(error.message)
+    setPendingTicketRequests(rows)
   }
 
   async function applyUpdateMerchandiseOrderStatus(orderId: string, status: MerchandiseOrderStatus) {
@@ -5485,6 +6712,10 @@ function App() {
               onApproveTicketRequest={applyApproveTicketRequest}
               onCompleteTicketRequest={applyCompleteTicketRequest}
               onCancelTicketRequest={applyCancelTicketRequest}
+              onUpdateTicketDepositConfirmed={applyUpdateTicketDepositConfirmed}
+              onUpdateTicketBalancePayment={applyUpdateTicketBalancePayment}
+              onUpdateTicketConfirmed={applyUpdateTicketConfirmed}
+              onRefreshTicketRequests={refreshTicketRequestsOnly}
               newsPosts={newsPosts}
               newsLoading={newsLoading}
               onCreateNews={applyCreateNews}
@@ -5654,21 +6885,101 @@ function App() {
                           const key = fixtureMatchKey(f)
                           const status = ticketWindowByKey[key] ?? 'disabled'
                           const myRequest = myTicketRequestByKey[key]
+                          const myRequestStatus = myRequest?.status
+                          const depositConfirmed = myRequest?.depositConfirmed === true
+                          const userCancelled = Boolean(myRequest?.userCancelledAt)
                           const busy = ticketBusyKey === key
                           const canRequestTicket =
                             membershipRecord?.status === 'active' &&
                             Boolean(membershipRecord.officialMuMembershipId?.trim())
                           const formSubmitted = Boolean(ticketFormSubmittedByKey[key])
+                          const showBalancePaymentPending =
+                            myRequest?.balancePaymentNotified === true &&
+                            myRequest.balanceRemainingAmountEur != null &&
+                            myRequest.balanceRemainingAmountEur > 0 &&
+                            myRequest?.ticketConfirmed !== true &&
+                            !userCancelled &&
+                            myRequestStatus !== 'cancelled' &&
+                            myRequestStatus !== 'rejected' &&
+                            myRequestStatus !== 'completed'
+                          const showTicketConfirmed =
+                            myRequest?.ticketConfirmed === true &&
+                            !userCancelled &&
+                            myRequestStatus !== 'cancelled' &&
+                            myRequestStatus !== 'rejected' &&
+                            myRequestStatus !== 'completed'
+                          const showDepositAccepted =
+                            depositConfirmed &&
+                            !showBalancePaymentPending &&
+                            !userCancelled &&
+                            myRequestStatus !== 'cancelled' &&
+                            myRequestStatus !== 'rejected' &&
+                            myRequestStatus !== 'completed'
 
                           return (
                             <div className="fixtures-member-ticket-panel">
                               <span className={`fixtures-ticket-pill fixtures-ticket-pill--${status}`}>
                                 {fixtureWindowStatusLabel(status)}
                               </span>
-                              {myRequest === 'pending' && (
-                                <span className="fixtures-ticket-pill fixtures-ticket-pill--pending">Pending</span>
+                              {userCancelled && (
+                                <span className="fixtures-ticket-pill fixtures-ticket-pill--closed">
+                                  Request cancelled
+                                </span>
                               )}
-                              {myRequest === 'approved' && (
+                              {!userCancelled && myRequestStatus === 'pending' && !depositConfirmed && (
+                                <>
+                                  <span className="fixtures-ticket-pill fixtures-ticket-pill--pending">Pending</span>
+                                  <button
+                                    type="button"
+                                    className="fixtures-ticket-request-btn"
+                                    onClick={() => openTicketDepositPayment(f)}
+                                  >
+                                    Pay deposit
+                                  </button>
+                                </>
+                              )}
+                              {showDepositAccepted && (
+                                <>
+                                  <p className="fixtures-ticket-accepted-msg">Request accepted</p>
+                                  <button
+                                    type="button"
+                                    className="fixtures-ticket-cancel-btn"
+                                    onClick={() => {
+                                      setTicketCancelConfirmError(null)
+                                      setTicketCancelConfirmFixture(f)
+                                    }}
+                                    disabled={busy || ticketCancelConfirmSubmitting}
+                                  >
+                                    Cancel request
+                                  </button>
+                                </>
+                              )}
+                              {showBalancePaymentPending && (
+                                <button
+                                  type="button"
+                                  className="fixtures-ticket-balance-pending-btn"
+                                  onClick={() => openTicketBalancePayment(f)}
+                                >
+                                  Ticket payment pending
+                                </button>
+                              )}
+                              {showTicketConfirmed && (
+                                <>
+                                  <p className="fixtures-ticket-confirmed-msg">Ticket Confirmed</p>
+                                  <button
+                                    type="button"
+                                    className="fixtures-ticket-cancel-btn"
+                                    onClick={() => {
+                                      setTicketCancelConfirmError(null)
+                                      setTicketCancelConfirmFixture(f)
+                                    }}
+                                    disabled={busy || ticketCancelConfirmSubmitting}
+                                  >
+                                    Cancel request
+                                  </button>
+                                </>
+                              )}
+                              {!userCancelled && myRequestStatus === 'approved' && !showBalancePaymentPending && (
                                 <>
                                   <span className="fixtures-ticket-pill fixtures-ticket-pill--approved">Accepted</span>
                                   {!formSubmitted && (
@@ -5682,31 +6993,29 @@ function App() {
                                   )}
                                 </>
                               )}
-                              {myRequest === 'completed' && (
+                              {!userCancelled && myRequestStatus === 'completed' && (
                                 <span className="fixtures-ticket-pill fixtures-ticket-pill--completed">Completed</span>
                               )}
-                              {myRequest === 'cancelled' && (
+                              {!userCancelled && myRequestStatus === 'cancelled' && (
                                 <span className="fixtures-ticket-pill fixtures-ticket-pill--closed">Cancelled</span>
                               )}
-                              {myRequest === 'rejected' && (
+                              {!userCancelled && myRequestStatus === 'rejected' && (
                                 <span className="fixtures-ticket-pill fixtures-ticket-pill--closed">Rejected</span>
                               )}
-                              {status === 'open' && !myRequest && canRequestTicket && (
+                              {status === 'open' && !myRequestStatus && canRequestTicket && (
                                 <button
                                   type="button"
                                   className="fixtures-ticket-request-btn"
                                   onClick={() => {
-                                    const yes = window.confirm(
-                                      'Are you sure you want to submit a match ticket request for this fixture?',
-                                    )
-                                    if (yes) void submitTicketRequestForMatch(f)
+                                    setTicketRequestConfirmError(null)
+                                    setTicketRequestConfirmFixture(f)
                                   }}
-                                  disabled={busy}
+                                  disabled={busy || ticketRequestConfirmSubmitting}
                                 >
                                   {busy ? 'Sending…' : 'Request'}
                                 </button>
                               )}
-                              {status === 'open' && !myRequest && !canRequestTicket && (
+                              {status === 'open' && !myRequestStatus && !canRequestTicket && (
                                 <p className="fixtures-ticket-eligibility-note">
                                   In order to request a ticket, you need to have active club and official Man UTD
                                   membership.
@@ -5740,6 +7049,58 @@ function App() {
       )}
 
       <main className="main-content">
+        <TicketRequestConfirmModal
+          open={ticketRequestConfirmFixture !== null}
+          fixture={ticketRequestConfirmFixture}
+          submitting={ticketRequestConfirmSubmitting}
+          error={ticketRequestConfirmError}
+          onClose={() => {
+            if (ticketRequestConfirmSubmitting) return
+            setTicketRequestConfirmFixture(null)
+            setTicketRequestConfirmError(null)
+          }}
+          onConfirm={() => void confirmTicketRequestAndOpenPayment()}
+        />
+        <TicketDepositPaymentModal
+          open={ticketDepositPaymentFixture !== null}
+          onClose={closeTicketDepositPayment}
+          fixture={ticketDepositPaymentFixture}
+          membershipNumber={formatMembershipNumber(membershipRecord?.membershipNumber)}
+          ticketReference={
+            ticketDepositPaymentFixture ? fixtureMatchKey(ticketDepositPaymentFixture) : 'match-ticket'
+          }
+        />
+        <TicketBalancePaymentModal
+          open={ticketBalancePaymentFixture !== null}
+          onClose={closeTicketBalancePayment}
+          fixture={ticketBalancePaymentFixture}
+          membershipNumber={formatMembershipNumber(membershipRecord?.membershipNumber)}
+          ticketReference={
+            ticketBalancePaymentFixture ? fixtureMatchKey(ticketBalancePaymentFixture) : 'match-ticket'
+          }
+          balanceRemainingAmountEur={
+            ticketBalancePaymentFixture
+              ? (myTicketRequestByKey[fixtureMatchKey(ticketBalancePaymentFixture)]?.balanceRemainingAmountEur ?? null)
+              : null
+          }
+          balancePaymentDeadline={
+            ticketBalancePaymentFixture
+              ? (myTicketRequestByKey[fixtureMatchKey(ticketBalancePaymentFixture)]?.balancePaymentDeadline ?? null)
+              : null
+          }
+        />
+        <TicketCancelConfirmModal
+          open={ticketCancelConfirmFixture !== null}
+          fixture={ticketCancelConfirmFixture}
+          submitting={ticketCancelConfirmSubmitting}
+          error={ticketCancelConfirmError}
+          onClose={() => {
+            if (ticketCancelConfirmSubmitting) return
+            setTicketCancelConfirmFixture(null)
+            setTicketCancelConfirmError(null)
+          }}
+          onConfirm={() => void confirmCancelTicketRequest()}
+        />
         <TicketCompletionModal
           open={ticketFormOpen}
           onClose={closeTicketCompletionForm}

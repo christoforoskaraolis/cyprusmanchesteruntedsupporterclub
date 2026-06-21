@@ -504,6 +504,69 @@
   gap: 0.35rem;
 }
 
+.fixtures-ticket-accepted-msg {
+  margin: 0;
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: #15803d;
+  text-align: right;
+}
+
+.fixtures-ticket-confirmed-msg {
+  margin: 0;
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: #15803d;
+  text-align: right;
+}
+
+.fixtures-ticket-cancel-btn {
+  font: inherit;
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 0.35rem 0.65rem;
+  border-radius: 8px;
+  border: 1px solid rgba(185, 28, 28, 0.35);
+  background: rgba(185, 28, 28, 0.08);
+  color: #b91c1c;
+  cursor: pointer;
+}
+
+.fixtures-ticket-cancel-btn:hover:not(:disabled) {
+  background: rgba(185, 28, 28, 0.14);
+}
+
+.fixtures-ticket-cancel-btn:disabled {
+  opacity: 0.65;
+  cursor: wait;
+}
+
+.fixtures-ticket-balance-pending-btn {
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 700;
+  padding: 0.35rem 0.7rem;
+  border-radius: 999px;
+  border: 1px solid rgba(245, 158, 11, 0.45);
+  background: rgba(245, 158, 11, 0.14);
+  color: #92400e;
+  cursor: pointer;
+}
+
+.fixtures-ticket-balance-pending-btn:hover {
+  background: rgba(245, 158, 11, 0.22);
+}
+
+.fixtures-ticket-pill--user-cancelled {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.15rem;
+  color: #991b1b;
+  background: rgba(239, 68, 68, 0.12);
+  border-color: rgba(239, 68, 68, 0.35);
+}
+
 .fixtures-admin-btn-row {
   display: flex;
   gap: 0.25rem;
@@ -624,6 +687,22 @@
   border-color: rgba(200, 16, 46, 0.45);
   color: var(--mu-red);
   background: rgba(200, 16, 46, 0.1);
+}
+
+.admin-tab-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.25rem;
+  height: 1.25rem;
+  margin-left: 0.45rem;
+  padding: 0 0.35rem;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  line-height: 1;
+  background: var(--mu-red);
+  color: #fff;
 }
 
 @media (min-width: 900px) {
@@ -1367,6 +1446,10 @@
   background: var(--surface);
   border: 1px solid var(--border);
   box-shadow: 0 18px 48px rgba(0, 0, 0, 0.28);
+}
+
+.renewal-modal-dialog--wide {
+  width: min(100%, 38rem);
 }
 
 .renewal-modal-head {
@@ -2614,6 +2697,60 @@
   font-size: 0.78rem;
 }
 
+.admin-ticket-deposit-confirm {
+  display: block;
+  margin-top: 0.55rem;
+}
+
+.admin-ticket-balance-payment {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  margin-top: 0.55rem;
+  padding-top: 0.55rem;
+  border-top: 1px solid var(--admin-border);
+}
+
+.admin-ticket-balance-payment-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.admin-ticket-balance-payment-input-wrap {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  max-width: 11rem;
+}
+
+.admin-ticket-balance-payment-currency {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--text-h);
+}
+
+.admin-ticket-balance-payment-input {
+  width: 100%;
+  min-width: 0;
+}
+
+.admin-ticket-balance-payment-date {
+  max-width: 11rem;
+}
+
+.admin-ticket-confirm-btn {
+  align-self: flex-start;
+  margin-top: 0.35rem;
+}
+
+.admin-ticket-confirmed-note {
+  margin: 0.35rem 0 0;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: #15803d;
+}
+
 .admin-member-flag-row {
   display: flex;
   flex-wrap: wrap;
@@ -3539,6 +3676,32 @@
   font-weight: 600;
   color: var(--text-h);
   border-bottom: none;
+}
+
+.ticket-deposit-notes {
+  margin-top: 1rem;
+  padding-top: 0.85rem;
+  border-top: 1px solid var(--border);
+}
+
+.ticket-deposit-notes-lead {
+  margin: 0 0 0.55rem;
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--text-h);
+  line-height: 1.45;
+}
+
+.ticket-deposit-notes-list {
+  margin: 0;
+  padding-left: 1.15rem;
+  font-size: 0.86rem;
+  color: var(--text);
+  line-height: 1.55;
+}
+
+.ticket-deposit-notes-list li + li {
+  margin-top: 0.45rem;
 }
 
 .membership-optional-official-total {
