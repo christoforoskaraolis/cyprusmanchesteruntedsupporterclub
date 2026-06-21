@@ -769,7 +769,14 @@ function NewsDetailModal({ post, open, onClose }: NewsDetailModalProps) {
 
 type AdminFilter = 'all' | 'pending' | 'active'
 type AdminTab = 'members' | 'tickets' | 'ticketRequests' | 'news' | 'merch' | 'official'
-type AdminTicketFilter = 'pending' | 'approved' | 'completed'
+type AdminTicketFilter = 'pending' | 'approved' | 'completed' | 'cancelled'
+
+function isTicketRequestCancelled(request: {
+  status: string
+  userCancelledAt: string | null
+}): boolean {
+  return Boolean(request.userCancelledAt) || request.status === 'cancelled'
+}
 
 function formatTicketMatchTabLabel(matchKey: string): string {
   const parsed = parseFixtureMatchKey(matchKey)
@@ -2201,8 +2208,12 @@ function AdminConsole({
   }, [ticketFixtures, pendingTicketRequests])
 
   const filteredTicketRequests = pendingTicketRequests
-    .filter((r) => r.status === ticketFilter)
     .filter((r) => ticketMatchFilter === 'all' || r.matchKey === ticketMatchFilter)
+    .filter((r) => {
+      if (ticketFilter === 'cancelled') return isTicketRequestCancelled(r)
+      if (isTicketRequestCancelled(r)) return false
+      return r.status === ticketFilter
+    })
 
   const filteredMerchOrders = merchandiseOrders.filter((o) => {
     const q = merchSearch.trim().toLowerCase()
@@ -3220,7 +3231,7 @@ function AdminConsole({
             <div className="admin-ticket-filter-group">
               <span className="admin-ticket-filter-label">Status</span>
               <div className="admin-ticket-status-tabs" role="tablist" aria-label="Filter ticket requests by status">
-                {(['pending', 'approved', 'completed'] as const).map((f) => (
+                {(['pending', 'approved', 'completed', 'cancelled'] as const).map((f) => (
                   <button
                     key={f}
                     type="button"
@@ -3229,7 +3240,13 @@ function AdminConsole({
                     className={`admin-ticket-status-tab ${ticketFilter === f ? 'is-active' : ''}`}
                     onClick={() => setTicketFilter(f)}
                   >
-                    {f === 'pending' ? 'Pending' : f === 'approved' ? 'Accepted' : 'Completed'}
+                    {f === 'pending'
+                      ? 'Pending'
+                      : f === 'approved'
+                        ? 'Accepted'
+                        : f === 'completed'
+                          ? 'Completed'
+                          : 'Cancelled'}
                   </button>
                 ))}
               </div>
@@ -3267,7 +3284,13 @@ function AdminConsole({
           {ticketActionError && <p className="admin-empty" style={{ color: '#b91c1c' }}>{ticketActionError}</p>}
           {filteredTicketRequests.length === 0 ? (
             <p className="admin-empty">
-              No {ticketFilter === 'approved' ? 'accepted' : ticketFilter} ticket requests
+              No{' '}
+              {ticketFilter === 'approved'
+                ? 'accepted'
+                : ticketFilter === 'cancelled'
+                  ? 'cancelled'
+                  : ticketFilter}{' '}
+              ticket requests
               {ticketMatchFilter !== 'all' ? ` for ${formatTicketMatchTabLabel(ticketMatchFilter)}` : ''}.
             </p>
           ) : (
@@ -7049,6 +7072,8 @@ function App() {
                           const canRequestTicket =
                             membershipRecord?.status === 'active' &&
                             Boolean(membershipRecord.officialMuMembershipId?.trim())
+                          const canSubmitNewRequest =
+                            !myRequestStatus || userCancelled || myRequestStatus === 'cancelled'
                           const formSubmitted = Boolean(ticketFormSubmittedByKey[key])
                           const showBalancePaymentPending =
                             myRequest?.balancePaymentNotified === true &&
@@ -7102,6 +7127,25 @@ function App() {
                                 <span className="fixtures-ticket-pill fixtures-ticket-pill--closed">
                                   Request cancelled
                                 </span>
+                              )}
+                              {status === 'open' && canSubmitNewRequest && canRequestTicket && (
+                                <button
+                                  type="button"
+                                  className="fixtures-ticket-request-btn"
+                                  onClick={() => {
+                                    setTicketRequestConfirmError(null)
+                                    setTicketRequestConfirmFixture(f)
+                                  }}
+                                  disabled={busy || ticketRequestConfirmSubmitting}
+                                >
+                                  {busy ? 'Sending…' : userCancelled ? 'Request again' : 'Request'}
+                                </button>
+                              )}
+                              {status === 'open' && canSubmitNewRequest && !canRequestTicket && (
+                                <p className="fixtures-ticket-eligibility-note">
+                                  In order to request a ticket, you need to have active club and official Man UTD
+                                  membership.
+                                </p>
                               )}
                               {!userCancelled && myRequestStatus === 'pending' && !depositConfirmed && (
                                 <>
@@ -7162,25 +7206,6 @@ function App() {
                               )}
                               {!userCancelled && myRequestStatus === 'rejected' && (
                                 <span className="fixtures-ticket-pill fixtures-ticket-pill--closed">Rejected</span>
-                              )}
-                              {status === 'open' && !myRequestStatus && canRequestTicket && (
-                                <button
-                                  type="button"
-                                  className="fixtures-ticket-request-btn"
-                                  onClick={() => {
-                                    setTicketRequestConfirmError(null)
-                                    setTicketRequestConfirmFixture(f)
-                                  }}
-                                  disabled={busy || ticketRequestConfirmSubmitting}
-                                >
-                                  {busy ? 'Sending…' : 'Request'}
-                                </button>
-                              )}
-                              {status === 'open' && !myRequestStatus && !canRequestTicket && (
-                                <p className="fixtures-ticket-eligibility-note">
-                                  In order to request a ticket, you need to have active club and official Man UTD
-                                  membership.
-                                </p>
                               )}
                             </div>
                           )

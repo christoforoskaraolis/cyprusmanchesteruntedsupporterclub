@@ -175,7 +175,17 @@ ticketsRouter.post(
       await query(
         `update public.fixture_ticket_requests
          set status = 'pending',
+             user_cancelled_at = null,
+             deposit_confirmed = false,
+             deposit_confirmed_at = null,
+             balance_remaining_amount_eur = null,
+             balance_payment_notified = false,
+             balance_payment_notified_at = null,
+             balance_payment_deadline = null,
+             ticket_confirmed = false,
+             ticket_confirmed_at = null,
              travel_companion_membership_numbers = $2,
+             requested_at = now(),
              updated_at = now()
          where id = $1`,
         [rows[0].id, filteredTravelCompanions],
