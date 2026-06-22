@@ -18,6 +18,7 @@
     "generate:vapid-keys": "tsx server/scripts/generate-vapid-keys.ts",
     "check:push": "tsx server/scripts/check-push-status.ts",
     "export:uploaded-images": "tsx server/scripts/export-uploaded-images.ts",
+    "purge:news-images": "tsx server/scripts/purge-embedded-images.ts",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview"
