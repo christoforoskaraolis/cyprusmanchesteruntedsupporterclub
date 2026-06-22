@@ -1,3 +1,9 @@
+import {
+  clubEmailClosingHtml,
+  clubEmailClosingHtmlEn,
+  clubEmailClosingText,
+  clubEmailClosingTextEn,
+} from './clubEmailSignature.ts'
 import { sendEmail } from './email.ts'
 
 const SUBJECT =
@@ -37,7 +43,8 @@ ${mycmuscUrl}
 Επαρχία Πάφου – Μιχάλης & Γιώργος Χαραλάμπους (τηλ.: 99427778)
 
 Ανυπομονούμε να σας δούμε στις επόμενες εκδηλώσεις μας!
-Με εκτίμηση, MUSC Cyprus
+
+${clubEmailClosingText()}
 
 ---
 
@@ -68,7 +75,8 @@ Larnaca & Famagusta Districts – Grigoris Gregoriou (mobile: 99293992)
 Paphos District – Michalis & Giorgos Charalambous (mobile: 99427778)
 
 We look forward to seeing you at our upcoming events!
-Best regards, MUSC Cyprus`
+
+${clubEmailClosingTextEn()}`
 }
 
 function buildHtml(firstName: string, mycmuscUrl: string): string {
@@ -98,8 +106,8 @@ function buildHtml(firstName: string, mycmuscUrl: string): string {
     <li>Επαρχίες Λάρνακας &amp; Αμμοχώστου – Γρηγόρης Γρηγορίου (τηλ.: 99293992)</li>
     <li>Επαρχία Πάφου – Μιχάλης &amp; Γιώργος Χαραλάμπους (τηλ.: 99427778)</li>
   </ul>
-  <p>Ανυπομονούμε να σας δούμε στις επόμενες εκδηλώσεις μας!<br>
-  Με εκτίμηση, <strong>MUSC Cyprus</strong></p>
+  <p>Ανυπομονούμε να σας δούμε στις επόμενες εκδηλώσεις μας!</p>
+  ${clubEmailClosingHtml()}
   <hr style="border:none;border-top:1px solid #ddd;margin:24px 0;">
   <p>Dear <strong>${safeName}</strong>,</p>
   <p>We are pleased to inform you that your membership has been successfully activated! 🔴⚫</p>
@@ -124,8 +132,8 @@ function buildHtml(firstName: string, mycmuscUrl: string): string {
     <li>Larnaca &amp; Famagusta Districts – Grigoris Gregoriou (mobile: 99293992)</li>
     <li>Paphos District – Michalis &amp; Giorgos Charalambous (mobile: 99427778)</li>
   </ul>
-  <p>We look forward to seeing you at our upcoming events!<br>
-  Best regards, <strong>MUSC Cyprus</strong></p>
+  <p>We look forward to seeing you at our upcoming events!</p>
+  ${clubEmailClosingHtmlEn()}
 </div>`
 }
 

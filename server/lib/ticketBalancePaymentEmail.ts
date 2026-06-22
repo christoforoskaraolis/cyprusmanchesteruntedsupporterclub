@@ -1,4 +1,5 @@
 import { formatFixtureMatchKeyForEmail } from './fixtureMatchKey.ts'
+import { clubEmailClosingHtml, clubEmailClosingText } from './clubEmailSignature.ts'
 import { sendEmail } from './email.ts'
 
 const SUBJECT =
@@ -84,11 +85,7 @@ ${matchDate}
 
 Καλή επιτυχία στην ομάδα μας και ευχόμαστε να φέρετε γούρι στους Reds με μία μεγάλη νίκη!
 
-Με εκτίμηση,
-
-Cyprus Manchester United Supporters Club
-
-One United. One Family. One Club.`
+${clubEmailClosingText()}`
 }
 
 function buildHtml(options: {
@@ -115,9 +112,7 @@ function buildHtml(options: {
   <p>Θα θέλαμε επίσης να σας παρακαλέσουμε, εφόσον το επιθυμείτε, να στηρίξετε τον Σύνδεσμό μας με μια μικρή αναφορά στα μέσα κοινωνικής δικτύωσής σας. Μοιραστείτε φωτογραφίες ή βίντεο από το ταξίδι και την εμπειρία σας στο Old Trafford κάνοντας αναφορά ή ταγκάροντας το Cyprus Manchester United Supporters Club. Οι αναρτήσεις των μελών μας αποτελούν την καλύτερη προβολή για τον Σύνδεσμο και εμπνέουν περισσότερους φίλους της United στην Κύπρο να ζήσουν το όνειρό τους.</p>
   <p>Σας ευχαριστούμε για τη συνεχή στήριξή σας και για την εμπιστοσύνη που δείχνετε στον Σύνδεσμό μας.</p>
   <p>Καλή επιτυχία στην ομάδα μας και ευχόμαστε να φέρετε γούρι στους Reds με μία μεγάλη νίκη!</p>
-  <p>Με εκτίμηση,</p>
-  <p><strong>Cyprus Manchester United Supporters Club</strong><br>
-  One United. One Family. One Club.</p>
+  ${clubEmailClosingHtml()}
 </div>`
 }
 

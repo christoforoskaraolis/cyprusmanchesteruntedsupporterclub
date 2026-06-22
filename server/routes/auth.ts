@@ -7,6 +7,7 @@ import { env } from '../env.ts'
 import { asyncHandler } from '../lib/asyncHandler.ts'
 import { badRequest, unauthorized } from '../lib/errors.ts'
 import { requireUser } from '../middleware/auth.ts'
+import { clubEmailClosingHtml, clubEmailClosingText } from '../lib/clubEmailSignature.ts'
 import { sendEmail } from '../lib/email.ts'
 
 export const authRouter = Router()
@@ -47,8 +48,8 @@ async function createAndSendPasswordResetEmail(userId: string, email: string, re
   await sendEmail(
     email,
     'Reset your CMUSC password',
-    `You asked to reset your password for the Cyprus Manchester United Supporters Club portal.\n\nOpen this link to choose a new password:\n${resetUrl}\n\nThis link expires in 1 hour. If you did not request this, you can ignore this email.`,
-    `<p>You asked to reset your password for the Cyprus Manchester United Supporters Club portal.</p><p><a href="${resetUrl}">Choose a new password</a></p><p>This link expires in 1 hour. If you did not request this, you can ignore this email.</p>`,
+    `You asked to reset your password for the Cyprus Manchester United Supporters Club portal.\n\nOpen this link to choose a new password:\n${resetUrl}\n\nThis link expires in 1 hour. If you did not request this, you can ignore this email.\n\n${clubEmailClosingText()}`,
+    `<p>You asked to reset your password for the Cyprus Manchester United Supporters Club portal.</p><p><a href="${resetUrl}">Choose a new password</a></p><p>This link expires in 1 hour. If you did not request this, you can ignore this email.</p>${clubEmailClosingHtml()}`,
   )
 }
 
@@ -67,8 +68,8 @@ async function createAndSendVerificationEmail(userId: string, email: string, req
   await sendEmail(
     email,
     'Verify your MUSC Cyprus account',
-    `Welcome to Cyprus Manchester United Supporters Club.\n\nPlease verify your email by opening this link:\n${verifyUrl}\n\nThis link expires in 24 hours.`,
-    `<p>Welcome to Cyprus Manchester United Supporters Club.</p><p>Please verify your email by clicking the link below:</p><p><a href="${verifyUrl}">${verifyUrl}</a></p><p>This link expires in 24 hours.</p>`,
+    `Welcome to Cyprus Manchester United Supporters Club.\n\nPlease verify your email by opening this link:\n${verifyUrl}\n\nThis link expires in 24 hours.\n\n${clubEmailClosingText()}`,
+    `<p>Welcome to Cyprus Manchester United Supporters Club.</p><p>Please verify your email by clicking the link below:</p><p><a href="${verifyUrl}">${verifyUrl}</a></p><p>This link expires in 24 hours.</p>${clubEmailClosingHtml()}`,
   )
 }
 

@@ -1,3 +1,4 @@
+import { clubEmailClosingHtml, clubEmailClosingText } from './clubEmailSignature.ts'
 import { sendEmail } from './email.ts'
 
 const SUBJECT = 'Kind Reminder for Manchester United Supportes Club Cyprus Payment'
@@ -26,9 +27,7 @@ function buildText(): string {
 
 Μαζί κάνουμε τη φωνή των Κυπρίων Reds πιο δυνατή στο Old Trafford!
 
-Με εκτίμηση,
-Cyprus Supporters Club Manchester United
-GGMU`
+${clubEmailClosingText()}`
 }
 
 function buildHtml(): string {
@@ -47,9 +46,7 @@ function buildHtml(): string {
   <p>Για οποιαδήποτε διευκρίνιση ή βοήθεια σχετικά με τη διαδικασία πληρωμής ή την ενεργοποίηση της συνδρομής σας, μπορείτε να επικοινωνήσετε μαζί μας.</p>
   <p>Σας ευχαριστούμε για τη συνεχή σας στήριξη και ανυπομονούμε να σας έχουμε κοντά μας για ακόμη μία συναρπαστική σεζόν.</p>
   <p><strong>Μαζί κάνουμε τη φωνή των Κυπρίων Reds πιο δυνατή στο Old Trafford!</strong></p>
-  <p>Με εκτίμηση,<br>
-  <strong>Cyprus Supporters Club Manchester United</strong><br>
-  GGMU</p>
+  ${clubEmailClosingHtml()}
 </div>`
 }
 

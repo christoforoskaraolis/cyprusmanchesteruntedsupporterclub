@@ -1,3 +1,4 @@
+import { clubEmailClosingHtml, clubEmailClosingText } from './clubEmailSignature.ts'
 import { sendEmail } from './email.ts'
 
 const SUBJECT = 'Επιβεβαίωση Παραλαβής Πακέτου Δώρου Συνδρομής 2026/27'
@@ -17,9 +18,7 @@ function buildText(): string {
 
 Σας ευχαριστούμε και πάλι για την εμπιστοσύνη και τη στήριξή σας. Μαζί συνεχίζουμε να εκπροσωπούμε επάξια τους φίλους της Manchester United στην Κύπρο.
 
-Με εκτίμηση,
-Cyprus Manchester United Supporters Club
-One United. One Family. One Club.`
+${clubEmailClosingText()}`
 }
 
 function buildHtml(): string {
@@ -31,9 +30,7 @@ function buildHtml(): string {
   <p>Παράλληλα, σας προτρέπουμε να παρακολουθείτε τα μέσα κοινωνικής δικτύωσης και τα κανάλια επικοινωνίας του Συνδέσμου, ώστε να ενημερώνεστε για εκδηλώσεις, συναντήσεις μελών, προσφορές, διαγωνισμούς, οργανωμένες εκδρομές και άλλες αποκλειστικές δραστηριότητες για τα μέλη μας.</p>
   <p>Σε περίπτωση που δεν έχετε παραλάβει το πακέτο δώρου σας ή πιστεύετε ότι το παρόν μήνυμα έχει σταλεί εκ παραδρομής, παρακαλούμε επικοινωνήστε μαζί μας το συντομότερο δυνατό ώστε να διερευνήσουμε το θέμα και να σας εξυπηρετήσουμε.</p>
   <p>Σας ευχαριστούμε και πάλι για την εμπιστοσύνη και τη στήριξή σας. Μαζί συνεχίζουμε να εκπροσωπούμε επάξια τους φίλους της Manchester United στην Κύπρο.</p>
-  <p>Με εκτίμηση,<br>
-  <strong>Cyprus Manchester United Supporters Club</strong><br>
-  One United. One Family. One Club.</p>
+  ${clubEmailClosingHtml()}
 </div>`
 }
 

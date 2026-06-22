@@ -1,4 +1,5 @@
 import { formatFixtureMatchKeyForEmail } from './fixtureMatchKey.ts'
+import { clubEmailClosingHtml, clubEmailClosingText } from './clubEmailSignature.ts'
 import { sendEmail } from './email.ts'
 import { TICKET_DEPOSIT_FEE_EUR } from './ticketTravelCompanions.ts'
 
@@ -54,11 +55,7 @@ ${bullets}
 
 Για οποιαδήποτε απορία ή διευκρίνιση, παρακαλούμε επικοινωνήστε μαζί μας.
 
-Με εκτίμηση,
-
-Cyprus Manchester United Supporters Club
-
-One United. One Family. One Club.`
+${clubEmailClosingText()}`
 }
 
 function buildHtml(matchKey: string, depositAmountEur: number, ticketSlotCount: number): string {
@@ -78,9 +75,7 @@ function buildHtml(matchKey: string, depositAmountEur: number, ticketSlotCount: 
   <p>Σας ευχαριστούμε για τη συνεργασία και την κατανόησή σας.</p>
   <p><strong>Σημαντική Υπενθύμιση:</strong> ${SCHEDULE_REMINDER}</p>
   <p>Για οποιαδήποτε απορία ή διευκρίνιση, παρακαλούμε επικοινωνήστε μαζί μας.</p>
-  <p>Με εκτίμηση,</p>
-  <p><strong>Cyprus Manchester United Supporters Club</strong><br>
-  One United. One Family. One Club.</p>
+  ${clubEmailClosingHtml()}
 </div>`
 }
 
