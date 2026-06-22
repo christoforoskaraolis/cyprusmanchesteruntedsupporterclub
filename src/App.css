@@ -988,6 +988,18 @@
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--mu-red) 25%, transparent);
 }
 
+.admin-news-body-photo-url-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.admin-news-body-photo-url-row .auth-input {
+  flex: 1 1 14rem;
+  min-width: 0;
+}
+
 .admin-news-textarea {
   min-height: 120px;
   resize: vertical;

@@ -856,6 +856,18 @@ function formatNewsPublishedAtForInput(publishedAt: string | null | undefined): 
   return `${year}-${month}-${day}T${hours}:${minutes}`
 }
 
+function isNewsImageSource(value: string): boolean {
+  const trimmed = value.trim()
+  if (!trimmed) return false
+  if (/^data:image\//i.test(trimmed)) return true
+  try {
+    const url = new URL(trimmed)
+    return url.protocol === 'http:' || url.protocol === 'https:'
+  } catch {
+    return false
+  }
+}
+
 type TicketDepositPaymentCardProps = {
   fixture: UpcomingFixture | null
   membershipNumber: string
@@ -2179,6 +2191,7 @@ function AdminConsole({
   const [newsImageUrl, setNewsImageUrl] = useState('')
   const [newsImageUrlMobile, setNewsImageUrlMobile] = useState('')
   const [newsBodyPhotos, setNewsBodyPhotos] = useState<string[]>([])
+  const [newsBodyPhotoUrlDraft, setNewsBodyPhotoUrlDraft] = useState('')
   const [newsPublishedAt, setNewsPublishedAt] = useState('')
   const [editingNewsId, setEditingNewsId] = useState<string | null>(null)
   const [busyNewsId, setBusyNewsId] = useState<string | null>(null)
@@ -2558,6 +2571,25 @@ function AdminConsole({
     setNewsError(null)
   }
 
+  function addNewsBodyPhotoUrl() {
+    const url = newsBodyPhotoUrlDraft.trim()
+    if (!url) {
+      setNewsError('Enter an image URL to add.')
+      return
+    }
+    if (!isNewsImageSource(url)) {
+      setNewsError('Enter a valid http(s) image URL.')
+      return
+    }
+    if (newsBodyPhotos.includes(url)) {
+      setNewsError('This image is already in the article photos list.')
+      return
+    }
+    setNewsBodyPhotos((prev) => [...prev, url])
+    setNewsBodyPhotoUrlDraft('')
+    setNewsError(null)
+  }
+
   function beginEditNews(post: NewsPost) {
     setEditingNewsId(post.id)
     setNewsTitle(post.title)
@@ -2565,6 +2597,7 @@ function AdminConsole({
     setNewsImageUrl(post.imageUrl ?? '')
     setNewsImageUrlMobile(post.imageUrlMobile ?? '')
     setNewsBodyPhotos(post.bodyPhotos ?? [])
+    setNewsBodyPhotoUrlDraft('')
     setNewsPublishedAt(formatNewsPublishedAtForInput(post.publishedAt))
     setNewsError(null)
     requestAnimationFrame(() => {
@@ -3786,7 +3819,7 @@ function AdminConsole({
               const body = newsBody.trim()
               const imageUrl = newsImageUrl.trim() || null
               const imageUrlMobile = newsImageUrlMobile.trim() || null
-              const bodyPhotos = newsBodyPhotos
+              const bodyPhotos = newsBodyPhotos.map((src) => src.trim()).filter(Boolean)
               const publishedAt = newsPublishedAt ? new Date(newsPublishedAt).toISOString() : new Date().toISOString()
               if (!title || !body) {
                 setNewsError('Title and content are required.')
@@ -3804,6 +3837,7 @@ function AdminConsole({
                 setNewsImageUrl('')
                 setNewsImageUrlMobile('')
                 setNewsBodyPhotos([])
+                setNewsBodyPhotoUrlDraft('')
                 setNewsPublishedAt('')
                 setEditingNewsId(null)
               } catch (err) {
@@ -3887,10 +3921,32 @@ function AdminConsole({
               <h4 className="admin-news-photo-block-title">Article photos (full post)</h4>
               <p className="admin-news-image-hint">
                 These photos appear inside the full article when members open the post — separate from the preview
-                images above. You can add multiple photos.
+                images above. You can add multiple photos via URL (e.g. Cloudinary) or upload.
               </p>
               <label className="admin-news-date-row">
-                <span>Upload photos</span>
+                <span>Image URL (optional)</span>
+                <div className="admin-news-body-photo-url-row">
+                  <input
+                    className="auth-input"
+                    type="text"
+                    inputMode="url"
+                    placeholder="https://res.cloudinary.com/.../article-photo.jpg"
+                    value={newsBodyPhotoUrlDraft}
+                    onChange={(e) => setNewsBodyPhotoUrlDraft(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault()
+                        addNewsBodyPhotoUrl()
+                      }
+                    }}
+                  />
+                  <button type="button" className="mycmusc-reg-btn mycmusc-reg-btn--secondary" onClick={addNewsBodyPhotoUrl}>
+                    Add URL
+                  </button>
+                </div>
+              </label>
+              <label className="admin-news-date-row">
+                <span>Or upload photos</span>
                 <input
                   className="auth-input"
                   type="file"
@@ -3953,6 +4009,7 @@ function AdminConsole({
                     setNewsImageUrl('')
                     setNewsImageUrlMobile('')
                     setNewsBodyPhotos([])
+                    setNewsBodyPhotoUrlDraft('')
                     setNewsPublishedAt('')
                     setNewsError(null)
                   }}
@@ -4000,6 +4057,7 @@ function AdminConsole({
                             setNewsImageUrl('')
                             setNewsImageUrlMobile('')
                             setNewsBodyPhotos([])
+                            setNewsBodyPhotoUrlDraft('')
                             setNewsPublishedAt('')
                             setNewsError(null)
                           }
