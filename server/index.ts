@@ -18,6 +18,7 @@ import { authRouter } from './routes/auth.ts'
 import { pushRouter } from './routes/push.ts'
 import { stripeRouter } from './routes/stripe.ts'
 import { publishDueNewsPosts } from './lib/publishScheduledNews.ts'
+import { startScheduledNewsPushChecks } from './lib/scheduleNewsPushChecks.ts'
 import { pruneNewsPostsToLimit } from './lib/pruneNewsPosts.ts'
 
 const __filename = fileURLToPath(import.meta.url)
@@ -104,13 +105,9 @@ app.use((req, res, next) => {
 
 app.use(errorHandler)
 
-const SCHEDULED_NEWS_INTERVAL_MS = 60_000
-
 app.listen(env.port, () => {
   console.log(`[api] listening on http://localhost:${env.port}`)
   void publishDueNewsPosts().catch((err) => console.error('[news] initial publish check failed:', err))
   void pruneNewsPostsToLimit().catch((err) => console.error('[news] initial prune failed:', err))
-  setInterval(() => {
-    void publishDueNewsPosts().catch((err) => console.error('[news] scheduled publish check failed:', err))
-  }, SCHEDULED_NEWS_INTERVAL_MS)
+  startScheduledNewsPushChecks()
 })
