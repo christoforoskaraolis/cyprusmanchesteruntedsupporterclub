@@ -4,6 +4,7 @@ import { asyncHandler } from '../lib/asyncHandler.ts'
 import { badRequest } from '../lib/errors.ts'
 import { env } from '../env.ts'
 import { publishDueNewsPosts } from '../lib/publishScheduledNews.ts'
+import { pruneNewsPostsToLimit } from '../lib/pruneNewsPosts.ts'
 import { requireAdmin, requireUser } from '../middleware/auth.ts'
 import { sendNewsPushToAllSubscribers } from '../lib/webPush.ts'
 
@@ -148,6 +149,8 @@ newsRouter.post(
         console.error('[web-push] news broadcast failed:', err)
       }
     }
+
+    await pruneNewsPostsToLimit()
 
     res.status(201).json({ ok: true, scheduled })
   }),

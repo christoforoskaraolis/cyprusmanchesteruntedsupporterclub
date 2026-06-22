@@ -844,6 +844,18 @@ function formatTicketBalancePaymentDeadlineForInput(deadlineIso: string | null |
   return `${day}/${month}/${year}`
 }
 
+function formatNewsPublishedAtForInput(publishedAt: string | null | undefined): string {
+  if (!publishedAt) return ''
+  const dt = new Date(publishedAt)
+  if (Number.isNaN(dt.getTime())) return ''
+  const year = dt.getFullYear()
+  const month = String(dt.getMonth() + 1).padStart(2, '0')
+  const day = String(dt.getDate()).padStart(2, '0')
+  const hours = String(dt.getHours()).padStart(2, '0')
+  const minutes = String(dt.getMinutes()).padStart(2, '0')
+  return `${year}-${month}-${day}T${hours}:${minutes}`
+}
+
 type TicketDepositPaymentCardProps = {
   fixture: UpcomingFixture | null
   membershipNumber: string
@@ -2171,6 +2183,7 @@ function AdminConsole({
   const [editingNewsId, setEditingNewsId] = useState<string | null>(null)
   const [busyNewsId, setBusyNewsId] = useState<string | null>(null)
   const [newsError, setNewsError] = useState<string | null>(null)
+  const newsFormRef = useRef<HTMLFormElement>(null)
   const [busyMerchOrderId, setBusyMerchOrderId] = useState<string | null>(null)
   const [memberSearch, setMemberSearch] = useState('')
   const [officialRequestFilter, setOfficialRequestFilter] = useState<'pending' | 'completed' | 'rejected'>('pending')
@@ -2543,6 +2556,20 @@ function AdminConsole({
     }
     setNewsBodyPhotos((prev) => [...prev, ...next])
     setNewsError(null)
+  }
+
+  function beginEditNews(post: NewsPost) {
+    setEditingNewsId(post.id)
+    setNewsTitle(post.title)
+    setNewsBody(post.body)
+    setNewsImageUrl(post.imageUrl ?? '')
+    setNewsImageUrlMobile(post.imageUrlMobile ?? '')
+    setNewsBodyPhotos(post.bodyPhotos ?? [])
+    setNewsPublishedAt(formatNewsPublishedAtForInput(post.publishedAt))
+    setNewsError(null)
+    requestAnimationFrame(() => {
+      newsFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    })
   }
 
   return (
@@ -3750,6 +3777,7 @@ function AdminConsole({
             </p>
           </div>
           <form
+            ref={newsFormRef}
             className="admin-news-form"
             onSubmit={async (e) => {
               e.preventDefault()
@@ -3783,6 +3811,12 @@ function AdminConsole({
               }
             }}
           >
+            {editingNewsId && (
+              <p className="admin-news-editing-banner" role="status">
+                Editing post: <strong>{newsTitle || 'Untitled'}</strong>. Update the fields below, then click{' '}
+                <strong>Update post</strong>.
+              </p>
+            )}
             <input
               className="auth-input"
               type="text"
@@ -3805,8 +3839,9 @@ function AdminConsole({
                 <span>Image URL (optional)</span>
                 <input
                   className="auth-input"
-                  type="url"
-                  placeholder="https://example.com/desktop-photo.jpg"
+                  type="text"
+                  inputMode="url"
+                  placeholder="https://res.cloudinary.com/.../desktop-photo.jpg"
                   value={newsImageUrl}
                   onChange={(e) => setNewsImageUrl(e.target.value)}
                 />
@@ -3831,8 +3866,9 @@ function AdminConsole({
                 <span>Image URL (optional)</span>
                 <input
                   className="auth-input"
-                  type="url"
-                  placeholder="https://example.com/mobile-photo.jpg"
+                  type="text"
+                  inputMode="url"
+                  placeholder="https://res.cloudinary.com/.../mobile-photo.jpg"
                   value={newsImageUrlMobile}
                   onChange={(e) => setNewsImageUrlMobile(e.target.value)}
                 />
@@ -3933,7 +3969,7 @@ function AdminConsole({
           ) : (
             <ul className="admin-news-list">
               {newsPosts.map((n) => (
-                <li key={n.id} className="admin-news-card">
+                <li key={n.id} className={`admin-news-card${editingNewsId === n.id ? ' is-editing' : ''}`}>
                   <p className="admin-news-card-title">{n.title}</p>
                   <p className="admin-news-card-meta">
                     {new Date(n.publishedAt) > new Date() ? 'Scheduled' : 'Published'}:{' '}
@@ -3945,18 +3981,9 @@ function AdminConsole({
                     <button
                       type="button"
                       className="admin-details-btn"
-                      onClick={() => {
-                        setEditingNewsId(n.id)
-                        setNewsTitle(n.title)
-                        setNewsBody(n.body)
-                        setNewsImageUrl(n.imageUrl ?? '')
-                        setNewsImageUrlMobile(n.imageUrlMobile ?? '')
-                        setNewsBodyPhotos(n.bodyPhotos ?? [])
-                        setNewsPublishedAt(new Date(n.publishedAt).toISOString().slice(0, 16))
-                        setNewsError(null)
-                      }}
+                      onClick={() => beginEditNews(n)}
                     >
-                      Edit
+                      {editingNewsId === n.id ? 'Editing…' : 'Edit'}
                     </button>
                     <button
                       type="button"
@@ -3966,6 +3993,16 @@ function AdminConsole({
                         setBusyNewsId(n.id)
                         try {
                           await onDeleteNews(n.id)
+                          if (editingNewsId === n.id) {
+                            setEditingNewsId(null)
+                            setNewsTitle('')
+                            setNewsBody('')
+                            setNewsImageUrl('')
+                            setNewsImageUrlMobile('')
+                            setNewsBodyPhotos([])
+                            setNewsPublishedAt('')
+                            setNewsError(null)
+                          }
                         } finally {
                           setBusyNewsId(null)
                         }
@@ -5684,19 +5721,19 @@ function App() {
   async function applyCreateNews(payload: NewsPostPayload) {
     const { error } = await insertNewsPost(payload, user?.id ?? null)
     if (error) throw new Error(error.message)
-    await Promise.all([loadNewsPosts(), loadAdminNewsPosts()])
+    await loadAdminNewsPosts()
   }
 
   async function applyUpdateNews(id: string, payload: NewsPostPayload) {
     const { error } = await updateNewsPost(id, payload, user?.id ?? null)
     if (error) throw new Error(error.message)
-    await Promise.all([loadNewsPosts(), loadAdminNewsPosts()])
+    await loadAdminNewsPosts()
   }
 
   async function applyDeleteNews(id: string) {
     const { error } = await deleteNewsPost(id)
     if (error) throw new Error(error.message)
-    await Promise.all([loadNewsPosts(), loadAdminNewsPosts()])
+    await loadAdminNewsPosts()
   }
 
   const refreshMyMembership = useCallback(async () => {

@@ -973,6 +973,21 @@
   margin-bottom: 0.9rem;
 }
 
+.admin-news-editing-banner {
+  margin: 0;
+  padding: 0.75rem 0.9rem;
+  border-radius: 8px;
+  border: 1px solid color-mix(in srgb, var(--mu-red) 35%, var(--admin-border));
+  background: color-mix(in srgb, var(--mu-red) 8%, var(--admin-surface));
+  font-size: 0.875rem;
+  line-height: 1.45;
+}
+
+.admin-news-card.is-editing {
+  border-color: var(--mu-red);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--mu-red) 25%, transparent);
+}
+
 .admin-news-textarea {
   min-height: 120px;
   resize: vertical;
