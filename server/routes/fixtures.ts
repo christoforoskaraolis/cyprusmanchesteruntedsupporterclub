@@ -2,6 +2,7 @@ import { Router } from 'express'
 import { query } from '../db.ts'
 import { asyncHandler } from '../lib/asyncHandler.ts'
 import { badRequest } from '../lib/errors.ts'
+import { getCachedResponse, invalidateResponseCache, RESPONSE_CACHE_TTL_MS, responseCacheKeys } from '../lib/responseCache.ts'
 import { requireAdmin, requireUser } from '../middleware/auth.ts'
 
 export const fixturesRouter = Router()
@@ -105,14 +106,17 @@ fixturesRouter.get(
   '/cache',
   requireUser,
   asyncHandler(async (_req, res) => {
-    const { rows } = await query<{ payload: unknown; updated_at: string }>(
-      `select payload, updated_at from public.fixtures_cache where id = 1`,
-    )
-    const row = rows[0]
-    res.json({
-      fixtures: Array.isArray(row?.payload) ? row.payload : [],
-      updatedAt: row?.updated_at ?? null,
+    const payload = await getCachedResponse(responseCacheKeys.fixturesCache, RESPONSE_CACHE_TTL_MS, async () => {
+      const { rows } = await query<{ payload: unknown; updated_at: string }>(
+        `select payload, updated_at from public.fixtures_cache where id = 1`,
+      )
+      const row = rows[0]
+      return {
+        fixtures: Array.isArray(row?.payload) ? row.payload : [],
+        updatedAt: row?.updated_at ?? null,
+      }
     })
+    res.json(payload)
   }),
 )
 
@@ -127,6 +131,7 @@ fixturesRouter.put(
        on conflict (id) do update set source_url = excluded.source_url, payload = excluded.payload, updated_by = excluded.updated_by`,
       [sourceUrl ?? '', JSON.stringify(Array.isArray(fixtures) ? fixtures : []), req.user!.id],
     )
+    invalidateResponseCache(responseCacheKeys.fixturesCache)
     res.json({ ok: true })
   }),
 )
@@ -158,6 +163,7 @@ fixturesRouter.post(
            on conflict (id) do update set source_url = excluded.source_url, payload = excluded.payload, updated_by = excluded.updated_by`,
           [MANUTD_ICS_URL, JSON.stringify(fixtures), req.user!.id],
         )
+        invalidateResponseCache(responseCacheKeys.fixturesCache)
         return res.json({ ok: true, count: fixtures.length })
       } catch (error) {
         lastError = error instanceof Error ? error.message : 'Fetch failed'

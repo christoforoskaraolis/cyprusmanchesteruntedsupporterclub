@@ -3,6 +3,7 @@ import { query } from '../db.ts'
 import { asyncHandler } from '../lib/asyncHandler.ts'
 import { badRequest } from '../lib/errors.ts'
 import { parseOfficialMuMembershipFields } from '../lib/officialMuMembership.ts'
+import { getCachedResponse, invalidateResponseCache, RESPONSE_CACHE_TTL_MS, responseCacheKeys } from '../lib/responseCache.ts'
 import { requireAdmin, requireUser } from '../middleware/auth.ts'
 
 export const officialMembershipsRouter = Router()
@@ -11,28 +12,35 @@ officialMembershipsRouter.get(
   '/',
   requireUser,
   asyncHandler(async (_req, res) => {
-    const { rows } = await query<{
-      id: string
-      title: string
-      price_eur: string | number
-      image_url: string
-      created_at: string
-      updated_at: string
-    }>(
-      `select id, title, price_eur, image_url, created_at, updated_at
-       from public.official_membership_offers
-       order by sort_order asc, created_at asc`,
+    const payload = await getCachedResponse(
+      responseCacheKeys.officialMemberships,
+      RESPONSE_CACHE_TTL_MS,
+      async () => {
+        const { rows } = await query<{
+          id: string
+          title: string
+          price_eur: string | number
+          image_url: string
+          created_at: string
+          updated_at: string
+        }>(
+          `select id, title, price_eur, image_url, created_at, updated_at
+           from public.official_membership_offers
+           order by sort_order asc, created_at asc`,
+        )
+        return {
+          rows: rows.map((r) => ({
+            id: r.id,
+            title: r.title,
+            priceEur: Number(r.price_eur),
+            imageUrl: r.image_url || '',
+            createdAt: r.created_at,
+            updatedAt: r.updated_at,
+          })),
+        }
+      },
     )
-    res.json({
-      rows: rows.map((r) => ({
-        id: r.id,
-        title: r.title,
-        priceEur: Number(r.price_eur),
-        imageUrl: r.image_url || '',
-        createdAt: r.created_at,
-        updatedAt: r.updated_at,
-      })),
-    })
+    res.json(payload)
   }),
 )
 
@@ -53,6 +61,7 @@ officialMembershipsRouter.post(
        )`,
       [title.trim(), priceEur, imageUrl ?? '', req.user!.id],
     )
+    invalidateResponseCache(responseCacheKeys.officialMemberships)
     res.status(201).json({ ok: true })
   }),
 )
@@ -71,6 +80,7 @@ officialMembershipsRouter.put(
        where id = $5`,
       [title.trim(), priceEur, imageUrl ?? null, req.user!.id, req.params.id],
     )
+    invalidateResponseCache(responseCacheKeys.officialMemberships)
     res.json({ ok: true })
   }),
 )
@@ -92,6 +102,7 @@ officialMembershipsRouter.put(
         )
       }
       await query('commit')
+      invalidateResponseCache(responseCacheKeys.officialMemberships)
       res.json({ ok: true })
     } catch (error) {
       await query('rollback')
@@ -237,6 +248,7 @@ officialMembershipsRouter.delete(
   requireAdmin,
   asyncHandler(async (req, res) => {
     await query(`delete from public.official_membership_offers where id = $1`, [req.params.id])
+    invalidateResponseCache(responseCacheKeys.officialMemberships)
     res.json({ ok: true })
   }),
 )

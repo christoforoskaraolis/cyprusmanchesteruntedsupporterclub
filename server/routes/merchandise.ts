@@ -1,6 +1,7 @@
 import { Router } from 'express'
 import { query } from '../db.ts'
 import { asyncHandler } from '../lib/asyncHandler.ts'
+import { getCachedResponse, invalidateResponseCache, RESPONSE_CACHE_TTL_MS, responseCacheKeys } from '../lib/responseCache.ts'
 import { requireAdmin, requireUser } from '../middleware/auth.ts'
 
 export const merchandiseRouter = Router()
@@ -9,21 +10,24 @@ merchandiseRouter.get(
   '/products',
   requireUser,
   asyncHandler(async (_req, res) => {
-    const { rows } = await query<any>(
-      `select id, title, price_eur, photos, created_at, updated_at
-       from public.merchandise_products
-       order by sort_order asc, created_at asc`,
-    )
-    res.json({
-      rows: rows.map((r) => ({
-        id: r.id,
-        title: r.title,
-        priceEur: Number(r.price_eur),
-        photos: Array.isArray(r.photos) ? r.photos : [],
-        createdAt: r.created_at,
-        updatedAt: r.updated_at,
-      })),
+    const payload = await getCachedResponse(responseCacheKeys.merchandiseProducts, RESPONSE_CACHE_TTL_MS, async () => {
+      const { rows } = await query<any>(
+        `select id, title, price_eur, photos, created_at, updated_at
+         from public.merchandise_products
+         order by sort_order asc, created_at asc`,
+      )
+      return {
+        rows: rows.map((r) => ({
+          id: r.id,
+          title: r.title,
+          priceEur: Number(r.price_eur),
+          photos: Array.isArray(r.photos) ? r.photos : [],
+          createdAt: r.created_at,
+          updatedAt: r.updated_at,
+        })),
+      }
     })
+    res.json(payload)
   }),
 )
 
@@ -45,6 +49,7 @@ merchandiseRouter.post(
        )`,
       [title.trim(), priceEur, JSON.stringify(Array.isArray(photos) ? photos : []), req.user!.id],
     )
+    invalidateResponseCache(responseCacheKeys.merchandiseProducts)
     res.status(201).json({ ok: true })
   }),
 )
@@ -63,6 +68,7 @@ merchandiseRouter.put(
        where id = $5`,
       [title.trim(), priceEur, photos ? JSON.stringify(photos) : null, req.user!.id, req.params.id],
     )
+    invalidateResponseCache(responseCacheKeys.merchandiseProducts)
     res.json({ ok: true })
   }),
 )
@@ -84,6 +90,7 @@ merchandiseRouter.put(
         )
       }
       await query('commit')
+      invalidateResponseCache(responseCacheKeys.merchandiseProducts)
       res.json({ ok: true })
     } catch (error) {
       await query('rollback')
@@ -97,6 +104,7 @@ merchandiseRouter.delete(
   requireAdmin,
   asyncHandler(async (req, res) => {
     await query(`delete from public.merchandise_products where id = $1`, [req.params.id])
+    invalidateResponseCache(responseCacheKeys.merchandiseProducts)
     res.json({ ok: true })
   }),
 )

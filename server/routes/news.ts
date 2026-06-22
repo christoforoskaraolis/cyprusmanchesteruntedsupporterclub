@@ -5,6 +5,7 @@ import { badRequest } from '../lib/errors.ts'
 import { env } from '../env.ts'
 import { publishDueNewsPosts } from '../lib/publishScheduledNews.ts'
 import { pruneNewsPostsToLimit } from '../lib/pruneNewsPosts.ts'
+import { getCachedResponse, invalidateResponseCache, RESPONSE_CACHE_TTL_MS, responseCacheKeys } from '../lib/responseCache.ts'
 import { requireAdmin, requireUser } from '../middleware/auth.ts'
 import { sendNewsPushToAllSubscribers } from '../lib/webPush.ts'
 
@@ -79,13 +80,16 @@ newsRouter.get(
   '/',
   requireUser,
   asyncHandler(async (_req, res) => {
-    const { rows } = await query<NewsRow>(
-      `select id, title, body, image_url, image_url_mobile, body_photos, published_at, updated_at
-       from public.news_posts
-       where published_at <= now()
-       order by published_at desc`,
-    )
-    res.json({ rows: rows.map(mapNewsRow) })
+    const payload = await getCachedResponse(responseCacheKeys.news, RESPONSE_CACHE_TTL_MS, async () => {
+      const { rows } = await query<NewsRow>(
+        `select id, title, body, image_url, image_url_mobile, body_photos, published_at, updated_at
+         from public.news_posts
+         where published_at <= now()
+         order by published_at desc`,
+      )
+      return { rows: rows.map(mapNewsRow) }
+    })
+    res.json(payload)
   }),
 )
 
@@ -152,6 +156,8 @@ newsRouter.post(
 
     await pruneNewsPostsToLimit()
 
+    invalidateResponseCache(responseCacheKeys.news)
+
     res.status(201).json({ ok: true, scheduled })
   }),
 )
@@ -204,6 +210,8 @@ newsRouter.put(
 
     void publishDueNewsPosts().catch((err) => console.error('[news] publish due posts failed:', err))
 
+    invalidateResponseCache(responseCacheKeys.news)
+
     res.json({ ok: true })
   }),
 )
@@ -213,6 +221,7 @@ newsRouter.delete(
   requireAdmin,
   asyncHandler(async (req, res) => {
     await query(`delete from public.news_posts where id = $1`, [req.params.id])
+    invalidateResponseCache(responseCacheKeys.news)
     res.json({ ok: true })
   }),
 )
