@@ -844,18 +844,6 @@ function formatTicketBalancePaymentDeadlineForInput(deadlineIso: string | null |
   return `${day}/${month}/${year}`
 }
 
-function formatNewsPublishedAtForInput(publishedAt: string | null | undefined): string {
-  if (!publishedAt) return ''
-  const dt = new Date(publishedAt)
-  if (Number.isNaN(dt.getTime())) return ''
-  const year = dt.getFullYear()
-  const month = String(dt.getMonth() + 1).padStart(2, '0')
-  const day = String(dt.getDate()).padStart(2, '0')
-  const hours = String(dt.getHours()).padStart(2, '0')
-  const minutes = String(dt.getMinutes()).padStart(2, '0')
-  return `${year}-${month}-${day}T${hours}:${minutes}`
-}
-
 function isNewsImageSource(value: string): boolean {
   const trimmed = value.trim()
   if (!trimmed) return false
@@ -2192,7 +2180,6 @@ function AdminConsole({
   const [newsImageUrlMobile, setNewsImageUrlMobile] = useState('')
   const [newsBodyPhotos, setNewsBodyPhotos] = useState<string[]>([])
   const [newsBodyPhotoUrlDraft, setNewsBodyPhotoUrlDraft] = useState('')
-  const [newsPublishedAt, setNewsPublishedAt] = useState('')
   const [editingNewsId, setEditingNewsId] = useState<string | null>(null)
   const [busyNewsId, setBusyNewsId] = useState<string | null>(null)
   const [newsError, setNewsError] = useState<string | null>(null)
@@ -2598,7 +2585,6 @@ function AdminConsole({
     setNewsImageUrlMobile(post.imageUrlMobile ?? '')
     setNewsBodyPhotos(post.bodyPhotos ?? [])
     setNewsBodyPhotoUrlDraft('')
-    setNewsPublishedAt(formatNewsPublishedAtForInput(post.publishedAt))
     setNewsError(null)
     requestAnimationFrame(() => {
       newsFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
@@ -3805,8 +3791,8 @@ function AdminConsole({
           <div className="admin-block-head">
             <h2 className="admin-block-title">News posts</h2>
             <p className="admin-block-lead">
-              Create or edit posts shown on the public News page. Posts with a future publish date stay hidden until that
-              time; push alerts are sent when the post goes live for members who enabled news alerts in MY MUCY.
+              Create or edit posts shown on the public News page. Publishing sends a push notification immediately to
+              members who enabled news alerts in MY MUCY.
             </p>
           </div>
           <form
@@ -3820,13 +3806,12 @@ function AdminConsole({
               const imageUrl = newsImageUrl.trim() || null
               const imageUrlMobile = newsImageUrlMobile.trim() || null
               const bodyPhotos = newsBodyPhotos.map((src) => src.trim()).filter(Boolean)
-              const publishedAt = newsPublishedAt ? new Date(newsPublishedAt).toISOString() : new Date().toISOString()
               if (!title || !body) {
                 setNewsError('Title and content are required.')
                 return
               }
               try {
-                const payload = { title, body, imageUrl, imageUrlMobile, bodyPhotos, publishedAt }
+                const payload = { title, body, imageUrl, imageUrlMobile, bodyPhotos }
                 if (editingNewsId) {
                   await onUpdateNews(editingNewsId, payload)
                 } else {
@@ -3838,7 +3823,6 @@ function AdminConsole({
                 setNewsImageUrlMobile('')
                 setNewsBodyPhotos([])
                 setNewsBodyPhotoUrlDraft('')
-                setNewsPublishedAt('')
                 setEditingNewsId(null)
               } catch (err) {
                 setNewsError(err instanceof Error ? err.message : 'Could not save news.')
@@ -3979,20 +3963,11 @@ function AdminConsole({
               imageUrl={newsImageUrl.trim() || null}
               imageUrlMobile={newsImageUrlMobile.trim() || null}
               publishedAt={
-                newsPublishedAt
-                  ? new Date(newsPublishedAt).toISOString()
+                editingNewsId
+                  ? (newsPosts.find((post) => post.id === editingNewsId)?.publishedAt ?? new Date().toISOString())
                   : new Date().toISOString()
               }
             />
-            <label className="admin-news-date-row">
-              <span>Publish date/time (optional)</span>
-              <input
-                className="auth-input"
-                type="datetime-local"
-                value={newsPublishedAt}
-                onChange={(e) => setNewsPublishedAt(e.target.value)}
-              />
-            </label>
             {newsError && <p className="auth-message is-error">{newsError}</p>}
             <div className="admin-news-form-actions">
               <button type="submit" className="board-admin-activate">
@@ -4010,7 +3985,6 @@ function AdminConsole({
                     setNewsImageUrlMobile('')
                     setNewsBodyPhotos([])
                     setNewsBodyPhotoUrlDraft('')
-                    setNewsPublishedAt('')
                     setNewsError(null)
                   }}
                 >
@@ -4029,8 +4003,7 @@ function AdminConsole({
                 <li key={n.id} className={`admin-news-card${editingNewsId === n.id ? ' is-editing' : ''}`}>
                   <p className="admin-news-card-title">{n.title}</p>
                   <p className="admin-news-card-meta">
-                    {new Date(n.publishedAt) > new Date() ? 'Scheduled' : 'Published'}:{' '}
-                    {new Date(n.publishedAt).toLocaleString('en-GB')}
+                    Published: {new Date(n.publishedAt).toLocaleString('en-GB')}
                   </p>
                   {n.imageUrl && <img src={n.imageUrl} alt={n.title} className="news-image" />}
                   <p className="admin-news-card-body">{n.body}</p>
@@ -4058,7 +4031,6 @@ function AdminConsole({
                             setNewsImageUrlMobile('')
                             setNewsBodyPhotos([])
                             setNewsBodyPhotoUrlDraft('')
-                            setNewsPublishedAt('')
                             setNewsError(null)
                           }
                         } finally {

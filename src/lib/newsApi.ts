@@ -20,7 +20,6 @@ export type NewsPostPayload = {
   imageUrl: string | null
   imageUrlMobile: string | null
   bodyPhotos: string[]
-  publishedAt: string
 }
 
 export function newsDesktopImage(post: Pick<NewsPost, 'imageUrl'>): string | null {

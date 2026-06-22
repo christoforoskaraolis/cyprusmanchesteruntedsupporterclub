@@ -3,7 +3,6 @@ import { query } from '../db.ts'
 import { asyncHandler } from '../lib/asyncHandler.ts'
 import { badRequest } from '../lib/errors.ts'
 import { env } from '../env.ts'
-import { publishDueNewsPosts } from '../lib/publishScheduledNews.ts'
 import { pruneNewsPostsToLimit } from '../lib/pruneNewsPosts.ts'
 import { getCachedResponse, invalidateResponseCache, RESPONSE_CACHE_TTL_MS, responseCacheKeys } from '../lib/responseCache.ts'
 import { requireAdmin, requireUser } from '../middleware/auth.ts'
@@ -36,18 +35,6 @@ function mapNewsRow(r: NewsRow) {
     publishedAt: r.published_at,
     updatedAt: r.updated_at,
   }
-}
-
-function parsePublishedAt(raw: string): Date {
-  const date = new Date(raw)
-  if (Number.isNaN(date.getTime())) {
-    throw badRequest('publishedAt must be a valid date/time')
-  }
-  return date
-}
-
-function isScheduledForFuture(publishedAt: Date): boolean {
-  return publishedAt.getTime() > Date.now()
 }
 
 function newsPushUrl(): string {
@@ -110,20 +97,18 @@ newsRouter.post(
   '/',
   requireAdmin,
   asyncHandler(async (req, res) => {
-    const { title, body, imageUrl, imageUrlMobile, bodyPhotos, publishedAt } = req.body as {
+    const { title, body, imageUrl, imageUrlMobile, bodyPhotos } = req.body as {
       title?: string
       body?: string
       imageUrl?: string | null
       imageUrlMobile?: string | null
       bodyPhotos?: string[]
-      publishedAt?: string
     }
-    if (!title?.trim() || !body?.trim() || !publishedAt) {
-      throw badRequest('title, body and publishedAt are required')
+    if (!title?.trim() || !body?.trim()) {
+      throw badRequest('title and body are required')
     }
 
-    const publishAt = parsePublishedAt(publishedAt)
-    const scheduled = isScheduledForFuture(publishAt)
+    const publishedAt = new Date().toISOString()
     const photos = parseBodyPhotos(bodyPhotos)
 
     const { rows } = await query<{ id: string }>(
@@ -138,15 +123,15 @@ newsRouter.post(
         imageUrl ?? null,
         imageUrlMobile ?? null,
         JSON.stringify(photos),
-        publishAt.toISOString(),
+        publishedAt,
         req.user!.id,
-        scheduled ? null : new Date().toISOString(),
+        publishedAt,
       ],
     )
     const postId = rows[0]?.id
     const newsTitle = title.trim()
 
-    if (!scheduled && postId) {
+    if (postId) {
       try {
         await sendImmediateNewsPush(postId, newsTitle)
       } catch (err) {
@@ -158,7 +143,7 @@ newsRouter.post(
 
     invalidateResponseCache(responseCacheKeys.news)
 
-    res.status(201).json({ ok: true, scheduled })
+    res.status(201).json({ ok: true })
   }),
 )
 
@@ -166,19 +151,17 @@ newsRouter.put(
   '/:id',
   requireAdmin,
   asyncHandler(async (req, res) => {
-    const { title, body, imageUrl, imageUrlMobile, bodyPhotos, publishedAt } = req.body as {
+    const { title, body, imageUrl, imageUrlMobile, bodyPhotos } = req.body as {
       title?: string
       body?: string
       imageUrl?: string | null
       imageUrlMobile?: string | null
       bodyPhotos?: string[]
-      publishedAt?: string
     }
-    if (!title?.trim() || !body?.trim() || !publishedAt) {
-      throw badRequest('title, body and publishedAt are required')
+    if (!title?.trim() || !body?.trim()) {
+      throw badRequest('title and body are required')
     }
 
-    const publishAt = parsePublishedAt(publishedAt)
     const photos = parseBodyPhotos(bodyPhotos)
 
     await query(
@@ -188,27 +171,18 @@ newsRouter.put(
            image_url = $3,
            image_url_mobile = $4,
            body_photos = $5::jsonb,
-           published_at = $6,
-           updated_by = $7,
-           push_sent_at = case
-             when push_sent_at is not null then push_sent_at
-             when $6::timestamptz > now() then null
-             else push_sent_at
-           end
-       where id = $8`,
+           updated_by = $6
+       where id = $7`,
       [
         title.trim(),
         body.trim(),
         imageUrl ?? null,
         imageUrlMobile ?? null,
         JSON.stringify(photos),
-        publishAt.toISOString(),
         req.user!.id,
         req.params.id,
       ],
     )
-
-    void publishDueNewsPosts().catch((err) => console.error('[news] publish due posts failed:', err))
 
     invalidateResponseCache(responseCacheKeys.news)
 
