@@ -4889,6 +4889,10 @@ function AdminConsole({
           setPurchasedMembershipError(null)
           try {
             await onUpdateAdminMemberFlags(purchasedMembershipTarget.applicationId, { member: true })
+            setMemberMuStatusDraftByApplicationId((prev) => ({
+              ...prev,
+              [purchasedMembershipTarget.applicationId]: 'activated',
+            }))
             const recipient = purchasedMembershipTarget.email || 'the member'
             setMemberActionNotice(`Official membership confirmation email sent to ${recipient}.`)
             setPurchasedMembershipTarget(null)
@@ -6423,6 +6427,9 @@ function App() {
         if (flags.member !== undefined) {
           updated.adminMember = flags.member
           updated.adminMemberAt = flags.member ? now : null
+          if (flags.member) {
+            updated.officialMuMembershipStatus = 'activated'
+          }
         }
         if (flags.sendMicrosite !== undefined) {
           updated.adminSendMicrosite = flags.sendMicrosite

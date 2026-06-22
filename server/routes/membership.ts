@@ -652,6 +652,7 @@ membershipRouter.put(
       admin_member_at: string | null
       admin_send_microsite: boolean
       admin_send_microsite_at: string | null
+      official_mu_membership_status: string | null
     }>(
       `update public.membership_applications
        set admin_member = coalesce($1, admin_member),
@@ -665,9 +666,14 @@ membershipRouter.put(
              when $2 is null then admin_send_microsite_at
              when $2 then now()
              else null
+           end,
+           official_mu_membership_status = case
+             when $1 is true then 'activated'
+             else official_mu_membership_status
            end
        where application_id = $3
-       returning application_id, admin_member, admin_member_at, admin_send_microsite, admin_send_microsite_at`,
+       returning application_id, admin_member, admin_member_at, admin_send_microsite, admin_send_microsite_at,
+                 official_mu_membership_status`,
       [member, sendMicrosite, applicationId],
     )
     if (rows.length === 0) throw notFound('Membership request not found')
@@ -687,6 +693,10 @@ membershipRouter.put(
       memberAt: row.admin_member_at,
       sendMicrosite: row.admin_send_microsite,
       sendMicrositeAt: row.admin_send_microsite_at,
+      officialMuMembershipStatus:
+        row.official_mu_membership_status === 'activated' || row.official_mu_membership_status === 'pending'
+          ? row.official_mu_membership_status
+          : null,
     })
   }),
 )
