@@ -457,6 +457,20 @@
   text-align: right;
 }
 
+.fixtures-ticket-availability {
+  margin: 0;
+  max-width: 220px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  line-height: 1.35;
+  color: var(--text-muted);
+  text-align: right;
+}
+
+.fixtures-ticket-availability.is-full {
+  color: #b45309;
+}
+
 .fixtures-ticket-pill {
   display: inline-block;
   font-size: 0.73rem;

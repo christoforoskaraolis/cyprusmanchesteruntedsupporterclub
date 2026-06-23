@@ -803,6 +803,11 @@ function fixtureWindowStatusLabel(status: FixtureTicketWindowStatus): string {
   return 'Disabled'
 }
 
+function fixtureTicketsRemaining(maxTickets: number | null, activeRequestCount: number): number | null {
+  if (maxTickets == null) return null
+  return Math.max(0, maxTickets - activeRequestCount)
+}
+
 function parseTicketBalanceAmountDraft(value: string): number | null {
   const trimmed = value.trim()
   if (!trimmed) return null
@@ -7325,6 +7330,11 @@ function App() {
                         {(() => {
                           const key = fixtureMatchKey(f)
                           const status = ticketWindowByKey[key] ?? 'disabled'
+                          const windowDetails = ticketWindowDetailsByKey[key]
+                          const maxTickets = windowDetails?.maxTickets ?? null
+                          const activeRequestCount = windowDetails?.activeRequestCount ?? 0
+                          const ticketsRemaining = fixtureTicketsRemaining(maxTickets, activeRequestCount)
+                          const atCapacity = ticketsRemaining === 0
                           const myRequest = myTicketRequestByKey[key]
                           const myRequestStatus = myRequest?.status
                           const depositConfirmed = myRequest?.depositConfirmed === true
@@ -7384,12 +7394,19 @@ function App() {
                               <span className={`fixtures-ticket-pill fixtures-ticket-pill--${status}`}>
                                 {fixtureWindowStatusLabel(status)}
                               </span>
+                              {status === 'open' && ticketsRemaining != null && (
+                                <p className={`fixtures-ticket-availability${atCapacity ? ' is-full' : ''}`}>
+                                  {atCapacity
+                                    ? 'No tickets remaining'
+                                    : `${ticketsRemaining} ticket${ticketsRemaining === 1 ? '' : 's'} remaining`}
+                                </p>
+                              )}
                               {userCancelled && (
                                 <span className="fixtures-ticket-pill fixtures-ticket-pill--closed">
                                   Request cancelled
                                 </span>
                               )}
-                              {status === 'open' && canSubmitNewRequest && canRequestTicket && (
+                              {status === 'open' && canSubmitNewRequest && canRequestTicket && !atCapacity && (
                                 <button
                                   type="button"
                                   className="fixtures-ticket-request-btn"
@@ -7407,6 +7424,9 @@ function App() {
                                   In order to request a ticket, you need to have active club and official Man UTD
                                   membership.
                                 </p>
+                              )}
+                              {status === 'open' && canSubmitNewRequest && canRequestTicket && atCapacity && (
+                                <p className="fixtures-ticket-availability is-full">Ticket requests are full for this match.</p>
                               )}
                               {!userCancelled && myRequestStatus === 'pending' && !depositConfirmed && (
                                 <>
