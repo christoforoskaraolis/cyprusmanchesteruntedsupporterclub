@@ -91,6 +91,27 @@ export function fixtureMatchKey(f: UpcomingFixture): string {
   return `${f.kickoffIso}|${f.competition}|${f.opponent}|${f.home ? 'H' : 'A'}|${f.venue}`
 }
 
+export type FixtureTicketTravelCompanionLookup = {
+  membershipNumber: number
+  fullName: string | null
+  found: boolean
+  eligible: boolean
+}
+
+export async function lookupTravelCompanionMembers(membershipNumbers: number[]) {
+  if (membershipNumbers.length === 0) return { rows: [] as FixtureTicketTravelCompanionLookup[], error: undefined }
+  try {
+    const data = await apiSend<{ rows: FixtureTicketTravelCompanionLookup[] }>(
+      '/api/tickets/travel-companions/lookup',
+      'POST',
+      { membershipNumbers },
+    )
+    return { rows: data.rows, error: undefined }
+  } catch (error) {
+    return { rows: [] as FixtureTicketTravelCompanionLookup[], error: asError(error) }
+  }
+}
+
 export async function fetchFixtureTicketWindows(matchKeys: string[]) {
   if (matchKeys.length === 0) return { rows: [] as FixtureTicketWindow[], error: undefined }
   try {

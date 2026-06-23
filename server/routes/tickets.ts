@@ -5,6 +5,7 @@ import { badRequest, notFound } from '../lib/errors.ts'
 import { sendTicketDepositConfirmedEmail } from '../lib/ticketDepositConfirmedEmail.ts'
 import { sendTicketBalancePaymentEmail } from '../lib/ticketBalancePaymentEmail.ts'
 import {
+  lookupMembersByMembershipNumbers,
   ticketDepositAmountEurFromCompanionNumbers,
   ticketSlotCountFromCompanionNumbers,
   validateTravelCompanionMembershipNumbers,
@@ -123,6 +124,18 @@ async function resolveTravelCompanionsByRequestId(
 }
 
 export const ticketsRouter = Router()
+
+ticketsRouter.post(
+  '/travel-companions/lookup',
+  requireUser,
+  asyncHandler(async (req, res) => {
+    const membershipNumbers = parseTravelCompanionMembershipNumbers(
+      (req.body as { membershipNumbers?: unknown })?.membershipNumbers,
+    )
+    const rows = await lookupMembersByMembershipNumbers(membershipNumbers)
+    res.json({ rows })
+  }),
+)
 
 ticketsRouter.post(
   '/windows/list',

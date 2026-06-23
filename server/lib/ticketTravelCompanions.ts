@@ -49,3 +49,47 @@ export async function validateTravelCompanionMembershipNumbers(
     }
   }
 }
+
+export type TravelCompanionMemberLookup = {
+  membershipNumber: number
+  fullName: string | null
+  found: boolean
+  eligible: boolean
+}
+
+export async function lookupMembersByMembershipNumbers(
+  membershipNumbers: number[],
+): Promise<TravelCompanionMemberLookup[]> {
+  if (membershipNumbers.length === 0) return []
+
+  const { rows } = await query<{
+    membership_number: number
+    first_name: string | null
+    last_name: string | null
+    profile_full_name: string | null
+    status: string
+    official_mu_membership_status: string | null
+  }>(
+    `select distinct on (ma.membership_number)
+            ma.membership_number, ma.first_name, ma.last_name,
+            p.full_name as profile_full_name, ma.status, ma.official_mu_membership_status
+     from public.membership_applications ma
+     left join public.profiles p on p.id = ma.user_id
+     where ma.membership_number = any($1::int[])
+     order by ma.membership_number, case when ma.status = 'active' then 0 else 1 end, ma.submitted_at desc`,
+    [membershipNumbers],
+  )
+
+  const byNumber = new Map(rows.map((row) => [row.membership_number, row]))
+
+  return membershipNumbers.map((membershipNumber) => {
+    const row = byNumber.get(membershipNumber)
+    if (!row) {
+      return { membershipNumber, fullName: null, found: false, eligible: false }
+    }
+    const fullName =
+      [row.first_name, row.last_name].filter(Boolean).join(' ').trim() || row.profile_full_name?.trim() || null
+    const eligible = row.status === 'active' && row.official_mu_membership_status === 'activated'
+    return { membershipNumber, fullName, found: true, eligible }
+  })
+}

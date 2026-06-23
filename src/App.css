@@ -2988,6 +2988,27 @@
 
 .ticket-request-travel-companion-input {
   max-width: 9rem;
+  flex-shrink: 0;
+}
+
+.ticket-request-travel-companion-name {
+  flex: 1;
+  min-width: 0;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--text);
+  text-align: right;
+  line-height: 1.3;
+}
+
+.ticket-request-travel-companion-name.is-muted {
+  color: var(--text-muted, #64748b);
+  font-weight: 500;
+}
+
+.ticket-request-travel-companion-name.is-error {
+  color: #b91c1c;
+  font-weight: 500;
 }
 
 .ticket-request-travel-companion-remove {

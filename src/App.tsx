@@ -58,6 +58,7 @@ import {
   fetchPendingFixtureTicketRequests,
   fetchFixtureTicketWindows,
   fetchMyFixtureTicketRequests,
+  lookupTravelCompanionMembers,
   type MyFixtureTicketRequest,
   fixtureMatchKey,
   formatFixtureMatchKeyLabel,
@@ -1025,8 +1026,17 @@ type TicketRequestConfirmModalProps = {
   fixture: UpcomingFixture | null
   submitting: boolean
   error: string | null
+  requesterMembershipNumber: number | null
   onClose: () => void
   onConfirm: (travelCompanionMembershipNumbers: number[]) => void
+}
+
+type TravelCompanionPreview = {
+  loading: boolean
+  fullName: string | null
+  found: boolean
+  eligible: boolean
+  isSelf: boolean
 }
 
 function parseTicketTravelCompanionDrafts(rows: string[]): number[] {
@@ -1049,14 +1059,83 @@ function TicketRequestConfirmModal({
   fixture,
   submitting,
   error,
+  requesterMembershipNumber,
   onClose,
   onConfirm,
 }: TicketRequestConfirmModalProps) {
   const [travelCompanionRows, setTravelCompanionRows] = useState<string[]>([])
+  const [companionPreviewByIndex, setCompanionPreviewByIndex] = useState<Record<number, TravelCompanionPreview>>({})
 
   useEffect(() => {
-    if (open) setTravelCompanionRows([])
+    if (open) {
+      setTravelCompanionRows([])
+      setCompanionPreviewByIndex({})
+    }
   }, [open, fixture?.kickoffIso, fixture?.opponent])
+
+  useEffect(() => {
+    if (!open) return
+
+    const numbersByIndex = travelCompanionRows.map((row) => {
+      const parsed = Number(row.trim())
+      return Number.isInteger(parsed) && parsed >= 1 ? parsed : null
+    })
+    const validNumbers = [...new Set(numbersByIndex.filter((value): value is number => value != null))]
+
+    if (validNumbers.length === 0) {
+      setCompanionPreviewByIndex({})
+      return
+    }
+
+    setCompanionPreviewByIndex((prev) => {
+      const next = { ...prev }
+      numbersByIndex.forEach((number, index) => {
+        if (number == null) {
+          delete next[index]
+          return
+        }
+        next[index] = {
+          loading: true,
+          fullName: prev[index]?.fullName ?? null,
+          found: false,
+          eligible: false,
+          isSelf: requesterMembershipNumber != null && number === requesterMembershipNumber,
+        }
+      })
+      return next
+    })
+
+    const timer = window.setTimeout(() => {
+      void (async () => {
+        const { rows, error: lookupError } = await lookupTravelCompanionMembers(validNumbers)
+        if (lookupError) return
+
+        const byNumber = new Map(rows.map((row) => [row.membershipNumber, row]))
+        setCompanionPreviewByIndex(() => {
+          const next: Record<number, TravelCompanionPreview> = {}
+          numbersByIndex.forEach((number, index) => {
+            if (number == null) return
+            const isSelf = requesterMembershipNumber != null && number === requesterMembershipNumber
+            const hit = byNumber.get(number)
+            if (!hit || !hit.found) {
+              next[index] = { loading: false, fullName: null, found: false, eligible: false, isSelf }
+              return
+            }
+            next[index] = {
+              loading: false,
+              fullName: hit.fullName,
+              found: true,
+              eligible: hit.eligible,
+              isSelf,
+            }
+          })
+          return next
+        })
+      })()
+    }, 400)
+
+    return () => window.clearTimeout(timer)
+  }, [open, travelCompanionRows, requesterMembershipNumber])
 
   if (!open || !fixture) return null
 
@@ -1076,6 +1155,44 @@ function TicketRequestConfirmModal({
 
   function removeTravelCompanionRow(index: number) {
     setTravelCompanionRows((prev) => prev.filter((_, rowIndex) => rowIndex !== index))
+    setCompanionPreviewByIndex((prev) => {
+      const next: Record<number, TravelCompanionPreview> = {}
+      Object.entries(prev).forEach(([key, value]) => {
+        const rowIndex = Number(key)
+        if (rowIndex < index) next[rowIndex] = value
+        else if (rowIndex > index) next[rowIndex - 1] = value
+      })
+      return next
+    })
+  }
+
+  function renderTravelCompanionPreview(index: number) {
+    const row = travelCompanionRows[index]?.trim()
+    if (!row) return null
+
+    const parsed = Number(row)
+    if (!Number.isInteger(parsed) || parsed < 1) {
+      return <span className="ticket-request-travel-companion-name is-muted">Enter a valid number</span>
+    }
+
+    const preview = companionPreviewByIndex[index]
+    if (!preview || preview.loading) {
+      return <span className="ticket-request-travel-companion-name is-muted">Looking up…</span>
+    }
+    if (preview.isSelf) {
+      return <span className="ticket-request-travel-companion-name is-error">Your own number</span>
+    }
+    if (!preview.found) {
+      return <span className="ticket-request-travel-companion-name is-error">Member not found</span>
+    }
+    if (!preview.eligible) {
+      return (
+        <span className="ticket-request-travel-companion-name is-error">
+          {preview.fullName ?? 'Member'} — not eligible
+        </span>
+      )
+    }
+    return <span className="ticket-request-travel-companion-name">{preview.fullName ?? 'Member'}</span>
   }
 
   return (
@@ -1141,6 +1258,7 @@ function TicketRequestConfirmModal({
                     disabled={submitting}
                     aria-label={`Travel companion MY MUCY number ${index + 1}`}
                   />
+                  {renderTravelCompanionPreview(index)}
                   <button
                     type="button"
                     className="ticket-request-travel-companion-remove"
@@ -7527,6 +7645,7 @@ function App() {
           fixture={ticketRequestConfirmFixture}
           submitting={ticketRequestConfirmSubmitting}
           error={ticketRequestConfirmError}
+          requesterMembershipNumber={membershipRecord?.membershipNumber ?? null}
           onClose={() => {
             if (ticketRequestConfirmSubmitting) return
             setTicketRequestConfirmFixture(null)
