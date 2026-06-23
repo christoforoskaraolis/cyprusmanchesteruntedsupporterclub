@@ -1118,10 +1118,13 @@ function TicketRequestConfirmModal({
           ).
         </p>
         <div className="ticket-request-travel-companions">
-          <p className="auth-label">Add the MYCS of someone who will travel with you (optional)</p>
+          <p className="auth-label">
+            Add the Cyprus Man Utd Supporter ID of any member who will travel with you (optional).
+          </p>
           <p className="renewal-modal-hint">
-            Each travelling member counts as one ticket. They must have active Cyprus and official Manchester United
-            membership.
+            {travelCompanionNumbers.length === 0
+              ? "By adding a member's number you are asking for a total of 2 tickets and no other request is needed from the travel-with member."
+              : `By adding a member's number you are asking for a total of ${ticketSlotCount} tickets and no other request is needed from the travel-with member.`}
           </p>
           {travelCompanionRows.length > 0 && (
             <ul className="ticket-request-travel-companion-list">
