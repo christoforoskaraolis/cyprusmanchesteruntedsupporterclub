@@ -1123,8 +1123,8 @@ function TicketRequestConfirmModal({
           </p>
           <p className="renewal-modal-hint">
             {travelCompanionNumbers.length === 0
-              ? "By adding a member's number you are asking for a total of 2 tickets and no other request is needed from the travel-with member."
-              : `By adding a member's number you are asking for a total of ${ticketSlotCount} tickets and no other request is needed from the travel-with member.`}
+              ? "By adding a member's number you are asking for a total of 2 tickets and no other request is needed from the travel-with member. You can add as many travel companions as you need."
+              : `By adding a member's number you are asking for a total of ${ticketSlotCount} tickets and no other request is needed from the travel-with member. You can add as many travel companions as you need.`}
           </p>
           {travelCompanionRows.length > 0 && (
             <ul className="ticket-request-travel-companion-list">
@@ -1135,11 +1135,11 @@ function TicketRequestConfirmModal({
                     type="text"
                     inputMode="numeric"
                     pattern="[0-9]*"
-                    placeholder="MYCS number"
+                    placeholder="MY MUCY Number"
                     value={row}
                     onChange={(e) => updateTravelCompanionRow(index, e.target.value)}
                     disabled={submitting}
-                    aria-label={`Travel companion MYCS ${index + 1}`}
+                    aria-label={`Travel companion MY MUCY number ${index + 1}`}
                   />
                   <button
                     type="button"
@@ -1154,6 +1154,9 @@ function TicketRequestConfirmModal({
               ))}
             </ul>
           )}
+          <p className="renewal-modal-hint ticket-request-travel-companion-id-note">
+            MY MUCY number is the Cyprus Membership ID located at the top right of the page by clicking MY MUCY.
+          </p>
           <button
             type="button"
             className="ticket-request-travel-companion-add"
