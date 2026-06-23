@@ -55,6 +55,26 @@ export type TravelCompanionMemberLookup = {
   fullName: string | null
   found: boolean
   eligible: boolean
+  ineligibleReason: string | null
+}
+
+function travelCompanionIneligibleReason(
+  status: string,
+  officialMuMembershipStatus: string | null,
+): string | null {
+  const reasons: string[] = []
+  if (status !== 'active') {
+    reasons.push('no active Cyprus membership')
+  }
+  if (officialMuMembershipStatus !== 'activated') {
+    if (officialMuMembershipStatus === 'pending') {
+      reasons.push('official MU membership is still pending')
+    } else {
+      reasons.push('no active official MU membership')
+    }
+  }
+  if (reasons.length === 0) return null
+  return reasons.join('; ')
 }
 
 export async function lookupMembersByMembershipNumbers(
@@ -85,11 +105,12 @@ export async function lookupMembersByMembershipNumbers(
   return membershipNumbers.map((membershipNumber) => {
     const row = byNumber.get(membershipNumber)
     if (!row) {
-      return { membershipNumber, fullName: null, found: false, eligible: false }
+      return { membershipNumber, fullName: null, found: false, eligible: false, ineligibleReason: null }
     }
     const fullName =
       [row.first_name, row.last_name].filter(Boolean).join(' ').trim() || row.profile_full_name?.trim() || null
-    const eligible = row.status === 'active' && row.official_mu_membership_status === 'activated'
-    return { membershipNumber, fullName, found: true, eligible }
+    const ineligibleReason = travelCompanionIneligibleReason(row.status, row.official_mu_membership_status)
+    const eligible = ineligibleReason == null
+    return { membershipNumber, fullName, found: true, eligible, ineligibleReason }
   })
 }

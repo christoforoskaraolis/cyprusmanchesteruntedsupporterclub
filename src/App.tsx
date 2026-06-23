@@ -1036,6 +1036,7 @@ type TravelCompanionPreview = {
   fullName: string | null
   found: boolean
   eligible: boolean
+  ineligibleReason: string | null
   isSelf: boolean
 }
 
@@ -1099,6 +1100,7 @@ function TicketRequestConfirmModal({
           fullName: prev[index]?.fullName ?? null,
           found: false,
           eligible: false,
+          ineligibleReason: null,
           isSelf: requesterMembershipNumber != null && number === requesterMembershipNumber,
         }
       })
@@ -1118,7 +1120,14 @@ function TicketRequestConfirmModal({
             const isSelf = requesterMembershipNumber != null && number === requesterMembershipNumber
             const hit = byNumber.get(number)
             if (!hit || !hit.found) {
-              next[index] = { loading: false, fullName: null, found: false, eligible: false, isSelf }
+              next[index] = {
+                loading: false,
+                fullName: null,
+                found: false,
+                eligible: false,
+                ineligibleReason: null,
+                isSelf,
+              }
               return
             }
             next[index] = {
@@ -1126,6 +1135,7 @@ function TicketRequestConfirmModal({
               fullName: hit.fullName,
               found: true,
               eligible: hit.eligible,
+              ineligibleReason: hit.ineligibleReason,
               isSelf,
             }
           })
@@ -1186,9 +1196,10 @@ function TicketRequestConfirmModal({
       return <span className="ticket-request-travel-companion-name is-error">Member not found</span>
     }
     if (!preview.eligible) {
+      const reason = preview.ineligibleReason ?? 'not eligible for match tickets'
       return (
         <span className="ticket-request-travel-companion-name is-error">
-          {preview.fullName ?? 'Member'} — not eligible
+          {preview.fullName ?? 'Member'} — {reason}
         </span>
       )
     }

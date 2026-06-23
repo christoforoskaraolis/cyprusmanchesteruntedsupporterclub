@@ -96,6 +96,7 @@ export type FixtureTicketTravelCompanionLookup = {
   fullName: string | null
   found: boolean
   eligible: boolean
+  ineligibleReason: string | null
 }
 
 export async function lookupTravelCompanionMembers(membershipNumbers: number[]) {
