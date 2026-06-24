@@ -19,3 +19,22 @@ export function parseOfficialMuMembershipFields(
   }
   return { officialMuId, officialMuStatus }
 }
+
+/** Member profile/family edits: status is admin-only; preserve the stored status. */
+export function resolveUserOfficialMuMembershipUpdate(
+  existingStatus: string | null | undefined,
+  rawId: string | undefined,
+): { officialMuId: string; officialMuStatus: OfficialMuMembershipStatus | null } {
+  const officialMuStatus =
+    existingStatus === 'activated' || existingStatus === 'pending' ? existingStatus : null
+  const officialMuId = (rawId ?? '').trim()
+
+  if (officialMuStatus == null && officialMuId) {
+    throw badRequest('Official membership status can only be set by an administrator.')
+  }
+  if (officialMuStatus != null && !officialMuId) {
+    throw badRequest('Please enter the official Manchester United membership number.')
+  }
+
+  return { officialMuId, officialMuStatus }
+}

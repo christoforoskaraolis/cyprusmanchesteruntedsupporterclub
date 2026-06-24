@@ -388,7 +388,10 @@ ticketsRouter.get(
       first_name: string | null
       last_name: string | null
       profile_full_name: string | null
+      profile_email: string | null
+      auth_email: string | null
       mobile_phone: string | null
+      membership_number: number | null
       official_mu_membership_id: string | null
       official_mu_membership_status: string | null
       application_id: string | null
@@ -409,11 +412,14 @@ ticketsRouter.get(
               ftr.balance_payment_notified_at, ftr.balance_payment_deadline,
               ftr.ticket_confirmed, ftr.ticket_confirmed_at, ftr.travel_companion_membership_numbers,
               m.first_name, m.last_name, p.full_name as profile_full_name,
-              m.mobile_phone, m.official_mu_membership_id, m.official_mu_membership_status, m.application_id
+              p.email as profile_email, au.email as auth_email,
+              m.mobile_phone, m.membership_number,
+              m.official_mu_membership_id, m.official_mu_membership_status, m.application_id
        from public.fixture_ticket_requests ftr
        left join public.profiles p on p.id = ftr.user_id
+       left join public.auth_users au on au.user_id = ftr.user_id
        left join lateral (
-         select ma.first_name, ma.last_name, ma.mobile_phone,
+         select ma.first_name, ma.last_name, ma.mobile_phone, ma.membership_number,
                 ma.official_mu_membership_id, ma.official_mu_membership_status, ma.application_id
          from public.membership_applications ma
          where ma.user_id = ftr.user_id
@@ -451,7 +457,9 @@ ticketsRouter.get(
           travelCompanions: travelCompanionsByRequestId.get(r.id) ?? [],
           user: {
             fullName,
+            membershipNumber: r.membership_number,
             mobilePhone: r.mobile_phone,
+            email: (r.profile_email || r.auth_email || '').trim() || null,
             officialMuMembershipId: r.official_mu_membership_id,
             officialMuMembershipStatus:
               r.official_mu_membership_status === 'activated' || r.official_mu_membership_status === 'pending'

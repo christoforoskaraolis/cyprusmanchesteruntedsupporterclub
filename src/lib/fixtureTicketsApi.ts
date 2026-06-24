@@ -53,7 +53,9 @@ export type AdminFixtureTicketRequest = {
   travelCompanions: FixtureTicketTravelCompanion[]
   user: {
     fullName: string | null
+    membershipNumber: number | null
     mobilePhone: string | null
+    email: string | null
     officialMuMembershipId: string | null
     officialMuMembershipStatus: OfficialMuMembershipStatus | null
     applicationId: string | null

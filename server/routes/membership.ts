@@ -7,7 +7,7 @@ import { sendMembershipActivationEmail } from '../lib/membershipActivationEmail.
 import { sendMembershipPaymentReminderEmail } from '../lib/membershipPaymentReminderEmail.ts'
 import { sendMembershipPresentReceivedEmail } from '../lib/membershipPresentReceivedEmail.ts'
 import { sendMembershipPurchasedMembershipEmail } from '../lib/membershipPurchasedMembershipEmail.ts'
-import { parseOfficialMuMembershipFields } from '../lib/officialMuMembership.ts'
+import { parseOfficialMuMembershipFields, resolveUserOfficialMuMembershipUpdate } from '../lib/officialMuMembership.ts'
 import { requireAdmin, requireUser } from '../middleware/auth.ts'
 
 export const membershipRouter = Router()
@@ -140,8 +140,11 @@ membershipRouter.put(
       status: string
       sponsor_application_id: string
       sponsor_status: string
+      official_mu_membership_id: string | null
+      official_mu_membership_status: string | null
     }>(
-      `select ma.id, ma.status, ma.sponsor_application_id, sponsor.status as sponsor_status
+      `select ma.id, ma.status, ma.sponsor_application_id, sponsor.status as sponsor_status,
+              ma.official_mu_membership_id, ma.official_mu_membership_status
        from public.membership_applications ma
        inner join public.membership_applications sponsor
          on sponsor.application_id = ma.sponsor_application_id
@@ -158,9 +161,9 @@ membershipRouter.put(
       throw badRequest('Your Cyprus membership must be active before you can update family members.')
     }
 
-    const { officialMuId, officialMuStatus } = parseOfficialMuMembershipFields(
+    const { officialMuId, officialMuStatus } = resolveUserOfficialMuMembershipUpdate(
+      family.official_mu_membership_status,
       p.officialMuMembershipId,
-      p.officialMuMembershipStatus,
     )
 
     if (officialMuId) {
@@ -337,13 +340,14 @@ membershipRouter.put(
       officialMuMembershipId?: string
       officialMuMembershipStatus?: string
     }
-    const { officialMuId, officialMuStatus } = parseOfficialMuMembershipFields(
-      payload.officialMuMembershipId,
-      payload.officialMuMembershipStatus,
-    )
 
-    const { rows: appRows } = await query<{ id: string; application_id: string; status: string }>(
-      `select id, application_id, status
+    const { rows: appRows } = await query<{
+      id: string
+      application_id: string
+      status: string
+      official_mu_membership_status: string | null
+    }>(
+      `select id, application_id, status, official_mu_membership_status
        from public.membership_applications
        where user_id = $1 and sponsor_application_id is null
        order by case status when 'active' then 0 when 'pending' then 1 else 2 end, submitted_at desc
@@ -357,6 +361,11 @@ membershipRouter.put(
         'Official Manchester United membership details can only be updated after your Cyprus membership is active.',
       )
     }
+
+    const { officialMuId, officialMuStatus } = resolveUserOfficialMuMembershipUpdate(
+      app.official_mu_membership_status,
+      payload.officialMuMembershipId,
+    )
 
     if (officialMuId) {
       const { rows: duplicateRows } = await query<{ application_id: string }>(

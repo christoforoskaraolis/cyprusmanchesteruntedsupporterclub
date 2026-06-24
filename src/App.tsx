@@ -150,6 +150,8 @@ type OfficialMuMembershipFieldsProps = {
   onStatusChange: (value: OfficialMuMembershipFormStatus) => void
   idInputName?: string
   statusHint?: string
+  /** When true, status is shown read-only (profile/family edits). Registration stays editable. */
+  statusReadOnly?: boolean
 }
 
 function OfficialMuMembershipFields({
@@ -159,59 +161,97 @@ function OfficialMuMembershipFields({
   onStatusChange,
   idInputName = 'official-mu-id',
   statusHint = 'If you have or are waiting for official MU membership, tell us whether it is active or still pending.',
+  statusReadOnly = false,
 }: OfficialMuMembershipFieldsProps) {
+  const hasLockedStatus = status === 'activated' || status === 'pending'
+
   return (
     <>
       <p className="membership-form-section-title">Official Manchester United membership</p>
-      <label className="auth-field membership-field">
-        <span className="auth-label">Membership number</span>
-        <input
-          className="auth-input"
-          type="text"
-          name={idInputName}
-          autoComplete="off"
-          placeholder="Required when status is Activated or Pending"
-          value={membershipId}
-          onChange={(ev) => onMembershipIdChange(ev.target.value)}
-        />
-      </label>
-      <fieldset className="membership-mu-status-fieldset">
-        <legend className="membership-mu-status-legend">Membership status</legend>
-        <p className="membership-mu-status-hint">{statusHint}</p>
-        <label className="membership-mu-status-option">
+      {hasLockedStatus && (
+        <label className="auth-field membership-field">
+          <span className="auth-label">Membership number</span>
           <input
-            type="radio"
-            name={`${idInputName}-status`}
-            value="activated"
-            checked={status === 'activated'}
-            onChange={() => onStatusChange('activated')}
+            className="auth-input"
+            type="text"
+            name={idInputName}
+            autoComplete="off"
+            placeholder="Required when status is Activated or Pending"
+            value={membershipId}
+            onChange={(ev) => onMembershipIdChange(ev.target.value)}
           />
-          <span>Activated — my official membership is active</span>
         </label>
-        <label className="membership-mu-status-option">
-          <input
-            type="radio"
-            name={`${idInputName}-status`}
-            value="pending"
-            checked={status === 'pending'}
-            onChange={() => onStatusChange('pending')}
-          />
-          <span>Pending — not yet active</span>
-        </label>
-        <label className="membership-mu-status-option">
-          <input
-            type="radio"
-            name={`${idInputName}-status`}
-            value=""
-            checked={status === ''}
-            onChange={() => {
-              onStatusChange('')
-              onMembershipIdChange('')
-            }}
-          />
-          <span>Not applicable — I do not have official MU membership yet</span>
-        </label>
-      </fieldset>
+      )}
+      {statusReadOnly ? (
+        <div className="membership-mu-status-readonly">
+          <span className="auth-label">Membership status</span>
+          <p className="mycmusc-summary-value">
+            {hasLockedStatus
+              ? formatOfficialMuMembershipStatus(status)
+              : 'Not applicable — I do not have official MU membership yet'}
+          </p>
+          <p className="membership-mu-status-hint">Status can only be changed by the club admin.</p>
+          {!hasLockedStatus && (
+            <p className="membership-mu-status-hint">
+              Contact the club admin if you need to add official Manchester United membership details.
+            </p>
+          )}
+        </div>
+      ) : (
+        <>
+          {!hasLockedStatus && (
+            <label className="auth-field membership-field">
+              <span className="auth-label">Membership number</span>
+              <input
+                className="auth-input"
+                type="text"
+                name={idInputName}
+                autoComplete="off"
+                placeholder="Required when status is Activated or Pending"
+                value={membershipId}
+                onChange={(ev) => onMembershipIdChange(ev.target.value)}
+              />
+            </label>
+          )}
+          <fieldset className="membership-mu-status-fieldset">
+            <legend className="membership-mu-status-legend">Membership status</legend>
+            <p className="membership-mu-status-hint">{statusHint}</p>
+            <label className="membership-mu-status-option">
+              <input
+                type="radio"
+                name={`${idInputName}-status`}
+                value="activated"
+                checked={status === 'activated'}
+                onChange={() => onStatusChange('activated')}
+              />
+              <span>Activated — my official membership is active</span>
+            </label>
+            <label className="membership-mu-status-option">
+              <input
+                type="radio"
+                name={`${idInputName}-status`}
+                value="pending"
+                checked={status === 'pending'}
+                onChange={() => onStatusChange('pending')}
+              />
+              <span>Pending — not yet active</span>
+            </label>
+            <label className="membership-mu-status-option">
+              <input
+                type="radio"
+                name={`${idInputName}-status`}
+                value=""
+                checked={status === ''}
+                onChange={() => {
+                  onStatusChange('')
+                  onMembershipIdChange('')
+                }}
+              />
+              <span>Not applicable — I do not have official MU membership yet</span>
+            </label>
+          </fieldset>
+        </>
+      )}
     </>
   )
 }
@@ -3650,7 +3690,7 @@ function AdminConsole({
                       {' · '}
                       Ticket slots: {1 + r.travelCompanions.length}
                     </p>
-                    {r.travelCompanions.length > 0 && (
+                    {r.travelCompanions.length > 0 ? (
                       <div className="admin-ticket-travel-with">
                         <p className="auth-label">Travel with</p>
                         <table className="admin-ticket-travel-with-table">
@@ -3678,6 +3718,39 @@ function AdminConsole({
                                 </td>
                               </tr>
                             ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    ) : (
+                      <div className="admin-ticket-travel-with">
+                        <p className="auth-label">Member</p>
+                        <table className="admin-ticket-travel-with-table">
+                          <thead>
+                            <tr>
+                              <th scope="col">MYCS</th>
+                              <th scope="col">Name</th>
+                              <th scope="col">Phone</th>
+                              <th scope="col">Email</th>
+                              <th scope="col">Official MU</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            <tr>
+                              <td>
+                                {r.user.membershipNumber != null
+                                  ? formatMembershipNumber(r.user.membershipNumber)
+                                  : '—'}
+                              </td>
+                              <td>{r.user.fullName ?? '—'}</td>
+                              <td>{r.user.mobilePhone ?? '—'}</td>
+                              <td>{r.user.email ?? '—'}</td>
+                              <td>
+                                {formatOfficialMuMembershipId(r.user.officialMuMembershipId)}
+                                {r.user.officialMuMembershipStatus
+                                  ? ` (${formatOfficialMuMembershipStatus(r.user.officialMuMembershipStatus)})`
+                                  : ''}
+                              </td>
+                            </tr>
                           </tbody>
                         </table>
                       </div>
@@ -6696,7 +6769,11 @@ function App() {
     ) {
       return setDetailsError('Please complete all required contact/address fields.')
     }
-    const parsedMu = parseOfficialMuMembershipFields(detailsOfficialMuId, detailsOfficialMuStatus)
+    const lockedStatus = membershipRecord.officialMuMembershipStatus ?? ''
+    const parsedMu = parseOfficialMuMembershipFields(
+      detailsOfficialMuId,
+      lockedStatus as OfficialMuMembershipFormStatus,
+    )
     if ('error' in parsedMu) {
       return setDetailsError(parsedMu.error)
     }
@@ -6784,7 +6861,12 @@ function App() {
     }
     const dob = parseDateOfBirthInput(familyEditDateOfBirth)
     if (!dob) return setFamilyEditError('Please enter a valid date of birth.')
-    const parsedMu = parseOfficialMuMembershipFields(familyEditOfficialMuId, familyEditOfficialMuStatus)
+    const fm = familyMembers.find((member) => member.applicationId === applicationId)
+    const lockedStatus = fm?.officialMuMembershipStatus ?? ''
+    const parsedMu = parseOfficialMuMembershipFields(
+      familyEditOfficialMuId,
+      lockedStatus as OfficialMuMembershipFormStatus,
+    )
     if ('error' in parsedMu) return setFamilyEditError(parsedMu.error)
 
     setFamilyEditSaving(true)
@@ -8364,6 +8446,7 @@ function App() {
                         status={detailsOfficialMuStatus}
                         onStatusChange={setDetailsOfficialMuStatus}
                         idInputName="profile-official-mu-id"
+                        statusReadOnly
                         statusHint="Add or update your official MU membership. Choose Activated when your Manchester United membership is active, or Pending while you are waiting."
                       />
                       <div className="renewal-modal-actions">
@@ -8653,6 +8736,7 @@ function App() {
                                       status={familyEditOfficialMuStatus}
                                       onStatusChange={setFamilyEditOfficialMuStatus}
                                       idInputName={`family-official-mu-id-${fm.applicationId}`}
+                                      statusReadOnly
                                       statusHint="Optional official MU membership for this family member."
                                     />
                                     <div className="renewal-modal-actions">
