@@ -16,6 +16,7 @@
     "migrate": "tsx server/scripts/migrate.ts",
     "cleanup:member-01": "tsx server/scripts/cleanup-keep-member-01.ts",
     "cleanup:ticket-requests": "tsx server/scripts/cleanup-fixture-ticket-requests.ts",
+    "cleanup:unverified-auth": "tsx server/scripts/cleanup-unverified-auth-users.ts",
     "generate:vapid-keys": "tsx server/scripts/generate-vapid-keys.ts",
     "check:push": "tsx server/scripts/check-push-status.ts",
     "export:uploaded-images": "tsx server/scripts/export-uploaded-images.ts",
