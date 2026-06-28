@@ -1028,6 +1028,46 @@
   margin-bottom: 0.75rem;
 }
 
+.admin-email-member-picker {
+  margin: 0 0 0.85rem;
+}
+
+.admin-email-member-picker-list {
+  list-style: none;
+  margin: 0.65rem 0 0;
+  padding: 0;
+  max-height: 18rem;
+  overflow: auto;
+  border: 1px solid var(--admin-border, #e2e8f0);
+  border-radius: 10px;
+  background: var(--admin-surface, #fff);
+}
+
+.admin-email-member-picker-list li + li {
+  border-top: 1px solid var(--admin-border, #e2e8f0);
+}
+
+.admin-email-member-picker-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.55rem;
+  padding: 0.55rem 0.7rem;
+  cursor: pointer;
+}
+
+.admin-email-member-picker-label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+}
+
+.admin-email-member-picker-meta {
+  font-size: 0.8125rem;
+  color: var(--text-muted, #64748b);
+  line-height: 1.35;
+}
+
 .admin-news-image-hint {
   margin: 0 0 0.5rem;
   font-size: 0.78rem;

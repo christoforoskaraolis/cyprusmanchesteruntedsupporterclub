@@ -2559,7 +2559,8 @@ function AdminConsole({
   const [balanceDeadlineDraftByRequestId, setBalanceDeadlineDraftByRequestId] = useState<Record<string, string>>({})
   const [ticketActionNotice, setTicketActionNotice] = useState<string | null>(null)
   const [ticketActionError, setTicketActionError] = useState<string | null>(null)
-  const [emailAudience, setEmailAudience] = useState<MemberEmailAudience>('all')
+  const [emailAudience, setEmailAudience] = useState<MemberEmailAudience | 'selected'>('all')
+  const [emailMemberSearch, setEmailMemberSearch] = useState('')
   const [emailSubject, setEmailSubject] = useState('')
   const [emailBody, setEmailBody] = useState('')
   const [emailBusy, setEmailBusy] = useState(false)
@@ -2579,6 +2580,18 @@ function AdminConsole({
 
   useEffect(() => {
     if (adminTab !== 'email') return
+    if (emailAudience === 'selected') {
+      const members = memberRegistry.filter((member) => selectedMemberApplicationIds[member.applicationId])
+      const emails = new Set<string>()
+      for (const member of members) {
+        const email = member.email?.trim().toLowerCase()
+        if (email) emails.add(email)
+      }
+      setEmailError(null)
+      setEmailRecipientCount(emails.size)
+      setEmailRecipientsLoading(false)
+      return
+    }
     let cancelled = false
     setEmailRecipientsLoading(true)
     void (async () => {
@@ -2596,9 +2609,23 @@ function AdminConsole({
     return () => {
       cancelled = true
     }
-  }, [adminTab, emailAudience])
+  }, [adminTab, emailAudience, memberRegistry, selectedMemberApplicationIds])
 
   const selectedMemberCount = Object.values(selectedMemberApplicationIds).filter(Boolean).length
+
+  const emailPickerMembers = memberRegistry
+    .filter((member) => member.status === 'pending' || member.status === 'active')
+    .filter((member) => {
+      const q = emailMemberSearch.trim().toLowerCase()
+      if (!q) return true
+      return (
+        member.applicationId.toLowerCase().includes(q) ||
+        `${member.firstName} ${member.lastName}`.toLowerCase().includes(q) ||
+        (member.email ?? '').toLowerCase().includes(q) ||
+        member.mobilePhone.toLowerCase().includes(q)
+      )
+    })
+    .sort((a, b) => new Date(b.submittedAt).getTime() - new Date(a.submittedAt).getTime())
 
   function openMemberEmailCompose(members: MemberRegistryEntry[]) {
     if (members.length === 0) return
@@ -5318,8 +5345,8 @@ function AdminConsole({
           <div className="admin-block-head">
             <h2 className="admin-block-title">Email members</h2>
             <p className="admin-block-lead">
-              Send an email to Cyprus membership applicants and active members. Each unique email address receives one
-              message. The club signature is added automatically at the end.
+              Send an email to Cyprus membership applicants and active members. Choose a group or pick individual members
+              below. Each unique email address receives one message. The club signature is added automatically at the end.
             </p>
           </div>
           {emailError && <p className="auth-message is-error">{emailError}</p>}
@@ -5359,13 +5386,96 @@ function AdminConsole({
               />
               <span>Active members only</span>
             </label>
+            <label className="membership-mu-status-option">
+              <input
+                type="radio"
+                name="admin-email-audience"
+                value="selected"
+                checked={emailAudience === 'selected'}
+                onChange={() => setEmailAudience('selected')}
+                disabled={emailBusy}
+              />
+              <span>Selected members only</span>
+            </label>
           </fieldset>
+          {emailAudience === 'selected' && (
+            <div className="admin-email-member-picker">
+              <div className="admin-search-row">
+                <input
+                  className="auth-input admin-search-input"
+                  type="search"
+                  placeholder="Search members by name, email, application ID, or phone"
+                  value={emailMemberSearch}
+                  onChange={(e) => setEmailMemberSearch(e.target.value)}
+                  disabled={emailBusy}
+                />
+                <button
+                  type="button"
+                  className="admin-merch-create-btn"
+                  disabled={emailBusy || emailPickerMembers.length === 0}
+                  onClick={() => {
+                    const next: Record<string, boolean> = { ...selectedMemberApplicationIds }
+                    for (const member of emailPickerMembers) next[member.applicationId] = true
+                    setSelectedMemberApplicationIds(next)
+                  }}
+                >
+                  Select all in view
+                </button>
+                <button
+                  type="button"
+                  className="admin-merch-create-btn"
+                  disabled={emailBusy || selectedMemberCount === 0}
+                  onClick={() => setSelectedMemberApplicationIds({})}
+                >
+                  Clear selection
+                </button>
+              </div>
+              {emailPickerMembers.length === 0 ? (
+                <p className="admin-empty">No members match this search.</p>
+              ) : (
+                <ul className="admin-email-member-picker-list">
+                  {emailPickerMembers.map((member) => (
+                    <li key={member.applicationId}>
+                      <label className="admin-email-member-picker-item">
+                        <input
+                          type="checkbox"
+                          checked={Boolean(selectedMemberApplicationIds[member.applicationId])}
+                          disabled={emailBusy}
+                          onChange={(e) => {
+                            const checked = e.target.checked
+                            setSelectedMemberApplicationIds((prev) => ({
+                              ...prev,
+                              [member.applicationId]: checked,
+                            }))
+                          }}
+                        />
+                        <span className="admin-email-member-picker-label">
+                          <strong>
+                            {member.firstName} {member.lastName}
+                          </strong>
+                          <span className="admin-email-member-picker-meta">
+                            {member.status === 'pending' ? 'Pending' : 'Active'}
+                            {member.email ? ` · ${member.email}` : ' · No email on file'}
+                            {member.status === 'active' && member.membershipNumber != null
+                              ? ` · #${formatMembershipNumber(member.membershipNumber)}`
+                              : ''}
+                          </span>
+                        </span>
+                      </label>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
           <p className="admin-block-lead">
             {emailRecipientsLoading
               ? 'Counting recipients…'
               : emailRecipientCount == null
                 ? 'Could not load recipient count.'
-                : `${emailRecipientCount} unique email address${emailRecipientCount === 1 ? '' : 'es'} will receive this message.`}
+                : emailAudience === 'selected' && selectedMemberCount === 0
+                  ? 'Select one or more members above.'
+                  : `${emailRecipientCount} unique email address${emailRecipientCount === 1 ? '' : 'es'} will receive this message.`}
           </p>
           <label className="auth-field membership-field">
             <span className="auth-label">Subject</span>
@@ -5392,7 +5502,12 @@ function AdminConsole({
           <button
             type="button"
             className="mycmusc-reg-btn mycmusc-reg-btn--primary merch-admin-submit"
-            disabled={emailBusy || emailRecipientsLoading || !emailRecipientCount}
+            disabled={
+              emailBusy ||
+              emailRecipientsLoading ||
+              !emailRecipientCount ||
+              (emailAudience === 'selected' && selectedMemberCount === 0)
+            }
             onClick={() => {
               const subject = emailSubject.trim()
               const body = emailBody.trim()
@@ -5405,7 +5520,11 @@ function AdminConsole({
                 return
               }
               if (!emailRecipientCount) {
-                setEmailError('No recipients with an email address match this audience.')
+                setEmailError(
+                  emailAudience === 'selected'
+                    ? 'Select at least one member with an email address on file.'
+                    : 'No recipients with an email address match this audience.',
+                )
                 return
               }
               const audienceLabel =
@@ -5413,7 +5532,9 @@ function AdminConsole({
                   ? 'all pending and active members'
                   : emailAudience === 'pending'
                     ? 'pending members'
-                    : 'active members'
+                    : emailAudience === 'active'
+                      ? 'active members'
+                      : `${selectedMemberCount} selected member${selectedMemberCount === 1 ? '' : 's'}`
               const confirmed = window.confirm(
                 `Send this email to ${emailRecipientCount} recipient${emailRecipientCount === 1 ? '' : 's'} (${audienceLabel})?`,
               )
@@ -5422,7 +5543,16 @@ function AdminConsole({
               setEmailError(null)
               setEmailNotice(null)
               void (async () => {
-                const result = await sendMemberBulkEmail({ audience: emailAudience, subject, body })
+                const result =
+                  emailAudience === 'selected'
+                    ? await sendMemberSelectedEmail({
+                        applicationIds: memberRegistry
+                          .filter((member) => selectedMemberApplicationIds[member.applicationId])
+                          .map((member) => member.applicationId),
+                        subject,
+                        body,
+                      })
+                    : await sendMemberBulkEmail({ audience: emailAudience, subject, body })
                 setEmailBusy(false)
                 if (result.error) {
                   setEmailError(result.error.message)
@@ -5435,9 +5565,16 @@ function AdminConsole({
                   setEmailError(`Failed addresses: ${result.failedEmails.join(', ')}`)
                   return
                 }
-                setEmailNotice(`Email sent to ${result.sentCount} recipient${result.sentCount === 1 ? '' : 's'}.`)
+                let notice = `Email sent to ${result.sentCount} recipient${result.sentCount === 1 ? '' : 's'}.`
+                if (emailAudience === 'selected' && (result.skippedNoEmail ?? 0) > 0) {
+                  notice += ` ${result.skippedNoEmail} selected member${result.skippedNoEmail === 1 ? '' : 's'} had no email on file.`
+                }
+                setEmailNotice(notice)
                 setEmailSubject('')
                 setEmailBody('')
+                if (emailAudience === 'selected') {
+                  setSelectedMemberApplicationIds({})
+                }
               })()
             }}
           >
