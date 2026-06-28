@@ -88,6 +88,12 @@ import {
 } from './lib/merchandiseApi.ts'
 import { resizeImageFileToJpegDataUrl } from './lib/resizeImage.ts'
 import { createAdminUser, deleteAdminUser, fetchAdminUsers, type AdminUserRow } from './lib/adminUsersApi.ts'
+import {
+  fetchMemberEmailRecipients,
+  sendMemberBulkEmail,
+  sendMemberSelectedEmail,
+  type MemberEmailAudience,
+} from './lib/adminEmailsApi.ts'
 import { useWebAppManifest } from './hooks/useWebAppManifest.ts'
 import { useAdminRoute } from './hooks/useAdminRoute.ts'
 import { ADMIN_PORTAL_URL } from './lib/adminAppBootstrap.ts'
@@ -814,7 +820,7 @@ function NewsDetailModal({ post, open, onClose }: NewsDetailModalProps) {
 }
 
 type AdminFilter = 'all' | 'pending' | 'active'
-type AdminTab = 'members' | 'tickets' | 'ticketRequests' | 'news' | 'merch' | 'official'
+type AdminTab = 'members' | 'tickets' | 'ticketRequests' | 'news' | 'merch' | 'official' | 'email'
 type AdminTicketFilter = 'pending' | 'approved' | 'completed' | 'cancelled'
 
 function isTicketRequestCancelled(request: {
@@ -2132,6 +2138,134 @@ function PurchasedMembershipConfirmModal({
   )
 }
 
+type MemberEmailComposeModalProps = {
+  open: boolean
+  members: MemberRegistryEntry[]
+  subject: string
+  body: string
+  submitting: boolean
+  error: string | null
+  onSubjectChange: (value: string) => void
+  onBodyChange: (value: string) => void
+  onClose: () => void
+  onConfirm: () => void
+}
+
+function MemberEmailComposeModal({
+  open,
+  members,
+  subject,
+  body,
+  submitting,
+  error,
+  onSubjectChange,
+  onBodyChange,
+  onClose,
+  onConfirm,
+}: MemberEmailComposeModalProps) {
+  if (!open) return null
+
+  const withEmail = members.filter((member) => member.email?.trim())
+  const withoutEmail = members.filter((member) => !member.email?.trim())
+  const uniqueEmails = [...new Set(withEmail.map((member) => member.email!.trim().toLowerCase()))]
+
+  return (
+    <div
+      className="renewal-modal-root"
+      role="presentation"
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget && !submitting) onClose()
+      }}
+    >
+      <div
+        className="renewal-modal-dialog renewal-modal-dialog--wide"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="member-email-compose-modal-title"
+      >
+        <div className="renewal-modal-head">
+          <h2 id="member-email-compose-modal-title" className="renewal-modal-title">
+            Email member{members.length === 1 ? '' : 's'}
+          </h2>
+          <button
+            type="button"
+            className="renewal-modal-close"
+            onClick={onClose}
+            disabled={submitting}
+            aria-label="Close"
+          >
+            ×
+          </button>
+        </div>
+        <p className="renewal-modal-lead">
+          {uniqueEmails.length} unique email address{uniqueEmails.length === 1 ? '' : 'es'} will receive this message.
+          The club signature is added automatically.
+        </p>
+        <ul className="admin-member-email-target-list">
+          {withEmail.map((member) => (
+            <li key={member.applicationId}>
+              {[member.firstName, member.lastName].filter(Boolean).join(' ').trim() || member.applicationId}
+              {' · '}
+              {member.email}
+            </li>
+          ))}
+          {withoutEmail.map((member) => (
+            <li key={member.applicationId} className="is-muted">
+              {[member.firstName, member.lastName].filter(Boolean).join(' ').trim() || member.applicationId}
+              {' · '}
+              No email on file (skipped)
+            </li>
+          ))}
+        </ul>
+        <label className="auth-field membership-field">
+          <span className="auth-label">Subject</span>
+          <input
+            className="auth-input"
+            type="text"
+            value={subject}
+            onChange={(e) => onSubjectChange(e.target.value)}
+            disabled={submitting}
+          />
+        </label>
+        <label className="auth-field membership-field">
+          <span className="auth-label">Message</span>
+          <textarea
+            className="auth-input admin-email-body-input"
+            rows={10}
+            value={body}
+            onChange={(e) => onBodyChange(e.target.value)}
+            disabled={submitting}
+          />
+        </label>
+        {withoutEmail.length > 0 && uniqueEmails.length === 0 && (
+          <p className="auth-message is-error renewal-modal-error">
+            None of the selected members have an email address on file.
+          </p>
+        )}
+        {error && <p className="auth-message is-error renewal-modal-error">{error}</p>}
+        <div className="renewal-modal-actions">
+          <button
+            type="button"
+            className="mycmusc-reg-btn mycmusc-reg-btn--secondary"
+            onClick={onClose}
+            disabled={submitting}
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            className="mycmusc-reg-btn mycmusc-reg-btn--primary"
+            onClick={() => void onConfirm()}
+            disabled={submitting || uniqueEmails.length === 0}
+          >
+            {submitting ? 'Sending…' : 'Send email'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 type TicketDepositConfirmModalProps = {
   open: boolean
   requestLabel: string | null
@@ -2425,9 +2559,54 @@ function AdminConsole({
   const [balanceDeadlineDraftByRequestId, setBalanceDeadlineDraftByRequestId] = useState<Record<string, string>>({})
   const [ticketActionNotice, setTicketActionNotice] = useState<string | null>(null)
   const [ticketActionError, setTicketActionError] = useState<string | null>(null)
+  const [emailAudience, setEmailAudience] = useState<MemberEmailAudience>('all')
+  const [emailSubject, setEmailSubject] = useState('')
+  const [emailBody, setEmailBody] = useState('')
+  const [emailBusy, setEmailBusy] = useState(false)
+  const [emailError, setEmailError] = useState<string | null>(null)
+  const [emailNotice, setEmailNotice] = useState<string | null>(null)
+  const [emailRecipientCount, setEmailRecipientCount] = useState<number | null>(null)
+  const [emailRecipientsLoading, setEmailRecipientsLoading] = useState(false)
+  const [selectedMemberApplicationIds, setSelectedMemberApplicationIds] = useState<Record<string, boolean>>({})
+  const [memberEmailTargets, setMemberEmailTargets] = useState<MemberRegistryEntry[] | null>(null)
+  const [memberEmailSubject, setMemberEmailSubject] = useState('')
+  const [memberEmailBody, setMemberEmailBody] = useState('')
+  const [memberEmailSubmitting, setMemberEmailSubmitting] = useState(false)
+  const [memberEmailError, setMemberEmailError] = useState<string | null>(null)
   const pendingMembersCount = memberRegistry.filter((member) => member.status === 'pending').length
   const activeMembersCount = memberRegistry.filter((member) => member.status === 'active').length
   const pendingOrdersCount = merchandiseOrders.filter((order) => order.status === 'pending').length
+
+  useEffect(() => {
+    if (adminTab !== 'email') return
+    let cancelled = false
+    setEmailRecipientsLoading(true)
+    void (async () => {
+      const { recipientCount, error } = await fetchMemberEmailRecipients(emailAudience)
+      if (cancelled) return
+      if (error) {
+        setEmailError(error.message)
+        setEmailRecipientCount(null)
+      } else {
+        setEmailError(null)
+        setEmailRecipientCount(recipientCount)
+      }
+      setEmailRecipientsLoading(false)
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [adminTab, emailAudience])
+
+  const selectedMemberCount = Object.values(selectedMemberApplicationIds).filter(Boolean).length
+
+  function openMemberEmailCompose(members: MemberRegistryEntry[]) {
+    if (members.length === 0) return
+    setMemberEmailError(null)
+    setMemberEmailSubject('')
+    setMemberEmailBody('')
+    setMemberEmailTargets(members)
+  }
 
   const filtered = [...memberRegistry]
     .filter((m) => filter === 'all' || m.status === filter)
@@ -2871,6 +3050,15 @@ function AdminConsole({
             >
               Official memberships
             </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={adminTab === 'email'}
+              className={`admin-main-tab ${adminTab === 'email' ? 'is-active' : ''}`}
+              onClick={() => setAdminTab('email')}
+            >
+              Email
+            </button>
           </div>
         </aside>
 
@@ -3009,6 +3197,37 @@ function AdminConsole({
         <button type="button" className="admin-merch-create-btn" onClick={exportMembersReport}>
           Export Excel
         </button>
+        <button
+          type="button"
+          className="admin-merch-create-btn"
+          disabled={filtered.length === 0}
+          onClick={() => {
+            const next: Record<string, boolean> = {}
+            for (const member of filtered) next[member.applicationId] = true
+            setSelectedMemberApplicationIds(next)
+          }}
+        >
+          Select all in view
+        </button>
+        <button
+          type="button"
+          className="admin-merch-create-btn"
+          disabled={selectedMemberCount === 0}
+          onClick={() => setSelectedMemberApplicationIds({})}
+        >
+          Clear selection
+        </button>
+        <button
+          type="button"
+          className="admin-merch-create-btn"
+          disabled={selectedMemberCount === 0}
+          onClick={() => {
+            const members = memberRegistry.filter((member) => selectedMemberApplicationIds[member.applicationId])
+            openMemberEmailCompose(members)
+          }}
+        >
+          Email selected ({selectedMemberCount})
+        </button>
       </div>
       {memberActionNotice && <p className="admin-member-action-notice">{memberActionNotice}</p>}
       {memberActionError && <p className="admin-empty" style={{ color: '#b91c1c' }}>{memberActionError}</p>}
@@ -3022,6 +3241,20 @@ function AdminConsole({
           {filtered.map((m) => (
             <li key={m.applicationId} className="admin-member-card">
               <div className="admin-member-card-top">
+                <label className="admin-member-select">
+                  <input
+                    type="checkbox"
+                    checked={Boolean(selectedMemberApplicationIds[m.applicationId])}
+                    aria-label={`Select ${m.firstName} ${m.lastName}`}
+                    onChange={(e) => {
+                      const checked = e.target.checked
+                      setSelectedMemberApplicationIds((prev) => ({
+                        ...prev,
+                        [m.applicationId]: checked,
+                      }))
+                    }}
+                  />
+                </label>
                 <div>
                   <code className="admin-member-ref">{m.applicationId}</code>
                   <p className="admin-member-name">
@@ -3039,6 +3272,7 @@ function AdminConsole({
                   )}
                   <p className="admin-member-meta">
                     {m.city}, {m.country} · {m.mobilePhone}
+                    {m.email ? ` · ${m.email}` : ' · No email on file'}
                     {m.status === 'active' && m.membershipNumber != null && (
                       <> · Member #{formatMembershipNumber(m.membershipNumber)}</>
                     )}
@@ -3220,6 +3454,14 @@ function AdminConsole({
                   onClick={() => setExpandedId((id) => (id === m.applicationId ? null : m.applicationId))}
                 >
                   {expandedId === m.applicationId ? 'Hide details' : 'Full details'}
+                </button>
+                <button
+                  type="button"
+                  className="admin-payment-reminder-btn"
+                  disabled={busyId !== null || memberEmailSubmitting}
+                  onClick={() => openMemberEmailCompose([m])}
+                >
+                  Email
                 </button>
                 <button
                   type="button"
@@ -5071,8 +5313,200 @@ function AdminConsole({
           </section>
         </section>
       )}
+      {adminTab === 'email' && (
+        <section className="admin-panel-block" aria-label="Member email">
+          <div className="admin-block-head">
+            <h2 className="admin-block-title">Email members</h2>
+            <p className="admin-block-lead">
+              Send an email to Cyprus membership applicants and active members. Each unique email address receives one
+              message. The club signature is added automatically at the end.
+            </p>
+          </div>
+          {emailError && <p className="auth-message is-error">{emailError}</p>}
+          {emailNotice && <p className="admin-member-action-notice">{emailNotice}</p>}
+          <fieldset className="membership-mu-status-fieldset admin-email-audience-fieldset">
+            <legend className="membership-mu-status-legend">Send to</legend>
+            <label className="membership-mu-status-option">
+              <input
+                type="radio"
+                name="admin-email-audience"
+                value="all"
+                checked={emailAudience === 'all'}
+                onChange={() => setEmailAudience('all')}
+                disabled={emailBusy}
+              />
+              <span>All members (pending + active)</span>
+            </label>
+            <label className="membership-mu-status-option">
+              <input
+                type="radio"
+                name="admin-email-audience"
+                value="pending"
+                checked={emailAudience === 'pending'}
+                onChange={() => setEmailAudience('pending')}
+                disabled={emailBusy}
+              />
+              <span>Pending members only</span>
+            </label>
+            <label className="membership-mu-status-option">
+              <input
+                type="radio"
+                name="admin-email-audience"
+                value="active"
+                checked={emailAudience === 'active'}
+                onChange={() => setEmailAudience('active')}
+                disabled={emailBusy}
+              />
+              <span>Active members only</span>
+            </label>
+          </fieldset>
+          <p className="admin-block-lead">
+            {emailRecipientsLoading
+              ? 'Counting recipients…'
+              : emailRecipientCount == null
+                ? 'Could not load recipient count.'
+                : `${emailRecipientCount} unique email address${emailRecipientCount === 1 ? '' : 'es'} will receive this message.`}
+          </p>
+          <label className="auth-field membership-field">
+            <span className="auth-label">Subject</span>
+            <input
+              className="auth-input"
+              type="text"
+              value={emailSubject}
+              onChange={(e) => setEmailSubject(e.target.value)}
+              disabled={emailBusy}
+              placeholder="Email subject"
+            />
+          </label>
+          <label className="auth-field membership-field">
+            <span className="auth-label">Message</span>
+            <textarea
+              className="auth-input admin-email-body-input"
+              rows={12}
+              value={emailBody}
+              onChange={(e) => setEmailBody(e.target.value)}
+              disabled={emailBusy}
+              placeholder="Write the main email message here…"
+            />
+          </label>
+          <button
+            type="button"
+            className="mycmusc-reg-btn mycmusc-reg-btn--primary merch-admin-submit"
+            disabled={emailBusy || emailRecipientsLoading || !emailRecipientCount}
+            onClick={() => {
+              const subject = emailSubject.trim()
+              const body = emailBody.trim()
+              if (!subject) {
+                setEmailError('Subject is required.')
+                return
+              }
+              if (!body) {
+                setEmailError('Email message is required.')
+                return
+              }
+              if (!emailRecipientCount) {
+                setEmailError('No recipients with an email address match this audience.')
+                return
+              }
+              const audienceLabel =
+                emailAudience === 'all'
+                  ? 'all pending and active members'
+                  : emailAudience === 'pending'
+                    ? 'pending members'
+                    : 'active members'
+              const confirmed = window.confirm(
+                `Send this email to ${emailRecipientCount} recipient${emailRecipientCount === 1 ? '' : 's'} (${audienceLabel})?`,
+              )
+              if (!confirmed) return
+              setEmailBusy(true)
+              setEmailError(null)
+              setEmailNotice(null)
+              void (async () => {
+                const result = await sendMemberBulkEmail({ audience: emailAudience, subject, body })
+                setEmailBusy(false)
+                if (result.error) {
+                  setEmailError(result.error.message)
+                  return
+                }
+                if (result.failedCount > 0) {
+                  setEmailNotice(
+                    `Sent ${result.sentCount} of ${result.recipientCount} emails. ${result.failedCount} failed.`,
+                  )
+                  setEmailError(`Failed addresses: ${result.failedEmails.join(', ')}`)
+                  return
+                }
+                setEmailNotice(`Email sent to ${result.sentCount} recipient${result.sentCount === 1 ? '' : 's'}.`)
+                setEmailSubject('')
+                setEmailBody('')
+              })()
+            }}
+          >
+            {emailBusy ? 'Sending…' : 'Send email'}
+          </button>
+        </section>
+      )}
         </div>
       </div>
+      <MemberEmailComposeModal
+        open={memberEmailTargets !== null}
+        members={memberEmailTargets ?? []}
+        subject={memberEmailSubject}
+        body={memberEmailBody}
+        submitting={memberEmailSubmitting}
+        error={memberEmailError}
+        onSubjectChange={setMemberEmailSubject}
+        onBodyChange={setMemberEmailBody}
+        onClose={() => {
+          if (memberEmailSubmitting) return
+          setMemberEmailTargets(null)
+          setMemberEmailError(null)
+        }}
+        onConfirm={async () => {
+          if (!memberEmailTargets || memberEmailTargets.length === 0) return
+          const subject = memberEmailSubject.trim()
+          const body = memberEmailBody.trim()
+          if (!subject) {
+            setMemberEmailError('Subject is required.')
+            return
+          }
+          if (!body) {
+            setMemberEmailError('Email message is required.')
+            return
+          }
+          setMemberEmailSubmitting(true)
+          setMemberEmailError(null)
+          setMemberActionError(null)
+          setMemberActionNotice(null)
+          try {
+            const result = await sendMemberSelectedEmail({
+              applicationIds: memberEmailTargets.map((member) => member.applicationId),
+              subject,
+              body,
+            })
+            if (result.error) {
+              setMemberEmailError(result.error.message)
+              return
+            }
+            let notice = `Email sent to ${result.sentCount} recipient${result.sentCount === 1 ? '' : 's'}.`
+            if (result.skippedNoEmail > 0) {
+              notice += ` ${result.skippedNoEmail} selected member${result.skippedNoEmail === 1 ? '' : 's'} had no email on file.`
+            }
+            if (result.failedCount > 0) {
+              setMemberEmailError(`Failed addresses: ${result.failedEmails.join(', ')}`)
+            } else {
+              setMemberEmailTargets(null)
+              setMemberEmailSubject('')
+              setMemberEmailBody('')
+              setSelectedMemberApplicationIds({})
+            }
+            setMemberActionNotice(notice)
+          } catch (error) {
+            setMemberEmailError(error instanceof Error ? error.message : 'Could not send email.')
+          } finally {
+            setMemberEmailSubmitting(false)
+          }
+        }}
+      />
       <PaymentReminderConfirmModal
         open={paymentReminderTarget !== null}
         memberLabel={

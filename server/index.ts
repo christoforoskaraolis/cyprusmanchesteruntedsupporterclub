@@ -14,6 +14,7 @@ import { merchandiseRouter } from './routes/merchandise.ts'
 import { membershipRouter } from './routes/membership.ts'
 import { adminUsersRouter } from './routes/adminUsers.ts'
 import { officialMembershipsRouter } from './routes/officialMemberships.ts'
+import { adminEmailsRouter } from './routes/adminEmails.ts'
 import { authRouter } from './routes/auth.ts'
 import { pushRouter } from './routes/push.ts'
 import { stripeRouter } from './routes/stripe.ts'
@@ -67,6 +68,7 @@ app.use('/api/tickets', ticketsRouter)
 app.use('/api/merchandise', merchandiseRouter)
 app.use('/api/membership', membershipRouter)
 app.use('/api/admin/users', adminUsersRouter)
+app.use('/api/admin/emails', adminEmailsRouter)
 app.use('/api/official-memberships', officialMembershipsRouter)
 app.use('/api/stripe', stripeRouter)
 

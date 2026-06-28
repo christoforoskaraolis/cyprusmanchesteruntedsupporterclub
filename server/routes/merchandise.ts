@@ -2,6 +2,7 @@ import { Router } from 'express'
 import { query } from '../db.ts'
 import { asyncHandler } from '../lib/asyncHandler.ts'
 import { getCachedResponse, invalidateResponseCache, RESPONSE_CACHE_TTL_MS, responseCacheKeys } from '../lib/responseCache.ts'
+import { reorderSortOrderRows } from '../lib/reorderSortOrder.ts'
 import { requireAdmin, requireUser } from '../middleware/auth.ts'
 
 export const merchandiseRouter = Router()
@@ -55,6 +56,18 @@ merchandiseRouter.post(
 )
 
 merchandiseRouter.put(
+  '/products/reorder',
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const { ids } = req.body as { ids: string[] }
+    if (!Array.isArray(ids) || ids.length === 0) return res.status(400).json({ error: 'ids are required' })
+    await reorderSortOrderRows('merchandise_products', ids, req.user!.id)
+    invalidateResponseCache(responseCacheKeys.merchandiseProducts)
+    res.json({ ok: true })
+  }),
+)
+
+merchandiseRouter.put(
   '/products/:id',
   requireAdmin,
   asyncHandler(async (req, res) => {
@@ -70,32 +83,6 @@ merchandiseRouter.put(
     )
     invalidateResponseCache(responseCacheKeys.merchandiseProducts)
     res.json({ ok: true })
-  }),
-)
-
-merchandiseRouter.put(
-  '/products/reorder',
-  requireAdmin,
-  asyncHandler(async (req, res) => {
-    const { ids } = req.body as { ids: string[] }
-    if (!Array.isArray(ids) || ids.length === 0) return res.status(400).json({ error: 'ids are required' })
-    await query('begin')
-    try {
-      for (let i = 0; i < ids.length; i += 1) {
-        await query(
-          `update public.merchandise_products
-           set sort_order = $1, updated_by = $2
-           where id = $3`,
-          [i + 1, req.user!.id, ids[i]],
-        )
-      }
-      await query('commit')
-      invalidateResponseCache(responseCacheKeys.merchandiseProducts)
-      res.json({ ok: true })
-    } catch (error) {
-      await query('rollback')
-      throw error
-    }
   }),
 )
 

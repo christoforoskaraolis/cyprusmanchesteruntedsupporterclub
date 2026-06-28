@@ -3,6 +3,7 @@ import { query } from '../db.ts'
 import { asyncHandler } from '../lib/asyncHandler.ts'
 import { badRequest } from '../lib/errors.ts'
 import { parseOfficialMuMembershipFields } from '../lib/officialMuMembership.ts'
+import { reorderSortOrderRows } from '../lib/reorderSortOrder.ts'
 import { getCachedResponse, invalidateResponseCache, RESPONSE_CACHE_TTL_MS, responseCacheKeys } from '../lib/responseCache.ts'
 import { requireAdmin, requireUser } from '../middleware/auth.ts'
 
@@ -67,6 +68,18 @@ officialMembershipsRouter.post(
 )
 
 officialMembershipsRouter.put(
+  '/reorder',
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const { ids } = req.body as { ids: string[] }
+    if (!Array.isArray(ids) || ids.length === 0) return res.status(400).json({ error: 'ids are required' })
+    await reorderSortOrderRows('official_membership_offers', ids, req.user!.id)
+    invalidateResponseCache(responseCacheKeys.officialMemberships)
+    res.json({ ok: true })
+  }),
+)
+
+officialMembershipsRouter.put(
   '/:id',
   requireAdmin,
   asyncHandler(async (req, res) => {
@@ -82,32 +95,6 @@ officialMembershipsRouter.put(
     )
     invalidateResponseCache(responseCacheKeys.officialMemberships)
     res.json({ ok: true })
-  }),
-)
-
-officialMembershipsRouter.put(
-  '/reorder',
-  requireAdmin,
-  asyncHandler(async (req, res) => {
-    const { ids } = req.body as { ids: string[] }
-    if (!Array.isArray(ids) || ids.length === 0) return res.status(400).json({ error: 'ids are required' })
-    await query('begin')
-    try {
-      for (let i = 0; i < ids.length; i += 1) {
-        await query(
-          `update public.official_membership_offers
-           set sort_order = $1, updated_by = $2
-           where id = $3`,
-          [i + 1, req.user!.id, ids[i]],
-        )
-      }
-      await query('commit')
-      invalidateResponseCache(responseCacheKeys.officialMemberships)
-      res.json({ ok: true })
-    } catch (error) {
-      await query('rollback')
-      throw error
-    }
   }),
 )
 
