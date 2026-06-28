@@ -107,17 +107,26 @@ export async function listMemberEmailRecipients(audience: MemberEmailAudience): 
   }
 
   const { rows } = await query<MemberEmailRecipientRow>(
-    `select distinct on (lower(email))
-            lower(trim(coalesce(nullif(trim(p.email), ''), nullif(trim(au.email), '')))) as email,
-            ma.first_name,
-            ma.last_name,
-            ma.status
-     from public.membership_applications ma
-     left join public.profiles p on p.id = ma.user_id
-     left join public.auth_users au on au.user_id = ma.user_id
-     where ${statusSql}
-       and coalesce(nullif(trim(p.email), ''), nullif(trim(au.email), '')) is not null
-     order by lower(email), case when ma.status = 'active' then 0 else 1 end, ma.submitted_at desc`,
+    `select distinct on (recipients.member_email)
+            recipients.member_email as email,
+            recipients.first_name,
+            recipients.last_name,
+            recipients.status
+     from (
+       select lower(trim(coalesce(nullif(trim(p.email), ''), nullif(trim(au.email), '')))) as member_email,
+              ma.first_name,
+              ma.last_name,
+              ma.status,
+              ma.submitted_at
+       from public.membership_applications ma
+       left join public.profiles p on p.id = ma.user_id
+       left join public.auth_users au on au.user_id = ma.user_id
+       where ${statusSql}
+         and coalesce(nullif(trim(p.email), ''), nullif(trim(au.email), '')) is not null
+     ) recipients
+     order by recipients.member_email,
+              case when recipients.status = 'active' then 0 else 1 end,
+              recipients.submitted_at desc`,
     params,
   )
 
