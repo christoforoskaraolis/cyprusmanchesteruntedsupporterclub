@@ -8461,6 +8461,9 @@ function App() {
                 <a className="contact-phone" href="tel:+35799489002">
                   +357 99 489 002
                 </a>
+                <a className="contact-phone" href="tel:+35797602750">
+                  +357 97 602 750
+                </a>
               </li>
               <li className="contact-card">
                 <p className="contact-role">Club PR Officer</p>
