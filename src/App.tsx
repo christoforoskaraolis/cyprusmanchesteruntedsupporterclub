@@ -8458,12 +8458,14 @@ function App() {
               <li className="contact-card">
                 <p className="contact-role">Club Secretary</p>
                 <p className="contact-name">Charalambos Loizou</p>
-                <a className="contact-phone" href="tel:+35799489002">
-                  +357 99 489 002
-                </a>
-                <a className="contact-phone" href="tel:+35797602750">
-                  +357 97 602 750
-                </a>
+                <div className="contact-phones">
+                  <a className="contact-phone" href="tel:+35799489002">
+                    +357 99 489 002
+                  </a>
+                  <a className="contact-phone" href="tel:+35797602750">
+                    +357 97 602 750
+                  </a>
+                </div>
               </li>
               <li className="contact-card">
                 <p className="contact-role">Club PR Officer</p>
