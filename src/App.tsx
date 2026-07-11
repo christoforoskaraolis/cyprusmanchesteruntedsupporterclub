@@ -4149,60 +4149,46 @@ function AdminConsole({
                           }
                         />
                       </label>
-                      <label className="admin-present-received admin-ticket-deposit-confirm">
-                        <input
-                          type="checkbox"
-                          checked={r.balancePaymentNotified}
+                      {r.balancePaymentNotified ? (
+                        <p className="admin-ticket-balance-sent-note">
+                          Payment email sent
+                          {r.balancePaymentNotifiedAt && (
+                            <span className="admin-present-received-at">
+                              {' '}
+                              · {new Date(r.balancePaymentNotifiedAt).toLocaleString('en-GB')}
+                              {r.balanceRemainingAmountEur != null
+                                ? ` · €${r.balanceRemainingAmountEur.toFixed(2)}`
+                                : ''}
+                              {r.balancePaymentDeadline
+                                ? ` · deadline ${new Date(r.balancePaymentDeadline).toLocaleDateString('en-GB')}`
+                                : ''}
+                            </span>
+                          )}
+                        </p>
+                      ) : (
+                        <button
+                          type="button"
+                          className="board-admin-activate admin-ticket-balance-send-btn"
                           disabled={
                             busyTicketRequestId !== null ||
                             ticketBalancePaymentSubmitting ||
-                            (!r.balancePaymentNotified && !canNotifyBalancePayment)
+                            !canNotifyBalancePayment
                           }
-                          onChange={async (e) => {
+                          onClick={() => {
+                            if (amountEur == null || paymentDeadline == null) return
                             setTicketActionError(null)
                             setTicketActionNotice(null)
-                            const checked = e.target.checked
-                            if (checked) {
-                              if (amountEur == null || paymentDeadline == null) return
-                              setTicketBalancePaymentError(null)
-                              setTicketBalancePaymentTarget({
-                                request: r,
-                                amountEur,
-                                paymentDeadline,
-                              })
-                              return
-                            }
-                            setBusyTicketRequestId(r.id)
-                            try {
-                              await onUpdateTicketBalancePayment(r.id, {
-                                balanceRemainingAmountEur: amountEur ?? r.balanceRemainingAmountEur ?? 0,
-                                balancePaymentDeadline:
-                                  paymentDeadline ??
-                                  formatTicketBalancePaymentDeadlineForInput(r.balancePaymentDeadline),
-                                balancePaymentNotified: false,
-                              })
-                            } catch (error) {
-                              setTicketActionError(
-                                error instanceof Error ? error.message : 'Could not update ticket payment.',
-                              )
-                            } finally {
-                              setBusyTicketRequestId(null)
-                            }
+                            setTicketBalancePaymentError(null)
+                            setTicketBalancePaymentTarget({
+                              request: r,
+                              amountEur,
+                              paymentDeadline,
+                            })
                           }}
-                        />
-                        Ticket payment
-                        {r.balancePaymentNotifiedAt && (
-                          <span className="admin-present-received-at">
-                            · {new Date(r.balancePaymentNotifiedAt).toLocaleString('en-GB')}
-                            {r.balanceRemainingAmountEur != null
-                              ? ` · €${r.balanceRemainingAmountEur.toFixed(2)}`
-                              : ''}
-                            {r.balancePaymentDeadline
-                              ? ` · deadline ${new Date(r.balancePaymentDeadline).toLocaleDateString('en-GB')}`
-                              : ''}
-                          </span>
-                        )}
-                      </label>
+                        >
+                          Send Email for the remaining amount and deadline
+                        </button>
+                      )}
                       {r.balancePaymentNotified && !r.ticketConfirmed && (
                         <button
                           type="button"

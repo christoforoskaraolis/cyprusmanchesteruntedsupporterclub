@@ -3002,6 +3002,22 @@
   max-width: 11rem;
 }
 
+.admin-ticket-balance-send-btn {
+  align-self: flex-start;
+  margin-top: 0.15rem;
+  max-width: 100%;
+  white-space: normal;
+  text-align: left;
+  line-height: 1.35;
+}
+
+.admin-ticket-balance-sent-note {
+  margin: 0.15rem 0 0;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: #15803d;
+}
+
 .admin-ticket-confirm-btn {
   align-self: flex-start;
   margin-top: 0.35rem;
