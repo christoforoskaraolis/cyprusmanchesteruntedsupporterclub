@@ -6,6 +6,40 @@ export type ParsedFixtureMatchKey = {
   venue: string
 }
 
+export type FixtureSummary = {
+  kickoffIso: string
+  competition: string
+  opponent: string
+  home: boolean
+  venue: string
+}
+
+export function normalizeFixtureOpponent(opponent: string): string {
+  return opponent.trim().toLowerCase().replace(/\s+/g, ' ')
+}
+
+export function buildFixtureMatchKey(fixture: FixtureSummary): string {
+  return `${fixture.kickoffIso}|${fixture.competition}|${fixture.opponent}|${fixture.home ? 'H' : 'A'}|${fixture.venue}`
+}
+
+export function fixtureMatchIdentityKeyFromParts(
+  competition: string,
+  opponent: string,
+  home: boolean,
+): string {
+  return `${competition.trim().toLowerCase()}|${normalizeFixtureOpponent(opponent)}|${home ? 'H' : 'A'}`
+}
+
+export function fixtureMatchIdentityKeyFromFixture(fixture: FixtureSummary): string {
+  return fixtureMatchIdentityKeyFromParts(fixture.competition, fixture.opponent, fixture.home)
+}
+
+export function fixtureMatchIdentityKeyFromMatchKey(matchKey: string): string | null {
+  const parsed = parseFixtureMatchKey(matchKey)
+  if (!parsed) return null
+  return fixtureMatchIdentityKeyFromParts(parsed.competition, parsed.opponent, parsed.home)
+}
+
 export function parseFixtureMatchKey(matchKey: string): ParsedFixtureMatchKey | null {
   const parts = matchKey.split('|')
   if (parts.length < 5) return null

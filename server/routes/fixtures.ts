@@ -1,7 +1,9 @@
 import { Router } from 'express'
-import { query } from '../db.ts'
+import { query, pool } from '../db.ts'
 import { asyncHandler } from '../lib/asyncHandler.ts'
 import { badRequest } from '../lib/errors.ts'
+import { type FixtureSummary } from '../lib/fixtureMatchKey.ts'
+import { remapRescheduledFixtureMatchKeys } from '../lib/remapRescheduledFixtureMatchKeys.ts'
 import { getCachedResponse, invalidateResponseCache, RESPONSE_CACHE_TTL_MS, responseCacheKeys } from '../lib/responseCache.ts'
 import { requireAdmin, requireUser } from '../middleware/auth.ts'
 
@@ -39,13 +41,7 @@ function parseFixtureFromSummary(summary: string): ParsedFixtureSummary | null {
   return null
 }
 
-type UpcomingFixture = {
-  kickoffIso: string
-  competition: string
-  opponent: string
-  home: boolean
-  venue: string
-}
+type UpcomingFixture = FixtureSummary
 
 function parseIcsDateToIso(raw: string): string | null {
   const value = raw.trim()
@@ -157,6 +153,18 @@ fixturesRouter.post(
           lastError = 'Calendar fetched but no fixtures could be parsed'
           continue
         }
+        const { rows: cacheRows } = await query<{ payload: unknown }>(
+          `select payload from public.fixtures_cache where id = 1`,
+        )
+        const previousFixtures = Array.isArray(cacheRows[0]?.payload)
+          ? (cacheRows[0].payload as FixtureSummary[])
+          : []
+        const remapped = await remapRescheduledFixtureMatchKeys(
+          pool,
+          previousFixtures,
+          fixtures,
+          req.user!.id,
+        )
         await query(
           `insert into public.fixtures_cache (id, source_url, payload, updated_by)
            values (1, $1, $2::jsonb, $3)
@@ -164,7 +172,7 @@ fixturesRouter.post(
           [MANUTD_ICS_URL, JSON.stringify(fixtures), req.user!.id],
         )
         invalidateResponseCache(responseCacheKeys.fixturesCache)
-        return res.json({ ok: true, count: fixtures.length })
+        return res.json({ ok: true, count: fixtures.length, remapped })
       } catch (error) {
         lastError = error instanceof Error ? error.message : 'Fetch failed'
       }

@@ -93,6 +93,35 @@ export function fixtureMatchKey(f: UpcomingFixture): string {
   return `${f.kickoffIso}|${f.competition}|${f.opponent}|${f.home ? 'H' : 'A'}|${f.venue}`
 }
 
+export function fixtureMatchIdentityKey(matchKey: string): string {
+  const parsed = parseFixtureMatchKey(matchKey)
+  if (!parsed) return matchKey
+  return `${parsed.competition.trim().toLowerCase()}|${parsed.opponent.trim().toLowerCase()}|${parsed.home ? 'H' : 'A'}`
+}
+
+export function fixtureMatchIdentityKeyFromFixture(f: UpcomingFixture): string {
+  return `${f.competition.trim().toLowerCase()}|${f.opponent.trim().toLowerCase()}|${f.home ? 'H' : 'A'}`
+}
+
+export function matchKeysReferToSameFixture(a: string, b: string): boolean {
+  return fixtureMatchIdentityKey(a) === fixtureMatchIdentityKey(b)
+}
+
+export function pickCanonicalFixtureMatchKey(matchKeys: string[]): string {
+  let bestKey = matchKeys[0] ?? ''
+  let bestKickoff = Number.NEGATIVE_INFINITY
+  for (const matchKey of matchKeys) {
+    const parsed = parseFixtureMatchKey(matchKey)
+    const kickoff = parsed ? new Date(parsed.kickoffIso).getTime() : Number.NEGATIVE_INFINITY
+    if (!Number.isFinite(kickoff)) continue
+    if (kickoff >= bestKickoff) {
+      bestKickoff = kickoff
+      bestKey = matchKey
+    }
+  }
+  return bestKey
+}
+
 export type FixtureTicketTravelCompanionLookup = {
   membershipNumber: number
   fullName: string | null

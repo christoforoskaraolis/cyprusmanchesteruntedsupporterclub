@@ -62,7 +62,9 @@ import {
   type MyFixtureTicketRequest,
   fixtureMatchKey,
   formatFixtureMatchKeyLabel,
+  matchKeysReferToSameFixture,
   parseFixtureMatchKey,
+  pickCanonicalFixtureMatchKey,
   requestFixtureTicket,
   setFixtureTicketRequestStatus,
   updateFixtureTicketRequestDepositConfirmed,
@@ -828,6 +830,41 @@ function isTicketRequestCancelled(request: {
   userCancelledAt: string | null
 }): boolean {
   return Boolean(request.userCancelledAt) || request.status === 'cancelled'
+}
+
+function fixtureMatchIdentityKey(matchKey: string): string {
+  const parsed = parseFixtureMatchKey(matchKey)
+  if (!parsed) return matchKey
+  return `${parsed.competition.trim().toLowerCase()}|${parsed.opponent.trim().toLowerCase()}|${parsed.home ? 'H' : 'A'}`
+}
+
+function lookupMyTicketRequestByMatchKey(
+  requestsByKey: Record<string, MyFixtureTicketRequest>,
+  matchKey: string,
+): MyFixtureTicketRequest | undefined {
+  if (requestsByKey[matchKey]) return requestsByKey[matchKey]
+  const identity = fixtureMatchIdentityKey(matchKey)
+  return Object.values(requestsByKey).find((request) => fixtureMatchIdentityKey(request.matchKey) === identity)
+}
+
+function lookupTicketWindowStatus(
+  windowsByKey: Record<string, FixtureTicketWindowStatus>,
+  matchKey: string,
+): FixtureTicketWindowStatus {
+  if (windowsByKey[matchKey]) return windowsByKey[matchKey]
+  const identity = fixtureMatchIdentityKey(matchKey)
+  const found = Object.entries(windowsByKey).find(([key]) => fixtureMatchIdentityKey(key) === identity)
+  return found?.[1] ?? 'disabled'
+}
+
+function lookupTicketWindowDetails(
+  detailsByKey: Record<string, { maxTickets: number | null; activeRequestCount: number }>,
+  matchKey: string,
+): { maxTickets: number | null; activeRequestCount: number } | undefined {
+  if (detailsByKey[matchKey]) return detailsByKey[matchKey]
+  const identity = fixtureMatchIdentityKey(matchKey)
+  const found = Object.entries(detailsByKey).find(([key]) => fixtureMatchIdentityKey(key) === identity)
+  return found?.[1]
 }
 
 function formatTicketMatchTabLabel(matchKey: string): string {
@@ -2658,19 +2695,32 @@ function AdminConsole({
     })
 
   const ticketMatchTabKeys = useMemo(() => {
-    const keys = new Set<string>()
-    for (const fixture of ticketFixtures) keys.add(fixtureMatchKey(fixture))
-    for (const request of pendingTicketRequests) keys.add(request.matchKey)
-    return [...keys].sort((a, b) => {
-      const parsedA = parseFixtureMatchKey(a)
-      const parsedB = parseFixtureMatchKey(b)
-      if (!parsedA || !parsedB) return a.localeCompare(b)
-      return new Date(parsedA.kickoffIso).getTime() - new Date(parsedB.kickoffIso).getTime()
-    })
+    const keysByIdentity = new Map<string, string[]>()
+    const addKey = (matchKey: string) => {
+      const identity = fixtureMatchIdentityKey(matchKey)
+      const existing = keysByIdentity.get(identity) ?? []
+      existing.push(matchKey)
+      keysByIdentity.set(identity, existing)
+    }
+    for (const fixture of ticketFixtures) addKey(fixtureMatchKey(fixture))
+    for (const request of pendingTicketRequests) addKey(request.matchKey)
+    return [...keysByIdentity.values()]
+      .map((keys) => pickCanonicalFixtureMatchKey(keys))
+      .sort((a, b) => {
+        const parsedA = parseFixtureMatchKey(a)
+        const parsedB = parseFixtureMatchKey(b)
+        if (!parsedA || !parsedB) return a.localeCompare(b)
+        return new Date(parsedA.kickoffIso).getTime() - new Date(parsedB.kickoffIso).getTime()
+      })
   }, [ticketFixtures, pendingTicketRequests])
 
   const filteredTicketRequests = pendingTicketRequests
-    .filter((r) => ticketMatchFilter === 'all' || r.matchKey === ticketMatchFilter)
+    .filter(
+      (r) =>
+        ticketMatchFilter === 'all' ||
+        r.matchKey === ticketMatchFilter ||
+        matchKeysReferToSameFixture(r.matchKey, ticketMatchFilter),
+    )
     .filter((r) => {
       if (ticketFilter === 'cancelled') return isTicketRequestCancelled(r)
       if (isTicketRequestCancelled(r)) return false
@@ -3750,8 +3800,8 @@ function AdminConsole({
             <ul className="fixtures-list">
               {ticketFixtures.map((fixture) => {
                 const key = fixtureMatchKey(fixture)
-                const status = ticketWindowByKey[key] ?? 'disabled'
-                const windowDetails = ticketWindowDetailsByKey[key]
+                const status = lookupTicketWindowStatus(ticketWindowByKey, key)
+                const windowDetails = lookupTicketWindowDetails(ticketWindowDetailsByKey, key)
                 const maxTickets = windowDetails?.maxTickets ?? null
                 const activeRequestCount = windowDetails?.activeRequestCount ?? 0
                 const maxTicketsDraft =
@@ -6478,8 +6528,9 @@ function App() {
       return
     }
     await loadFixturesFromCache()
+    await Promise.all([refreshTicketRequestsOnly(), refreshFixtureTicketStates()])
     setFixturesLoading(false)
-  }, [isAdmin, loadFixturesFromCache])
+  }, [isAdmin, loadFixturesFromCache, refreshFixtureTicketStates])
 
   async function setFixtureTicketStatus(fixture: UpcomingFixture, status: FixtureTicketWindowStatus) {
     if (!isAdmin) return
@@ -6534,7 +6585,7 @@ function App() {
   function resolveTicketDepositSlotCount(fixture: UpcomingFixture | null): number {
     if (!fixture) return 1
     const key = fixtureMatchKey(fixture)
-    return myTicketRequestByKey[key]?.ticketSlotCount ?? pendingTicketDepositSlotCount ?? 1
+    return lookupMyTicketRequestByMatchKey(myTicketRequestByKey, key)?.ticketSlotCount ?? pendingTicketDepositSlotCount ?? 1
   }
 
   function openTicketDepositPayment(fixture: UpcomingFixture) {
@@ -8240,13 +8291,13 @@ function App() {
                       <div className="fixtures-card-right">
                         {(() => {
                           const key = fixtureMatchKey(f)
-                          const status = ticketWindowByKey[key] ?? 'disabled'
-                          const windowDetails = ticketWindowDetailsByKey[key]
+                          const status = lookupTicketWindowStatus(ticketWindowByKey, key)
+                          const windowDetails = lookupTicketWindowDetails(ticketWindowDetailsByKey, key)
                           const maxTickets = windowDetails?.maxTickets ?? null
                           const activeRequestCount = windowDetails?.activeRequestCount ?? 0
                           const ticketsRemaining = fixtureTicketsRemaining(maxTickets, activeRequestCount)
                           const atCapacity = ticketsRemaining === 0
-                          const myRequest = myTicketRequestByKey[key]
+                          const myRequest = lookupMyTicketRequestByMatchKey(myTicketRequestByKey, key)
                           const myRequestStatus = myRequest?.status
                           const depositConfirmed = myRequest?.depositConfirmed === true
                           const userCancelled = Boolean(myRequest?.userCancelledAt)
@@ -8462,12 +8513,18 @@ function App() {
           }
           balanceRemainingAmountEur={
             ticketBalancePaymentFixture
-              ? (myTicketRequestByKey[fixtureMatchKey(ticketBalancePaymentFixture)]?.balanceRemainingAmountEur ?? null)
+              ? (lookupMyTicketRequestByMatchKey(
+                  myTicketRequestByKey,
+                  fixtureMatchKey(ticketBalancePaymentFixture),
+                )?.balanceRemainingAmountEur ?? null)
               : null
           }
           balancePaymentDeadline={
             ticketBalancePaymentFixture
-              ? (myTicketRequestByKey[fixtureMatchKey(ticketBalancePaymentFixture)]?.balancePaymentDeadline ?? null)
+              ? (lookupMyTicketRequestByMatchKey(
+                  myTicketRequestByKey,
+                  fixtureMatchKey(ticketBalancePaymentFixture),
+                )?.balancePaymentDeadline ?? null)
               : null
           }
         />
@@ -8499,7 +8556,8 @@ function App() {
           }
           ticketSlotCount={
             ticketFormFixture
-              ? (myTicketRequestByKey[fixtureMatchKey(ticketFormFixture)]?.ticketSlotCount ?? 1)
+              ? (lookupMyTicketRequestByMatchKey(myTicketRequestByKey, fixtureMatchKey(ticketFormFixture))
+                  ?.ticketSlotCount ?? 1)
               : 1
           }
         />
