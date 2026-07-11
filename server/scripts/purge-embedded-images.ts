@@ -1,7 +1,7 @@
 /**
- * Remove base64-embedded images from news posts after migrating to external URLs
- * (e.g. Cloudinary). Only touches news_posts (desktop, mobile, article photos).
- * Merchandise and other site images are left unchanged. HTTP(S) links are kept.
+ * Remove base64-embedded images after migrating to external URLs (e.g. Cloudinary).
+ * Touches news_posts, merchandise_products, and official_membership_offers.
+ * HTTP(S) links are kept.
  *
  * Usage:
  *   npm run purge:news-images           # dry-run (preview only)
@@ -101,6 +101,63 @@ async function main(): Promise<void> {
       }
     }
 
+    const { rows: merchRows } = await client.query<{
+      id: string
+      title: string
+      photos: unknown
+    }>(
+      `select id, title, photos
+       from public.merchandise_products
+       order by sort_order asc, created_at asc`,
+    )
+
+    for (const row of merchRows) {
+      const photos = parseImageStringArray(row.photos)
+      const { kept, removed, bytesRemoved } = stripEmbeddedImages(photos)
+      if (removed === 0) continue
+      changes.push({
+        id: row.id,
+        label: row.title,
+        field: 'merchandise_products.photos',
+        action: `remove ${removed} embedded image(s), keep ${kept.length}`,
+        bytesRemoved,
+      })
+      totalBytesRemoved += bytesRemoved
+      if (execute) {
+        await client.query(`update public.merchandise_products set photos = $2::jsonb where id = $1`, [
+          row.id,
+          JSON.stringify(kept),
+        ])
+      }
+    }
+
+    const { rows: offerRows } = await client.query<{
+      id: string
+      title: string
+      image_url: string | null
+    }>(
+      `select id, title, image_url
+       from public.official_membership_offers
+       order by sort_order asc, created_at asc`,
+    )
+
+    for (const row of offerRows) {
+      const value = row.image_url
+      if (!value || !isEmbeddedDataUrlImage(value)) continue
+      const bytesRemoved = estimateEmbeddedImageBytes(value)
+      changes.push({
+        id: row.id,
+        label: row.title,
+        field: 'official_membership_offers.image_url',
+        action: 'set empty',
+        bytesRemoved,
+      })
+      totalBytesRemoved += bytesRemoved
+      if (execute) {
+        await client.query(`update public.official_membership_offers set image_url = '' where id = $1`, [row.id])
+      }
+    }
+
     if (execute) await client.query('commit')
   } catch (err) {
     if (execute) await client.query('rollback')
@@ -110,27 +167,27 @@ async function main(): Promise<void> {
   }
 
   if (changes.length === 0) {
-    console.log('[purge:news] No embedded base64 images found in news posts.')
+    console.log('[purge:images] No embedded base64 images found in news, merchandise, or membership offers.')
     return
   }
 
   console.log(
-    `[purge:news] ${execute ? 'Applied' : 'Dry run'} — ${changes.length} change(s), ~${formatMb(totalBytesRemoved)} removed`,
+    `[purge:images] ${execute ? 'Applied' : 'Dry run'} — ${changes.length} change(s), ~${formatMb(totalBytesRemoved)} removed`,
   )
   for (const change of changes) {
     console.log(
-      `  - news_posts.${change.field} (${change.label || change.id.slice(0, 8)}): ${change.action} [~${formatMb(change.bytesRemoved)}]`,
+      `  - ${change.field} (${change.label || change.id.slice(0, 8)}): ${change.action} [~${formatMb(change.bytesRemoved)}]`,
     )
   }
 
   if (!execute) {
-    console.log('\n[purge:news] Preview only. Re-run with --execute to apply.')
+    console.log('\n[purge:images] Preview only. Re-run with --execute to apply.')
   }
 }
 
 void main()
   .catch((err) => {
-    console.error('[purge:news] Failed:', err)
+    console.error('[purge:images] Failed:', err)
     process.exit(1)
   })
   .finally(async () => {

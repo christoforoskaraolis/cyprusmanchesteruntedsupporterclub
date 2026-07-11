@@ -1,6 +1,8 @@
 import { Router } from 'express'
 import { query } from '../db.ts'
 import { asyncHandler } from '../lib/asyncHandler.ts'
+import { parseExternalImageUrls } from '../lib/externalImageUrl.ts'
+import { badRequest } from '../lib/errors.ts'
 import { getCachedResponse, invalidateResponseCache, RESPONSE_CACHE_TTL_MS, responseCacheKeys } from '../lib/responseCache.ts'
 import { reorderSortOrderRows } from '../lib/reorderSortOrder.ts'
 import { requireAdmin, requireUser } from '../middleware/auth.ts'
@@ -37,6 +39,8 @@ merchandiseRouter.post(
   requireAdmin,
   asyncHandler(async (req, res) => {
     const { title, priceEur, photos } = req.body as { title: string; priceEur: number; photos: string[] }
+    const photoUrls = parseExternalImageUrls(photos)
+    if (photoUrls.length === 0) throw badRequest('At least one product photo URL is required')
     await query(
       `insert into public.merchandise_products (title, description, price_eur, photos, sort_order, created_by, updated_by)
        values (
@@ -48,7 +52,7 @@ merchandiseRouter.post(
          $4,
          $4
        )`,
-      [title.trim(), priceEur, JSON.stringify(Array.isArray(photos) ? photos : []), req.user!.id],
+      [title.trim(), priceEur, JSON.stringify(photoUrls), req.user!.id],
     )
     invalidateResponseCache(responseCacheKeys.merchandiseProducts)
     res.status(201).json({ ok: true })
@@ -72,6 +76,8 @@ merchandiseRouter.put(
   requireAdmin,
   asyncHandler(async (req, res) => {
     const { title, priceEur, photos } = req.body as { title: string; priceEur: number; photos?: string[] }
+    const photoUrls = photos != null ? parseExternalImageUrls(photos) : null
+    if (photoUrls != null && photoUrls.length === 0) throw badRequest('At least one product photo URL is required')
     await query(
       `update public.merchandise_products
        set title = $1,
@@ -79,7 +85,7 @@ merchandiseRouter.put(
            photos = coalesce($3::jsonb, photos),
            updated_by = $4
        where id = $5`,
-      [title.trim(), priceEur, photos ? JSON.stringify(photos) : null, req.user!.id, req.params.id],
+      [title.trim(), priceEur, photoUrls ? JSON.stringify(photoUrls) : null, req.user!.id, req.params.id],
     )
     invalidateResponseCache(responseCacheKeys.merchandiseProducts)
     res.json({ ok: true })

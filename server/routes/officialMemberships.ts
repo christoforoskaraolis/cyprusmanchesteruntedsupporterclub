@@ -2,6 +2,7 @@ import { Router } from 'express'
 import { query } from '../db.ts'
 import { asyncHandler } from '../lib/asyncHandler.ts'
 import { badRequest } from '../lib/errors.ts'
+import { requireExternalImageUrl } from '../lib/externalImageUrl.ts'
 import { parseOfficialMuMembershipFields } from '../lib/officialMuMembership.ts'
 import { reorderSortOrderRows } from '../lib/reorderSortOrder.ts'
 import { getCachedResponse, invalidateResponseCache, RESPONSE_CACHE_TTL_MS, responseCacheKeys } from '../lib/responseCache.ts'
@@ -50,6 +51,7 @@ officialMembershipsRouter.post(
   requireAdmin,
   asyncHandler(async (req, res) => {
     const { title, priceEur, imageUrl } = req.body as { title: string; priceEur: number; imageUrl: string }
+    const imageLink = requireExternalImageUrl(imageUrl, 'Picture URL')
     await query(
       `insert into public.official_membership_offers (title, price_eur, image_url, sort_order, created_by, updated_by)
        values (
@@ -60,7 +62,7 @@ officialMembershipsRouter.post(
          $4,
          $4
        )`,
-      [title.trim(), priceEur, imageUrl ?? '', req.user!.id],
+      [title.trim(), priceEur, imageLink, req.user!.id],
     )
     invalidateResponseCache(responseCacheKeys.officialMemberships)
     res.status(201).json({ ok: true })
@@ -84,6 +86,8 @@ officialMembershipsRouter.put(
   requireAdmin,
   asyncHandler(async (req, res) => {
     const { title, priceEur, imageUrl } = req.body as { title: string; priceEur: number; imageUrl?: string }
+    const imageLink =
+      imageUrl !== undefined ? requireExternalImageUrl(imageUrl, 'Picture URL') : null
     await query(
       `update public.official_membership_offers
        set title = $1,
@@ -91,7 +95,7 @@ officialMembershipsRouter.put(
            image_url = coalesce($3, image_url),
            updated_by = $4
        where id = $5`,
-      [title.trim(), priceEur, imageUrl ?? null, req.user!.id, req.params.id],
+      [title.trim(), priceEur, imageLink, req.user!.id, req.params.id],
     )
     invalidateResponseCache(responseCacheKeys.officialMemberships)
     res.json({ ok: true })

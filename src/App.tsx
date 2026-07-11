@@ -896,10 +896,10 @@ function formatTicketBalancePaymentDeadlineForInput(deadlineIso: string | null |
   return `${day}/${month}/${year}`
 }
 
-function isNewsImageSource(value: string): boolean {
+function isExternalImageUrl(value: string): boolean {
   const trimmed = value.trim()
   if (!trimmed) return false
-  if (/^data:image\//i.test(trimmed)) return true
+  if (/^data:image\//i.test(trimmed)) return false
   try {
     const url = new URL(trimmed)
     return url.protocol === 'http:' || url.protocol === 'https:'
@@ -2509,9 +2509,12 @@ function AdminConsole({
   const [adminMerchTitle, setAdminMerchTitle] = useState('')
   const [adminMerchPrice, setAdminMerchPrice] = useState('')
   const [adminMerchPhotos, setAdminMerchPhotos] = useState<string[]>([])
+  const [adminMerchPhotoUrlDraft, setAdminMerchPhotoUrlDraft] = useState('')
   const [adminMerchBusy, setAdminMerchBusy] = useState(false)
   const [adminMerchError, setAdminMerchError] = useState<string | null>(null)
-  const [editingMerchById, setEditingMerchById] = useState<Record<string, { title: string; price: string }>>({})
+  const [editingMerchById, setEditingMerchById] = useState<
+    Record<string, { title: string; price: string; photos: string[]; photoUrlDraft: string }>
+  >({})
   const [newAdminEmail, setNewAdminEmail] = useState('')
   const [adminUsersBusy, setAdminUsersBusy] = useState(false)
   const [officialTitle, setOfficialTitle] = useState('')
@@ -2519,7 +2522,9 @@ function AdminConsole({
   const [officialImageUrl, setOfficialImageUrl] = useState('')
   const [officialBusy, setOfficialBusy] = useState(false)
   const [officialError, setOfficialError] = useState<string | null>(null)
-  const [editingOfficialById, setEditingOfficialById] = useState<Record<string, { title: string; price: string }>>({})
+  const [editingOfficialById, setEditingOfficialById] = useState<
+    Record<string, { title: string; price: string; imageUrl: string }>
+  >({})
   const [officialRequestBusyId, setOfficialRequestBusyId] = useState<string | null>(null)
   const [expandedOfficialRequestId, setExpandedOfficialRequestId] = useState<string | null>(null)
   const [officialMuIdDraftByRequestId, setOfficialMuIdDraftByRequestId] = useState<Record<string, string>>({})
@@ -2888,23 +2893,45 @@ function AdminConsole({
     return next
   }
 
-  async function onPickAdminMerchPhotos(files: FileList | null) {
-    if (!files || files.length === 0) return
-    const next: string[] = []
-    for (const file of Array.from(files)) {
-      if (!file.type.startsWith('image/')) {
-        setAdminMerchError('Please choose image files only.')
-        return
-      }
-      try {
-        const dataUrl = await resizeImageFileToJpegDataUrl(file, { maxEdge: 1200, quality: 0.88 })
-        next.push(dataUrl)
-      } catch (e) {
-        setAdminMerchError(e instanceof Error ? e.message : 'Could not process image.')
-        return
-      }
+  function addAdminMerchPhotoUrl() {
+    const url = adminMerchPhotoUrlDraft.trim()
+    if (!url) {
+      setAdminMerchError('Enter an image URL to add.')
+      return
     }
-    setAdminMerchPhotos((prev) => [...prev, ...next])
+    if (!isExternalImageUrl(url)) {
+      setAdminMerchError('Enter a valid http(s) image URL (e.g. Cloudinary). Uploaded files are not stored in the database.')
+      return
+    }
+    if (adminMerchPhotos.includes(url)) {
+      setAdminMerchError('This photo URL is already in the list.')
+      return
+    }
+    setAdminMerchPhotos((prev) => [...prev, url])
+    setAdminMerchPhotoUrlDraft('')
+    setAdminMerchError(null)
+  }
+
+  function addEditingMerchPhotoUrl(productId: string) {
+    const draft = editingMerchById[productId]
+    if (!draft) return
+    const url = draft.photoUrlDraft.trim()
+    if (!url) {
+      setAdminMerchError('Enter an image URL to add.')
+      return
+    }
+    if (!isExternalImageUrl(url)) {
+      setAdminMerchError('Enter a valid http(s) image URL (e.g. Cloudinary).')
+      return
+    }
+    if (draft.photos.includes(url)) {
+      setAdminMerchError('This photo URL is already in the list.')
+      return
+    }
+    setEditingMerchById((prev) => ({
+      ...prev,
+      [productId]: { ...draft, photos: [...draft.photos, url], photoUrlDraft: '' },
+    }))
     setAdminMerchError(null)
   }
 
@@ -2950,7 +2977,7 @@ function AdminConsole({
       setNewsError('Enter an image URL to add.')
       return
     }
-    if (!isNewsImageSource(url)) {
+    if (!isExternalImageUrl(url)) {
       setNewsError('Enter a valid http(s) image URL.')
       return
     }
@@ -4571,15 +4598,36 @@ function AdminConsole({
               </label>
             </div>
             <label className="auth-field membership-field">
-              <span className="auth-label">Photos</span>
-              <input
-                className="auth-input"
-                type="file"
-                accept="image/*"
-                multiple
-                onChange={(ev) => void onPickAdminMerchPhotos(ev.target.files)}
-                disabled={adminMerchBusy}
-              />
+              <span className="auth-label">Photo URLs</span>
+              <p className="admin-news-image-hint">
+                Upload images to Cloudinary (or similar), then paste the link here — do not upload files directly (keeps
+                database size small).
+              </p>
+              <div className="admin-news-body-photo-url-row">
+                <input
+                  className="auth-input"
+                  type="text"
+                  inputMode="url"
+                  placeholder="https://res.cloudinary.com/.../product.jpg"
+                  value={adminMerchPhotoUrlDraft}
+                  onChange={(ev) => setAdminMerchPhotoUrlDraft(ev.target.value)}
+                  onKeyDown={(ev) => {
+                    if (ev.key === 'Enter') {
+                      ev.preventDefault()
+                      addAdminMerchPhotoUrl()
+                    }
+                  }}
+                  disabled={adminMerchBusy}
+                />
+                <button
+                  type="button"
+                  className="mycmusc-reg-btn mycmusc-reg-btn--secondary"
+                  onClick={addAdminMerchPhotoUrl}
+                  disabled={adminMerchBusy}
+                >
+                  Add URL
+                </button>
+              </div>
             </label>
             {adminMerchPhotos.length > 0 && (
               <ul className="merch-admin-photo-strip">
@@ -4615,12 +4663,17 @@ function AdminConsole({
                   setAdminMerchError('Please enter a valid price.')
                   return
                 }
+                if (adminMerchPhotos.length === 0) {
+                  setAdminMerchError('Add at least one photo URL.')
+                  return
+                }
                 setAdminMerchBusy(true)
                 try {
                   await onCreateMerchandiseProduct({ title, priceEur: price, photos: adminMerchPhotos })
                   setAdminMerchTitle('')
                   setAdminMerchPrice('')
                   setAdminMerchPhotos([])
+                  setAdminMerchPhotoUrlDraft('')
                 } catch (err) {
                   setAdminMerchError(err instanceof Error ? err.message : 'Could not create product.')
                 } finally {
@@ -4635,6 +4688,8 @@ function AdminConsole({
                 const draft = editingMerchById[product.id] ?? {
                   title: product.title,
                   price: product.priceEur.toFixed(2),
+                  photos: [...product.photos],
+                  photoUrlDraft: '',
                 }
                 return (
                 <li key={product.id} className="merch-card">
@@ -4680,6 +4735,65 @@ function AdminConsole({
                         }
                         disabled={adminMerchBusy}
                       />
+                    </label>
+                    <label className="auth-field membership-field">
+                      <span className="auth-label">Photo URLs</span>
+                      <div className="admin-news-body-photo-url-row">
+                        <input
+                          className="auth-input"
+                          type="text"
+                          inputMode="url"
+                          placeholder="https://res.cloudinary.com/.../product.jpg"
+                          value={draft.photoUrlDraft}
+                          onChange={(ev) =>
+                            setEditingMerchById((prev) => ({
+                              ...prev,
+                              [product.id]: { ...draft, photoUrlDraft: ev.target.value },
+                            }))
+                          }
+                          onKeyDown={(ev) => {
+                            if (ev.key === 'Enter') {
+                              ev.preventDefault()
+                              addEditingMerchPhotoUrl(product.id)
+                            }
+                          }}
+                          disabled={adminMerchBusy}
+                        />
+                        <button
+                          type="button"
+                          className="mycmusc-reg-btn mycmusc-reg-btn--secondary"
+                          onClick={() => addEditingMerchPhotoUrl(product.id)}
+                          disabled={adminMerchBusy}
+                        >
+                          Add URL
+                        </button>
+                      </div>
+                      {draft.photos.length > 0 && (
+                        <ul className="merch-admin-photo-strip">
+                          {draft.photos.map((src, i) => (
+                            <li key={`${i}-${src.slice(0, 24)}`} className="merch-admin-photo-tile">
+                              <img src={src} alt="" className="merch-admin-photo-img" />
+                              <button
+                                type="button"
+                                className="merch-admin-photo-remove"
+                                onClick={() =>
+                                  setEditingMerchById((prev) => ({
+                                    ...prev,
+                                    [product.id]: {
+                                      ...draft,
+                                      photos: draft.photos.filter((_, j) => j !== i),
+                                    },
+                                  }))
+                                }
+                                disabled={adminMerchBusy}
+                                aria-label="Remove photo"
+                              >
+                                ×
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
                     </label>
                     <div className="admin-ticket-request-actions">
                       <button
@@ -4735,10 +4849,15 @@ function AdminConsole({
                           const price = Number(draft.price.replace(',', '.'))
                           if (!title) return setAdminMerchError('Title is required.')
                           if (!Number.isFinite(price) || price < 0) return setAdminMerchError('Please enter a valid price.')
+                          if (draft.photos.length === 0) return setAdminMerchError('Add at least one photo URL.')
                           setAdminMerchBusy(true)
                           setAdminMerchError(null)
                           try {
-                            await onUpdateMerchandiseProduct(product.id, { title, priceEur: price })
+                            await onUpdateMerchandiseProduct(product.id, {
+                              title,
+                              priceEur: price,
+                              photos: draft.photos,
+                            })
                           } catch (err) {
                             setAdminMerchError(err instanceof Error ? err.message : 'Could not update product.')
                           } finally {
@@ -4894,32 +5013,23 @@ function AdminConsole({
             </label>
           </div>
           <label className="auth-field membership-field">
-            <span className="auth-label">Picture</span>
+            <span className="auth-label">Picture URL</span>
+            <p className="admin-news-image-hint">
+              Upload to Cloudinary (or similar), then paste the link — do not upload files directly.
+            </p>
             <input
               className="auth-input"
-              type="file"
-              accept="image/*"
+              type="text"
+              inputMode="url"
+              placeholder="https://res.cloudinary.com/.../membership-pack.jpg"
+              value={officialImageUrl}
+              onChange={(ev) => setOfficialImageUrl(ev.target.value)}
               disabled={officialBusy}
-              onChange={async (ev) => {
-                const file = ev.target.files?.[0]
-                if (!file) return
-                if (!file.type.startsWith('image/')) {
-                  setOfficialError('Please choose an image file.')
-                  return
-                }
-                try {
-                  const dataUrl = await resizeImageFileToJpegDataUrl(file, { maxEdge: 1200, quality: 0.88 })
-                  setOfficialImageUrl(dataUrl)
-                  setOfficialError(null)
-                } catch (e) {
-                  setOfficialError(e instanceof Error ? e.message : 'Could not process image.')
-                }
-              }}
             />
           </label>
-          {officialImageUrl && (
+          {officialImageUrl.trim() && isExternalImageUrl(officialImageUrl) && (
             <div className="merch-admin-photo-tile">
-              <img src={officialImageUrl} alt="" className="merch-admin-photo-img" />
+              <img src={officialImageUrl.trim()} alt="" className="merch-admin-photo-img" />
             </div>
           )}
           <button
@@ -4932,10 +5042,14 @@ function AdminConsole({
               const price = Number(officialPrice.replace(',', '.'))
               if (!title) return setOfficialError('Title is required.')
               if (!Number.isFinite(price) || price < 0) return setOfficialError('Please enter a valid price.')
-              if (!officialImageUrl) return setOfficialError('Picture is required.')
+              const imageUrl = officialImageUrl.trim()
+              if (!imageUrl) return setOfficialError('Picture URL is required.')
+              if (!isExternalImageUrl(imageUrl)) {
+                return setOfficialError('Enter a valid http(s) image URL (e.g. Cloudinary).')
+              }
               setOfficialBusy(true)
               try {
-                await onCreateOfficialOffer({ title, priceEur: price, imageUrl: officialImageUrl })
+                await onCreateOfficialOffer({ title, priceEur: price, imageUrl })
                 setOfficialTitle('')
                 setOfficialPrice('')
                 setOfficialImageUrl('')
@@ -4959,6 +5073,7 @@ function AdminConsole({
                 const draft = editingOfficialById[offer.id] ?? {
                   title: offer.title,
                   price: offer.priceEur.toFixed(2),
+                  imageUrl: offer.imageUrl,
                 }
                 return (
                 <li key={offer.id} className="merch-card">
@@ -5000,6 +5115,23 @@ function AdminConsole({
                           setEditingOfficialById((prev) => ({
                             ...prev,
                             [offer.id]: { ...draft, price: ev.target.value },
+                          }))
+                        }
+                        disabled={officialBusy}
+                      />
+                    </label>
+                    <label className="auth-field membership-field">
+                      <span className="auth-label">Edit picture URL</span>
+                      <input
+                        className="auth-input"
+                        type="text"
+                        inputMode="url"
+                        placeholder="https://res.cloudinary.com/.../membership-pack.jpg"
+                        value={draft.imageUrl}
+                        onChange={(ev) =>
+                          setEditingOfficialById((prev) => ({
+                            ...prev,
+                            [offer.id]: { ...draft, imageUrl: ev.target.value },
                           }))
                         }
                         disabled={officialBusy}
@@ -5059,10 +5191,15 @@ function AdminConsole({
                           const price = Number(draft.price.replace(',', '.'))
                           if (!title) return setOfficialError('Title is required.')
                           if (!Number.isFinite(price) || price < 0) return setOfficialError('Please enter a valid price.')
+                          const imageUrl = draft.imageUrl.trim()
+                          if (!imageUrl) return setOfficialError('Picture URL is required.')
+                          if (!isExternalImageUrl(imageUrl)) {
+                            return setOfficialError('Enter a valid http(s) image URL (e.g. Cloudinary).')
+                          }
                           setOfficialBusy(true)
                           setOfficialError(null)
                           try {
-                            await onUpdateOfficialOffer(offer.id, { title, priceEur: price })
+                            await onUpdateOfficialOffer(offer.id, { title, priceEur: price, imageUrl })
                           } catch (err) {
                             setOfficialError(err instanceof Error ? err.message : 'Could not update offer.')
                           } finally {
@@ -8450,7 +8587,7 @@ function App() {
             <ul className="contact-list">
               <li className="contact-card">
                 <p className="contact-role">Club Chairman</p>
-                <p className="contact-name">Demitris Nathanael</p>
+                <p className="contact-name">Demetris Nathanael</p>
                 <a className="contact-phone" href="tel:+35799472227">
                   +357 99 472 227
                 </a>
