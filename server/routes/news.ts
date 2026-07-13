@@ -1,7 +1,7 @@
 import { Router } from 'express'
 import { query } from '../db.ts'
 import { asyncHandler } from '../lib/asyncHandler.ts'
-import { badRequest } from '../lib/errors.ts'
+import { badRequest, notFound } from '../lib/errors.ts'
 import { env } from '../env.ts'
 import { pruneNewsPostsToLimit } from '../lib/pruneNewsPosts.ts'
 import { getCachedResponse, invalidateResponseCache, RESPONSE_CACHE_TTL_MS, responseCacheKeys } from '../lib/responseCache.ts'
@@ -19,6 +19,16 @@ type NewsRow = {
   updated_at: string
 }
 
+type NewsPreviewRow = {
+  id: string
+  title: string
+  excerpt: string
+  image_url: string | null
+  image_url_mobile: string | null
+  published_at: string
+  updated_at: string
+}
+
 function parseBodyPhotos(value: unknown): string[] {
   if (!Array.isArray(value)) return []
   return value.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
@@ -32,6 +42,18 @@ function mapNewsRow(r: NewsRow) {
     imageUrl: r.image_url,
     imageUrlMobile: r.image_url_mobile,
     bodyPhotos: parseBodyPhotos(r.body_photos),
+    publishedAt: r.published_at,
+    updatedAt: r.updated_at,
+  }
+}
+
+function mapNewsPreviewRow(r: NewsPreviewRow) {
+  return {
+    id: r.id,
+    title: r.title,
+    excerpt: r.excerpt,
+    imageUrl: r.image_url,
+    imageUrlMobile: r.image_url_mobile,
     publishedAt: r.published_at,
     updatedAt: r.updated_at,
   }
@@ -68,13 +90,19 @@ newsRouter.get(
   requireUser,
   asyncHandler(async (_req, res) => {
     const payload = await getCachedResponse(responseCacheKeys.news, RESPONSE_CACHE_TTL_MS, async () => {
-      const { rows } = await query<NewsRow>(
-        `select id, title, body, image_url, image_url_mobile, body_photos, published_at, updated_at
+      const { rows } = await query<NewsPreviewRow>(
+        `select id,
+                title,
+                left(regexp_replace(body, E'[\\n\\r]+', ' ', 'g'), 180) as excerpt,
+                image_url,
+                image_url_mobile,
+                published_at,
+                updated_at
          from public.news_posts
          where published_at <= now()
          order by published_at desc`,
       )
-      return { rows: rows.map(mapNewsRow) }
+      return { rows: rows.map(mapNewsPreviewRow) }
     })
     res.json(payload)
   }),
@@ -84,12 +112,35 @@ newsRouter.get(
   '/admin',
   requireAdmin,
   asyncHandler(async (_req, res) => {
-    const { rows } = await query<NewsRow>(
-      `select id, title, body, image_url, image_url_mobile, body_photos, published_at, updated_at
+    const { rows } = await query<NewsPreviewRow>(
+      `select id,
+              title,
+              left(regexp_replace(body, E'[\\n\\r]+', ' ', 'g'), 180) as excerpt,
+              image_url,
+              image_url_mobile,
+              published_at,
+              updated_at
        from public.news_posts
        order by published_at desc`,
     )
-    res.json({ rows: rows.map(mapNewsRow) })
+    res.json({ rows: rows.map(mapNewsPreviewRow) })
+  }),
+)
+
+newsRouter.get(
+  '/:id',
+  requireUser,
+  asyncHandler(async (req, res) => {
+    const { rows } = await query<NewsRow>(
+      `select id, title, body, image_url, image_url_mobile, body_photos, published_at, updated_at
+       from public.news_posts
+       where id = $1 and published_at <= now()
+       limit 1`,
+      [req.params.id],
+    )
+    const row = rows[0]
+    if (!row) throw notFound('News post not found')
+    res.json({ row: mapNewsRow(row) })
   }),
 )
 

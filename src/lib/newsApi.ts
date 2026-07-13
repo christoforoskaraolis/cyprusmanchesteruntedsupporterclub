@@ -1,17 +1,18 @@
 import { apiGet, apiSend, asError } from './apiClient'
 
-export type NewsPost = {
+export type NewsPostPreview = {
   id: string
   title: string
-  body: string
-  /** Desktop / PC card image (16:9). */
+  excerpt: string
   imageUrl: string | null
-  /** Smartphone card image (4:5 portrait). Falls back to imageUrl when null. */
   imageUrlMobile: string | null
-  /** Extra photos shown in the full article view (not the feed preview cards). */
-  bodyPhotos: string[]
   publishedAt: string
   updatedAt: string
+}
+
+export type NewsPost = NewsPostPreview & {
+  body: string
+  bodyPhotos: string[]
 }
 
 export type NewsPostPayload = {
@@ -22,43 +23,64 @@ export type NewsPostPayload = {
   bodyPhotos: string[]
 }
 
-export function newsDesktopImage(post: Pick<NewsPost, 'imageUrl'>): string | null {
+export function newsDesktopImage(post: Pick<NewsPostPreview, 'imageUrl'>): string | null {
   return post.imageUrl
 }
 
-export function newsMobileImage(post: Pick<NewsPost, 'imageUrl' | 'imageUrlMobile'>): string | null {
+export function newsMobileImage(post: Pick<NewsPostPreview, 'imageUrl' | 'imageUrlMobile'>): string | null {
   return post.imageUrlMobile ?? post.imageUrl
 }
 
-function mapNewsRows(rows: NewsPost[]) {
+function mapNewsPreviewRows(rows: NewsPostPreview[]) {
   return rows.map((row) => ({
     ...row,
     imageUrlMobile: row.imageUrlMobile ?? null,
-    bodyPhotos: Array.isArray(row.bodyPhotos) ? row.bodyPhotos : [],
+    excerpt: row.excerpt ?? '',
   }))
+}
+
+function mapNewsRow(row: NewsPost) {
+  return {
+    ...row,
+    imageUrlMobile: row.imageUrlMobile ?? null,
+    bodyPhotos: Array.isArray(row.bodyPhotos) ? row.bodyPhotos : [],
+    excerpt: row.excerpt ?? '',
+  }
 }
 
 export async function fetchNewsPosts() {
   try {
-    const data = await apiGet<{ rows: NewsPost[] }>('/api/news')
+    const data = await apiGet<{ rows: NewsPostPreview[] }>('/api/news')
     return {
-      rows: mapNewsRows(data.rows),
+      rows: mapNewsPreviewRows(data.rows),
       error: undefined,
     }
   } catch (error) {
-    return { rows: [] as NewsPost[], error: asError(error) }
+    return { rows: [] as NewsPostPreview[], error: asError(error) }
   }
 }
 
 export async function fetchAdminNewsPosts() {
   try {
-    const data = await apiGet<{ rows: NewsPost[] }>('/api/news/admin')
+    const data = await apiGet<{ rows: NewsPostPreview[] }>('/api/news/admin')
     return {
-      rows: mapNewsRows(data.rows),
+      rows: mapNewsPreviewRows(data.rows),
       error: undefined,
     }
   } catch (error) {
-    return { rows: [] as NewsPost[], error: asError(error) }
+    return { rows: [] as NewsPostPreview[], error: asError(error) }
+  }
+}
+
+export async function fetchNewsPostById(id: string) {
+  try {
+    const data = await apiGet<{ row: NewsPost }>(`/api/news/${encodeURIComponent(id)}`)
+    return {
+      row: mapNewsRow(data.row),
+      error: undefined,
+    }
+  } catch (error) {
+    return { row: null as NewsPost | null, error: asError(error) }
   }
 }
 

@@ -1,6 +1,7 @@
 import type { NextFunction, Request, Response } from 'express'
 import jwt from 'jsonwebtoken'
 import { query } from '../db.ts'
+import { getCachedAuthUser, setCachedAuthUser } from '../lib/authUserCache.ts'
 import { forbidden, unauthorized } from '../lib/errors.ts'
 import { env } from '../env.ts'
 
@@ -70,6 +71,10 @@ async function authenticate(req: Request): Promise<AuthenticatedUser | null> {
   if (!payload) return null
   const userId = payload.sub
   const email = payload.email ?? null
+
+  const cached = getCachedAuthUser(userId)
+  if (cached) return cached
+
   await ensureProfileRow(userId, email)
 
   const { rows } = await query<{ is_admin: boolean }>(`select is_admin from public.profiles where id = $1`, [userId])
@@ -80,7 +85,10 @@ async function authenticate(req: Request): Promise<AuthenticatedUser | null> {
     await query(`update public.profiles set is_admin = true where id = $1`, [userId])
     isAdmin = true
   }
-  return { id: userId, email, isAdmin }
+
+  const user = { id: userId, email, isAdmin }
+  setCachedAuthUser(user)
+  return user
 }
 
 export async function attachUser(req: Request, _res: Response, next: NextFunction) {

@@ -14,7 +14,7 @@ export const responseCacheKeys = {
   officialMemberships: 'GET /api/official-memberships',
 } as const
 
-export const RESPONSE_CACHE_TTL_MS = ONE_HOUR_MS
+export const RESPONSE_CACHE_TTL_MS = 4 * ONE_HOUR_MS
 
 export function invalidateResponseCache(key: string): void {
   store.delete(key)

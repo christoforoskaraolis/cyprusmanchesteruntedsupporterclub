@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { newsDesktopImage, newsMobileImage, type NewsPost } from '../lib/newsApi.ts'
+import { newsDesktopImage, newsMobileImage, type NewsPostPreview } from '../lib/newsApi.ts'
 
 type NewsFeedProps = {
-  posts: NewsPost[]
-  onReadPost: (post: NewsPost) => void
+  posts: NewsPostPreview[]
+  onReadPost: (post: NewsPostPreview) => void
   limit?: number
   idPrefix?: string
   /** Force desktop or mobile layout regardless of screen size (admin preview). */
@@ -14,14 +14,9 @@ type NewsFeedProps = {
   variant?: 'default' | 'home'
 }
 
-function newsBodyExcerpt(body: string, maxChars = 140): string {
-  const lines = body
-    .split(/\n/)
-    .map((l) => l.trim())
-    .filter(Boolean)
-  const first = lines[0] ?? ''
-  if (first.length >= 24 && first.length <= maxChars) return first
-  const flat = body.replace(/\s+/g, ' ').trim()
+function newsBodyExcerpt(post: Pick<NewsPostPreview, 'excerpt'>, maxChars = 140): string {
+  const flat = post.excerpt.replace(/\s+/g, ' ').trim()
+  if (!flat) return ''
   if (flat.length <= maxChars) return flat
   return `${flat.slice(0, Math.max(24, maxChars - 1)).trim()}…`
 }
@@ -124,7 +119,7 @@ export function NewsFeed({
                   <h2 id={titleId} className="news-feed-hero-title">
                     {post.title}
                   </h2>
-                  <p className="news-feed-hero-excerpt">{newsBodyExcerpt(post.body)}</p>
+                  <p className="news-feed-hero-excerpt">{newsBodyExcerpt(post)}</p>
                   <button
                     type="button"
                     className="news-feed-read-btn"

@@ -43,10 +43,12 @@ import { fetchCachedFixtures, syncFixturesFromManutd, type UpcomingFixture } fro
 import {
   deleteNewsPost,
   fetchAdminNewsPosts,
+  fetchNewsPostById,
   fetchNewsPosts,
   insertNewsPost,
   newsDesktopImage,
   type NewsPost,
+  type NewsPostPreview,
   type NewsPostPayload,
   updateNewsPost,
 } from './lib/newsApi.ts'
@@ -759,12 +761,13 @@ function RenewMembershipModal({
 
 type NewsDetailModalProps = {
   post: NewsPost | null
+  loading: boolean
   open: boolean
   onClose: () => void
 }
 
-function NewsDetailModal({ post, open, onClose }: NewsDetailModalProps) {
-  if (!open || !post) return null
+function NewsDetailModal({ post, loading, open, onClose }: NewsDetailModalProps) {
+  if (!open) return null
 
   return (
     <div
@@ -782,12 +785,16 @@ function NewsDetailModal({ post, open, onClose }: NewsDetailModalProps) {
       >
         <div className="renewal-modal-head">
           <h2 id="news-detail-title" className="renewal-modal-title news-detail-modal-title">
-            {post.title}
+            {post?.title ?? 'News'}
           </h2>
           <button type="button" className="renewal-modal-close" onClick={onClose} aria-label="Close">
             ×
           </button>
         </div>
+        {loading ? (
+          <p className="admin-empty">Loading article…</p>
+        ) : post ? (
+          <>
         <p className="news-detail-modal-date">
           Published: {new Date(post.publishedAt).toLocaleString('en-GB', { dateStyle: 'long', timeStyle: 'short' })}
         </p>
@@ -811,6 +818,10 @@ function NewsDetailModal({ post, open, onClose }: NewsDetailModalProps) {
             </div>
           ) : null}
         </div>
+          </>
+        ) : (
+          <p className="auth-message is-error">Could not load this article.</p>
+        )}
         <div className="renewal-modal-actions">
           <button type="button" className="mycmusc-reg-btn mycmusc-reg-btn--primary" onClick={onClose}>
             Close
@@ -2419,7 +2430,8 @@ type AdminConsoleProps = {
   ) => Promise<void>
   onUpdateTicketConfirmed: (requestId: string) => Promise<void>
   onRefreshTicketRequests: () => Promise<void>
-  newsPosts: NewsPost[]
+  onAdminTabChange?: (tab: AdminTab) => void
+  newsPosts: NewsPostPreview[]
   newsLoading: boolean
   onCreateNews: (payload: NewsPostPayload) => Promise<void>
   onUpdateNews: (id: string, payload: NewsPostPayload) => Promise<void>
@@ -2482,6 +2494,7 @@ function AdminConsole({
   onUpdateTicketBalancePayment,
   onUpdateTicketConfirmed,
   onRefreshTicketRequests,
+  onAdminTabChange,
   newsPosts,
   newsLoading,
   onCreateNews,
@@ -2518,6 +2531,11 @@ function AdminConsole({
 }: AdminConsoleProps) {
   const [adminTab, setAdminTab] = useState<AdminTab>('members')
   const [ticketRequestsRefreshing, setTicketRequestsRefreshing] = useState(false)
+
+  useEffect(() => {
+    onAdminTabChange?.(adminTab)
+  }, [adminTab, onAdminTabChange])
+
   const [filter, setFilter] = useState<AdminFilter>('all')
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [busyId, setBusyId] = useState<string | null>(null)
@@ -3040,15 +3058,20 @@ function AdminConsole({
     setNewsError(null)
   }
 
-  function beginEditNews(post: NewsPost) {
-    setEditingNewsId(post.id)
-    setNewsTitle(post.title)
-    setNewsBody(post.body)
-    setNewsImageUrl(post.imageUrl ?? '')
-    setNewsImageUrlMobile(post.imageUrlMobile ?? '')
-    setNewsBodyPhotos(post.bodyPhotos ?? [])
-    setNewsBodyPhotoUrlDraft('')
+  async function beginEditNews(post: NewsPostPreview) {
     setNewsError(null)
+    const { row, error } = await fetchNewsPostById(post.id)
+    if (error || !row) {
+      setNewsError(error?.message ?? 'Could not load this post for editing.')
+      return
+    }
+    setEditingNewsId(row.id)
+    setNewsTitle(row.title)
+    setNewsBody(row.body)
+    setNewsImageUrl(row.imageUrl ?? '')
+    setNewsImageUrlMobile(row.imageUrlMobile ?? '')
+    setNewsBodyPhotos(row.bodyPhotos ?? [])
+    setNewsBodyPhotoUrlDraft('')
     requestAnimationFrame(() => {
       newsFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
     })
@@ -4551,7 +4574,7 @@ function AdminConsole({
                     Published: {new Date(n.publishedAt).toLocaleString('en-GB')}
                   </p>
                   {n.imageUrl && <img src={n.imageUrl} alt={n.title} className="news-image" />}
-                  <p className="admin-news-card-body">{n.body}</p>
+                  <p className="admin-news-card-body">{n.excerpt}</p>
                   <div className="admin-news-card-actions">
                     <button
                       type="button"
@@ -6338,9 +6361,11 @@ function App() {
   const [myOfficialRequests, setMyOfficialRequests] = useState<OfficialMembershipRequest[]>([])
   const [adminOfficialRequests, setAdminOfficialRequests] = useState<AdminOfficialMembershipRequest[]>([])
   const [adminOfficialRequestsLoading, setAdminOfficialRequestsLoading] = useState(false)
-  const [newsPosts, setNewsPosts] = useState<NewsPost[]>([])
+  const [newsPosts, setNewsPosts] = useState<NewsPostPreview[]>([])
   const [newsLoading, setNewsLoading] = useState(false)
   const [newsDetailPost, setNewsDetailPost] = useState<NewsPost | null>(null)
+  const [newsDetailLoading, setNewsDetailLoading] = useState(false)
+  const [newsDetailOpen, setNewsDetailOpen] = useState(false)
   const [showCyprusMembershipForm, setShowCyprusMembershipForm] = useState(false)
   const [showFamilyMemberForm, setShowFamilyMemberForm] = useState(false)
   const [familyMembers, setFamilyMembers] = useState<MemberRegistryEntry[]>([])
@@ -6648,25 +6673,25 @@ function App() {
     setTicketFormSubmitting(false)
     closeTicketCompletionForm()
     await refreshFixtureTicketStates()
-    if (isAdmin) await loadAdminRegistry()
+    if (isAdmin) await refreshTicketRequestsOnly()
   }
 
   async function applyApproveTicketRequest(row: AdminFixtureTicketRequest) {
     const { error } = await setFixtureTicketRequestStatus(row.id, 'approved')
     if (error) throw new Error(error.message)
-    await loadAdminRegistry()
+    await refreshTicketRequestsOnly()
   }
 
   async function applyCompleteTicketRequest(row: AdminFixtureTicketRequest) {
     const { error } = await setFixtureTicketRequestStatus(row.id, 'completed')
     if (error) throw new Error(error.message)
-    await loadAdminRegistry()
+    await refreshTicketRequestsOnly()
   }
 
   async function applyCancelTicketRequest(row: AdminFixtureTicketRequest) {
     const { error } = await setFixtureTicketRequestStatus(row.id, 'cancelled')
     if (error) throw new Error(error.message)
-    await loadAdminRegistry()
+    await refreshTicketRequestsOnly()
   }
 
   async function applyUpdateTicketDepositConfirmed(requestId: string, depositConfirmed: boolean) {
@@ -6703,7 +6728,7 @@ function App() {
   async function applyUpdateMerchandiseOrderStatus(orderId: string, status: MerchandiseOrderStatus) {
     const { error } = await updateMerchandiseOrderStatus(orderId, status)
     if (error) throw new Error(error.message)
-    await loadAdminRegistry()
+    await loadAdminMerchandiseOrdersData()
   }
 
   async function applyCreateNews(payload: NewsPostPayload) {
@@ -6796,6 +6821,26 @@ function App() {
       return
     }
     setNewsPosts(rows)
+  }, [])
+
+  const openNewsDetail = useCallback(async (preview: NewsPostPreview) => {
+    setNewsDetailOpen(true)
+    setNewsDetailLoading(true)
+    setNewsDetailPost(null)
+    const { row, error } = await fetchNewsPostById(preview.id)
+    setNewsDetailLoading(false)
+    if (error || !row) {
+      console.error(error ?? 'News post not found')
+      setNewsDetailOpen(false)
+      return
+    }
+    setNewsDetailPost(row)
+  }, [])
+
+  const closeNewsDetail = useCallback(() => {
+    setNewsDetailOpen(false)
+    setNewsDetailLoading(false)
+    setNewsDetailPost(null)
   }, [])
 
   const loadMerchandiseProducts = useCallback(async () => {
@@ -6971,7 +7016,7 @@ function App() {
     const { error } = await setAdminOfficialMembershipRequestStatus(requestId, status, options)
     if (error) throw error
     await loadAdminOfficialRequests()
-    await loadAdminRegistry()
+    await reloadMemberRegistryOnly()
     await refreshMyMembership()
   }
 
@@ -7131,22 +7176,17 @@ function App() {
     })()
   }, [verifyEmail])
 
-  const loadAdminRegistry = useCallback(async () => {
+  const loadAdminMembersData = useCallback(async () => {
     if (!isAdmin) return
     setRegistryLoading(true)
     setAdminUsersLoading(true)
-    setOfficialOffersLoading(true)
-    const [{ rows, error }, renewRes, ticketRes, merchRes, adminsRes, officialRes] = await Promise.all([
+    const [{ rows, error }, renewRes, adminsRes] = await Promise.all([
       fetchAllMembershipApplications(),
       fetchPendingRenewalRequests(),
-      fetchPendingFixtureTicketRequests(),
-      fetchAllMerchandiseOrders(),
       fetchAdminUsers(),
-      fetchOfficialMembershipOffers(),
     ])
     setRegistryLoading(false)
     setAdminUsersLoading(false)
-    setOfficialOffersLoading(false)
     if (error) {
       console.error(error)
       setMemberRegistry([])
@@ -7159,31 +7199,49 @@ function App() {
     } else {
       setPendingRenewals(renewRes.rows)
     }
-    if (ticketRes.error) {
-      console.error(ticketRes.error)
-      setPendingTicketRequests([])
-    } else {
-      setPendingTicketRequests(ticketRes.rows)
-    }
-    if (merchRes.error) {
-      console.error(merchRes.error)
-      setAdminMerchandiseOrders([])
-    } else {
-      setAdminMerchandiseOrders(merchRes.rows)
-    }
     if (adminsRes.error) {
       console.error(adminsRes.error)
       setAdminUsers([])
     } else {
       setAdminUsers(adminsRes.rows)
     }
-    if (officialRes.error) {
-      console.error(officialRes.error)
-      setOfficialOffers([])
+  }, [isAdmin])
+
+  const loadAdminMerchandiseOrdersData = useCallback(async () => {
+    if (!isAdmin) return
+    const merchRes = await fetchAllMerchandiseOrders()
+    if (merchRes.error) {
+      console.error(merchRes.error)
+      setAdminMerchandiseOrders([])
     } else {
-      setOfficialOffers(officialRes.rows)
+      setAdminMerchandiseOrders(merchRes.rows)
     }
   }, [isAdmin])
+
+  const handleAdminTabChange = useCallback(
+    (tab: AdminTab) => {
+      if (!isAdmin) return
+      switch (tab) {
+        case 'members':
+        case 'email':
+          void loadAdminMembersData()
+          break
+        case 'ticketRequests':
+          void refreshTicketRequestsOnly()
+          break
+        case 'merch':
+          void loadAdminMerchandiseOrdersData()
+          break
+        case 'official':
+          void loadAdminOfficialRequests()
+          void loadOfficialOffers()
+          break
+        default:
+          break
+      }
+    },
+    [isAdmin, loadAdminMembersData, loadAdminMerchandiseOrdersData, loadAdminOfficialRequests, loadOfficialOffers, refreshTicketRequestsOnly],
+  )
 
   const reloadMemberRegistryOnly = useCallback(async () => {
     if (!isAdmin) return
@@ -7223,12 +7281,8 @@ function App() {
   }, [isAdminRoute, refreshAdminStatus])
 
   useEffect(() => {
-    if (isAdminRoute && isAdmin) void loadAdminRegistry()
-  }, [isAdminRoute, isAdmin, loadAdminRegistry])
-
-  useEffect(() => {
-    if (isAdminRoute && isAdmin) void loadAdminOfficialRequests()
-  }, [isAdminRoute, isAdmin, loadAdminOfficialRequests])
+    if (isAdminRoute && isAdmin) void loadAdminMembersData()
+  }, [isAdminRoute, isAdmin, loadAdminMembersData])
 
   useEffect(() => {
     if (isAdminRoute && mode === 'create-account') setMode('sign-in')
@@ -7410,14 +7464,14 @@ function App() {
   ) {
     const { error } = await updateApplicationMemberId(applicationId, memberId, officialMuMembershipStatus)
     if (error) throw new Error(error.message)
-    await loadAdminRegistry()
+    await reloadMemberRegistryOnly()
     await refreshMyMembership()
   }
 
   async function applyUpdateMembershipNumber(applicationId: string, membershipNumber: number | null) {
     const { error } = await updateApplicationMembershipNumber(applicationId, membershipNumber)
     if (error) throw new Error(error.message)
-    await loadAdminRegistry()
+    await reloadMemberRegistryOnly()
     await refreshMyMembership()
   }
 
@@ -7474,7 +7528,7 @@ function App() {
     const nextUntil = nextSeasonValidUntilIso(currentVu)
     const { error } = await completeRenewalRequest(row.id, row.application_id, nextUntil)
     if (error) throw new Error(error.message)
-    await loadAdminRegistry()
+    await loadAdminMembersData()
     await refreshMyMembership()
   }
 
@@ -8155,6 +8209,7 @@ function App() {
               onReorderOfficialOffers={applyReorderOfficialOffers}
               onSetOfficialRequestStatus={applySetOfficialRequestStatus}
               onDeleteOfficialRequest={applyDeleteOfficialRequest}
+              onAdminTabChange={handleAdminTabChange}
             />
           ) : (
             <div className="section-page admin-page">
@@ -8563,8 +8618,9 @@ function App() {
         />
         <NewsDetailModal
           post={newsDetailPost}
-          open={newsDetailPost !== null}
-          onClose={() => setNewsDetailPost(null)}
+          loading={newsDetailLoading}
+          open={newsDetailOpen}
+          onClose={closeNewsDetail}
         />
         {activePage === 'board' && (
           <div className="board-page">
@@ -8674,7 +8730,7 @@ function App() {
                 No posts yet. Club announcements and matchday updates will appear here.
               </p>
             ) : (
-              <NewsFeed posts={newsPosts} onReadPost={setNewsDetailPost} idPrefix="news-page" />
+              <NewsFeed posts={newsPosts} onReadPost={openNewsDetail} idPrefix="news-page" />
             )}
           </div>
         )}
@@ -9709,7 +9765,7 @@ function App() {
               <>
                 <NewsFeed
                   posts={newsPosts}
-                  onReadPost={setNewsDetailPost}
+                  onReadPost={openNewsDetail}
                   limit={3}
                   variant="home"
                   idPrefix="home-news"

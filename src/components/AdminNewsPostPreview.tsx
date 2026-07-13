@@ -1,5 +1,5 @@
 import { NewsFeed } from './NewsFeed.tsx'
-import type { NewsPost } from '../lib/newsApi.ts'
+import type { NewsPostPreview } from '../lib/newsApi.ts'
 
 type AdminNewsPostPreviewProps = {
   title: string
@@ -9,6 +9,15 @@ type AdminNewsPostPreviewProps = {
   publishedAt: string
 }
 
+function newsExcerptFromBody(body: string, maxChars = 140): string {
+  const flat = body.replace(/\s+/g, ' ').trim()
+  if (!flat) {
+    return 'Your news content will appear here as a short excerpt on the cards. The full text opens when members tap Read.'
+  }
+  if (flat.length <= maxChars) return flat
+  return `${flat.slice(0, Math.max(24, maxChars - 1)).trim()}…`
+}
+
 export function AdminNewsPostPreview({
   title,
   body,
@@ -16,15 +25,12 @@ export function AdminNewsPostPreview({
   imageUrlMobile,
   publishedAt,
 }: AdminNewsPostPreviewProps) {
-  const previewPost: NewsPost = {
+  const previewPost: NewsPostPreview = {
     id: 'admin-preview',
     title: title.trim() || 'News headline preview',
-    body:
-      body.trim() ||
-      'Your news content will appear here as a short excerpt on the cards. The full text opens when members tap Read.',
+    excerpt: newsExcerptFromBody(body),
     imageUrl,
     imageUrlMobile,
-    bodyPhotos: [],
     publishedAt,
     updatedAt: publishedAt,
   }
