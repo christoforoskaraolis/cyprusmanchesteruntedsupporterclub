@@ -2532,9 +2532,10 @@ function AdminConsole({
   const [adminTab, setAdminTab] = useState<AdminTab>('members')
   const [ticketRequestsRefreshing, setTicketRequestsRefreshing] = useState(false)
 
-  useEffect(() => {
-    onAdminTabChange?.(adminTab)
-  }, [adminTab, onAdminTabChange])
+  function selectAdminTab(tab: AdminTab) {
+    setAdminTab(tab)
+    onAdminTabChange?.(tab)
+  }
 
   const [filter, setFilter] = useState<AdminFilter>('all')
   const [expandedId, setExpandedId] = useState<string | null>(null)
@@ -3119,7 +3120,7 @@ function AdminConsole({
               role="tab"
               aria-selected={adminTab === 'members'}
               className={`admin-main-tab ${adminTab === 'members' ? 'is-active' : ''}`}
-              onClick={() => setAdminTab('members')}
+              onClick={() => selectAdminTab('members')}
             >
               Members
             </button>
@@ -3128,7 +3129,7 @@ function AdminConsole({
               role="tab"
               aria-selected={adminTab === 'tickets'}
               className={`admin-main-tab ${adminTab === 'tickets' ? 'is-active' : ''}`}
-              onClick={() => setAdminTab('tickets')}
+              onClick={() => selectAdminTab('tickets')}
             >
               Tickets
             </button>
@@ -3138,7 +3139,7 @@ function AdminConsole({
               aria-selected={adminTab === 'ticketRequests'}
               className={`admin-main-tab ${adminTab === 'ticketRequests' ? 'is-active' : ''}`}
               onClick={() => {
-                setAdminTab('ticketRequests')
+                selectAdminTab('ticketRequests')
                 setTicketRequestsRefreshing(true)
                 void onRefreshTicketRequests().finally(() => setTicketRequestsRefreshing(false))
               }}
@@ -3155,7 +3156,7 @@ function AdminConsole({
               role="tab"
               aria-selected={adminTab === 'news'}
               className={`admin-main-tab ${adminTab === 'news' ? 'is-active' : ''}`}
-              onClick={() => setAdminTab('news')}
+              onClick={() => selectAdminTab('news')}
             >
               News
             </button>
@@ -3164,7 +3165,7 @@ function AdminConsole({
               role="tab"
               aria-selected={adminTab === 'merch'}
               className={`admin-main-tab ${adminTab === 'merch' ? 'is-active' : ''}`}
-              onClick={() => setAdminTab('merch')}
+              onClick={() => selectAdminTab('merch')}
             >
               Merchandise orders
             </button>
@@ -3173,7 +3174,7 @@ function AdminConsole({
               role="tab"
               aria-selected={adminTab === 'official'}
               className={`admin-main-tab ${adminTab === 'official' ? 'is-active' : ''}`}
-              onClick={() => setAdminTab('official')}
+              onClick={() => selectAdminTab('official')}
             >
               Official memberships
             </button>
@@ -3182,7 +3183,7 @@ function AdminConsole({
               role="tab"
               aria-selected={adminTab === 'email'}
               className={`admin-main-tab ${adminTab === 'email' ? 'is-active' : ''}`}
-              onClick={() => setAdminTab('email')}
+              onClick={() => selectAdminTab('email')}
             >
               Email
             </button>
@@ -6719,11 +6720,11 @@ function App() {
     await refreshTicketRequestsOnly()
   }
 
-  async function refreshTicketRequestsOnly() {
+  const refreshTicketRequestsOnly = useCallback(async () => {
     const { rows, error } = await fetchPendingFixtureTicketRequests()
     if (error) throw new Error(error.message)
     setPendingTicketRequests(rows)
-  }
+  }, [])
 
   async function applyUpdateMerchandiseOrderStatus(orderId: string, status: MerchandiseOrderStatus) {
     const { error } = await updateMerchandiseOrderStatus(orderId, status)
