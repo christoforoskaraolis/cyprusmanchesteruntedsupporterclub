@@ -8,6 +8,7 @@ import { sendMembershipPaymentReminderEmail } from '../lib/membershipPaymentRemi
 import { sendMembershipPresentReceivedEmail } from '../lib/membershipPresentReceivedEmail.ts'
 import { sendMembershipPurchasedMembershipEmail } from '../lib/membershipPurchasedMembershipEmail.ts'
 import { parseOfficialMuMembershipFields, resolveUserOfficialMuMembershipUpdate } from '../lib/officialMuMembership.ts'
+import { autoCompletePendingOfficialMembershipRequests } from '../lib/autoCompleteOfficialMembershipRequests.ts'
 import { requireAdmin, requireUser } from '../middleware/auth.ts'
 
 export const membershipRouter = Router()
@@ -563,16 +564,37 @@ membershipRouter.put(
       }
     }
 
-    const { rows } = await query<{ application_id: string }>(
+    const { rows: existingRows } = await query<{
+      user_id: string
+      admin_member: boolean
+    }>(
+      `select user_id, admin_member
+       from public.membership_applications
+       where application_id = $1
+       limit 1`,
+      [applicationId],
+    )
+    const existingApp = existingRows[0]
+    if (!existingApp) throw notFound('Membership request not found')
+
+    const { rows } = await query<{ application_id: string; official_mu_membership_status: string | null }>(
       `update public.membership_applications
        set official_mu_membership_id = $1,
            official_mu_membership_status = $2
        where application_id = $3
-       returning application_id`,
+       returning application_id, official_mu_membership_status`,
       [officialMuId || null, officialMuStatus, applicationId],
     )
     if (rows.length === 0) throw notFound('Membership request not found')
-    res.json({ ok: true })
+
+    const autoCompletedOfficialRequests = await autoCompletePendingOfficialMembershipRequests(null, {
+      applicationId,
+      userId: existingApp.user_id,
+      officialMuMembershipStatus: rows[0].official_mu_membership_status,
+      adminMember: existingApp.admin_member === true,
+    })
+
+    res.json({ ok: true, autoCompletedOfficialRequests })
   }),
 )
 
@@ -641,10 +663,11 @@ membershipRouter.put(
 
     const { rows: existingRows } = await query<{
       admin_member: boolean
+      user_id: string
       profile_email: string | null
       auth_email: string | null
     }>(
-      `select ma.admin_member, p.email as profile_email, au.email as auth_email
+      `select ma.admin_member, ma.user_id, p.email as profile_email, au.email as auth_email
        from public.membership_applications ma
        left join public.profiles p on p.id = ma.user_id
        left join public.auth_users au on au.user_id = ma.user_id
@@ -696,6 +719,13 @@ membershipRouter.put(
     }
 
     const row = rows[0]
+    const autoCompletedOfficialRequests = await autoCompletePendingOfficialMembershipRequests(null, {
+      applicationId,
+      userId: existing.user_id,
+      officialMuMembershipStatus: row.official_mu_membership_status,
+      adminMember: row.admin_member === true,
+    })
+
     res.json({
       ok: true,
       member: row.admin_member,
@@ -706,6 +736,7 @@ membershipRouter.put(
         row.official_mu_membership_status === 'activated' || row.official_mu_membership_status === 'pending'
           ? row.official_mu_membership_status
           : null,
+      autoCompletedOfficialRequests,
     })
   }),
 )

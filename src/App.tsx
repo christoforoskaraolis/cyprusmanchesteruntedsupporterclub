@@ -7841,6 +7841,8 @@ function App() {
     if (error) throw new Error(error.message)
     await reloadMemberRegistryOnly()
     await refreshMyMembership()
+    void loadAdminOfficialRequests()
+    void loadMyOfficialRequests()
   }
 
   async function applyUpdateMembershipNumber(applicationId: string, membershipNumber: number | null) {
@@ -7893,6 +7895,8 @@ function App() {
       }),
     )
     void reloadMemberRegistryOnly()
+    void loadAdminOfficialRequests()
+    void loadMyOfficialRequests()
   }
 
   async function applyCompleteRenewal(row: PendingRenewalListRow) {

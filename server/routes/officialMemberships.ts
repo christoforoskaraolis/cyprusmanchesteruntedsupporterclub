@@ -4,6 +4,7 @@ import { asyncHandler } from '../lib/asyncHandler.ts'
 import { badRequest } from '../lib/errors.ts'
 import { requireExternalImageUrl } from '../lib/externalImageUrl.ts'
 import { parseOfficialMuMembershipFields } from '../lib/officialMuMembership.ts'
+import { autoCompleteOfficialRequestsForApplication } from '../lib/autoCompleteOfficialMembershipRequests.ts'
 import { reorderSortOrderRows } from '../lib/reorderSortOrder.ts'
 import { getCachedResponse, invalidateResponseCache, RESPONSE_CACHE_TTL_MS, responseCacheKeys } from '../lib/responseCache.ts'
 import { requireAdmin, requireUser } from '../middleware/auth.ts'
@@ -297,6 +298,26 @@ officialMembershipsRouter.post(
        values ($1, $2, 'pending', $3)`,
       [req.user!.id, offerId, linkedApplicationId],
     )
-    res.status(201).json({ ok: true })
+
+    const applicationIdForAutoComplete =
+      linkedApplicationId ??
+      (
+        await query<{ application_id: string }>(
+          `select application_id
+           from public.membership_applications
+           where user_id = $1 and sponsor_application_id is null
+           order by case status when 'active' then 0 when 'pending' then 1 else 2 end, submitted_at desc
+           limit 1`,
+          [req.user!.id],
+        )
+      ).rows[0]?.application_id ??
+      null
+
+    let autoCompletedOfficialRequests = 0
+    if (applicationIdForAutoComplete) {
+      autoCompletedOfficialRequests = await autoCompleteOfficialRequestsForApplication(applicationIdForAutoComplete)
+    }
+
+    res.status(201).json({ ok: true, autoCompletedOfficialRequests })
   }),
 )
