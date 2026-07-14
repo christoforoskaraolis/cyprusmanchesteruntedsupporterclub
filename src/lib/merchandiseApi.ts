@@ -5,8 +5,19 @@ export type MerchandiseProduct = {
   title: string
   priceEur: number
   photos: string[]
+  stockQuantity: number
   createdAt: string
   updatedAt: string
+}
+
+export function formatMerchandiseAvailability(stockQuantity: number): string {
+  if (stockQuantity <= 0) return 'Out of stock'
+  if (stockQuantity === 1) return '1 available'
+  return `${stockQuantity} available`
+}
+
+export function isMerchandiseInStock(stockQuantity: number): boolean {
+  return stockQuantity > 0
 }
 
 export type MerchandiseOrderLine = {
@@ -41,6 +52,7 @@ export async function insertMerchandiseProduct(payload: {
   title: string
   priceEur: number
   photos: string[]
+  stockQuantity: number
   userId: string | null
 }) {
   void payload.userId
@@ -63,7 +75,7 @@ export async function deleteMerchandiseProduct(id: string) {
 
 export async function updateMerchandiseProduct(
   id: string,
-  payload: { title: string; priceEur: number; photos?: string[] },
+  payload: { title: string; priceEur: number; photos?: string[]; stockQuantity?: number },
 ) {
   try {
     await apiSend(`/api/merchandise/products/${id}`, 'PUT', payload)

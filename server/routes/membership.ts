@@ -753,6 +753,110 @@ membershipRouter.put(
   }),
 )
 
+membershipRouter.put(
+  '/applications/:applicationId/details',
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const applicationId = String(req.params.applicationId ?? '').trim()
+    if (!applicationId) throw badRequest('Application ID is required')
+
+    const p = req.body as {
+      firstName?: string
+      lastName?: string
+      mobilePhone?: string
+      dateOfBirth?: string
+      address?: string
+      area?: string
+      postalCode?: string
+      city?: string
+      country?: string
+      familyRelationship?: string
+      familyRelationshipOther?: string
+    }
+
+    const firstName = (p.firstName ?? '').trim()
+    const lastName = (p.lastName ?? '').trim()
+    const mobilePhone = (p.mobilePhone ?? '').trim()
+    const dateOfBirth = (p.dateOfBirth ?? '').trim()
+    const address = (p.address ?? '').trim()
+    const area = (p.area ?? '').trim()
+    const postalCode = (p.postalCode ?? '').trim()
+    const city = (p.city ?? '').trim()
+    const country = (p.country ?? '').trim()
+
+    if (!firstName || !lastName) throw badRequest('First and last name are required.')
+    if (!mobilePhone || !dateOfBirth || !address || !area || !postalCode || !city || !country) {
+      throw badRequest('Please complete all required contact and address fields.')
+    }
+
+    const { rows: existingRows } = await query<{
+      id: string
+      user_id: string
+      sponsor_application_id: string | null
+    }>(
+      `select id, user_id, sponsor_application_id
+       from public.membership_applications
+       where application_id = $1
+       limit 1`,
+      [applicationId],
+    )
+    const existing = existingRows[0]
+    if (!existing) throw notFound('Membership request not found')
+
+    let familyRelationship: string | null = null
+    let familyRelationshipOther: string | null = null
+    if (existing.sponsor_application_id) {
+      const rel = (p.familyRelationship ?? '').trim()
+      if (!rel || !FAMILY_RELATIONSHIPS.has(rel)) {
+        throw badRequest('Please select a valid family relationship.')
+      }
+      familyRelationshipOther = (p.familyRelationshipOther ?? '').trim() || null
+      if (rel === 'other' && !familyRelationshipOther) {
+        throw badRequest('Please describe the family relationship when you select Other.')
+      }
+      if (rel !== 'other') familyRelationshipOther = null
+      familyRelationship = rel
+    }
+
+    await query(
+      `update public.membership_applications
+       set first_name = $2,
+           last_name = $3,
+           mobile_phone = $4,
+           date_of_birth = $5,
+           address = $6,
+           area = $7,
+           postal_code = $8,
+           city = $9,
+           country = $10,
+           family_relationship = coalesce($11, family_relationship),
+           family_relationship_other = coalesce($12, family_relationship_other)
+       where id = $1`,
+      [
+        existing.id,
+        firstName,
+        lastName,
+        mobilePhone,
+        dateOfBirth,
+        address,
+        area,
+        postalCode,
+        city,
+        country,
+        familyRelationship,
+        familyRelationshipOther,
+      ],
+    )
+
+    if (!existing.sponsor_application_id) {
+      const fullName = `${firstName} ${lastName}`.trim()
+      await query(`update public.profiles set full_name = $2 where id = $1`, [existing.user_id, fullName || null])
+    }
+
+    res.json({ ok: true })
+  }),
+)
+
 membershipRouter.delete(
   '/applications/:applicationId',
   requireAdmin,

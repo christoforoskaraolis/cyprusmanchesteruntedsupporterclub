@@ -6,6 +6,7 @@ import {
   type DbRenewalRequest,
   type MemberApplicationPayload,
   type MemberRegistryEntry,
+  type AdminMemberDetailsPayload,
   type MyProfileRow,
   type PendingRenewalListRow,
   completeRenewalRequest,
@@ -34,6 +35,7 @@ import {
   setApplicationStatus,
   updateApplicationMemberId,
   updateApplicationMembershipNumber,
+  updateApplicationMemberDetails,
   updateApplicationPresentReceived,
   updateApplicationAdminMemberFlags,
   updateFamilyMemberDetails,
@@ -80,8 +82,10 @@ import {
   fetchAllMerchandiseOrders,
   fetchMerchandiseProducts,
   fetchMyMerchandiseOrders,
+  formatMerchandiseAvailability,
   insertMerchandiseOrder,
   insertMerchandiseProduct,
+  isMerchandiseInStock,
   reorderMerchandiseProducts,
   updateMerchandiseProduct,
   updateMerchandiseOrderStatus,
@@ -833,7 +837,7 @@ function NewsDetailModal({ post, loading, open, onClose }: NewsDetailModalProps)
 }
 
 type AdminFilter = 'all' | 'pending' | 'active'
-type AdminTab = 'members' | 'tickets' | 'ticketRequests' | 'news' | 'merch' | 'official' | 'email'
+type AdminTab = 'members' | 'admins' | 'tickets' | 'ticketRequests' | 'news' | 'merch' | 'official' | 'email'
 type AdminTicketFilter = 'pending' | 'approved' | 'completed' | 'cancelled'
 
 function isTicketRequestCancelled(request: {
@@ -2395,6 +2399,32 @@ function TicketDepositConfirmModal({
   )
 }
 
+type AdminMemberDetailsDraft = AdminMemberDetailsPayload & {
+  familyRelationship: string
+  familyRelationshipOther: string
+}
+
+function adminMemberDetailsDraftFromEntry(
+  entry: MemberRegistryEntry,
+  drafts: Record<string, AdminMemberDetailsDraft>,
+): AdminMemberDetailsDraft {
+  return (
+    drafts[entry.applicationId] ?? {
+      firstName: entry.firstName,
+      lastName: entry.lastName,
+      mobilePhone: entry.mobilePhone,
+      dateOfBirth: dateOfBirthToDateInputValue(entry.dateOfBirth),
+      address: entry.address,
+      area: entry.area,
+      postalCode: entry.postalCode,
+      city: entry.city,
+      country: entry.country,
+      familyRelationship: entry.familyRelationship ?? '',
+      familyRelationshipOther: entry.familyRelationshipOther ?? '',
+    }
+  )
+}
+
 type AdminConsoleProps = {
   memberRegistry: MemberRegistryEntry[]
   loading: boolean
@@ -2409,6 +2439,7 @@ type AdminConsoleProps = {
     memberId: string,
     officialMuMembershipStatus: OfficialMuMembershipStatus | null,
   ) => Promise<void>
+  onUpdateMemberDetails: (applicationId: string, payload: AdminMemberDetailsPayload) => Promise<void>
   onUpdateMembershipNumber: (applicationId: string, membershipNumber: number | null) => Promise<void>
   onUpdatePresentReceived: (applicationId: string, presentReceived: boolean) => Promise<void>
   onUpdateAdminMemberFlags: (
@@ -2439,8 +2470,16 @@ type AdminConsoleProps = {
   merchandiseOrders: MerchandiseOrderRow[]
   onUpdateMerchandiseOrderStatus: (orderId: string, status: MerchandiseOrderStatus) => Promise<void>
   merchandiseProducts: MerchandiseProduct[]
-  onCreateMerchandiseProduct: (payload: { title: string; priceEur: number; photos: string[] }) => Promise<void>
-  onUpdateMerchandiseProduct: (id: string, payload: { title: string; priceEur: number; photos?: string[] }) => Promise<void>
+  onCreateMerchandiseProduct: (payload: {
+    title: string
+    priceEur: number
+    photos: string[]
+    stockQuantity: number
+  }) => Promise<void>
+  onUpdateMerchandiseProduct: (
+    id: string,
+    payload: { title: string; priceEur: number; photos?: string[]; stockQuantity?: number },
+  ) => Promise<void>
   onDeleteMerchandiseProduct: (id: string) => Promise<void>
   onReorderMerchandiseProducts: (ids: string[]) => Promise<void>
   ticketFixtures: UpcomingFixture[]
@@ -2483,6 +2522,7 @@ function AdminConsole({
   onSetPending,
   onDeleteMemberRequest,
   onUpdateMemberId,
+  onUpdateMemberDetails,
   onUpdateMembershipNumber,
   onUpdatePresentReceived,
   onUpdateAdminMemberFlags,
@@ -2564,12 +2604,13 @@ function AdminConsole({
   const [ticketMaxTicketsError, setTicketMaxTicketsError] = useState<string | null>(null)
   const [adminMerchTitle, setAdminMerchTitle] = useState('')
   const [adminMerchPrice, setAdminMerchPrice] = useState('')
+  const [adminMerchStock, setAdminMerchStock] = useState('')
   const [adminMerchPhotos, setAdminMerchPhotos] = useState<string[]>([])
   const [adminMerchPhotoUrlDraft, setAdminMerchPhotoUrlDraft] = useState('')
   const [adminMerchBusy, setAdminMerchBusy] = useState(false)
   const [adminMerchError, setAdminMerchError] = useState<string | null>(null)
   const [editingMerchById, setEditingMerchById] = useState<
-    Record<string, { title: string; price: string; photos: string[]; photoUrlDraft: string }>
+    Record<string, { title: string; price: string; stock: string; photos: string[]; photoUrlDraft: string }>
   >({})
   const [newAdminEmail, setNewAdminEmail] = useState('')
   const [adminUsersBusy, setAdminUsersBusy] = useState(false)
@@ -2592,6 +2633,9 @@ function AdminConsole({
     Record<string, OfficialMuMembershipFormStatus>
   >({})
   const [membershipNumberDraftByApplicationId, setMembershipNumberDraftByApplicationId] = useState<Record<string, string>>({})
+  const [memberDetailsDraftByApplicationId, setMemberDetailsDraftByApplicationId] = useState<
+    Record<string, AdminMemberDetailsDraft>
+  >({})
   const [memberActionError, setMemberActionError] = useState<string | null>(null)
   const [memberActionNotice, setMemberActionNotice] = useState<string | null>(null)
   const [paymentReminderTarget, setPaymentReminderTarget] = useState<MemberRegistryEntry | null>(null)
@@ -2877,22 +2921,35 @@ function AdminConsole({
       r.balancePaymentNotifiedAt ?? '',
       r.balancePaymentDeadline ?? '',
       String(1 + r.travelCompanions.length),
-      r.travelCompanions
-        .map((c) => {
+      [
+        [
+          'Requester',
+          r.user.membershipNumber != null ? formatMembershipNumber(r.user.membershipNumber) : '',
+          r.user.fullName ?? '',
+          r.user.mobilePhone ?? '',
+          r.user.email ?? '',
+          `${formatOfficialMuMembershipId(r.user.officialMuMembershipId)}${
+            r.user.officialMuMembershipStatus
+              ? ` (${formatOfficialMuMembershipStatus(r.user.officialMuMembershipStatus)})`
+              : ''
+          }`,
+        ].join(' / '),
+        ...r.travelCompanions.map((c) => {
           const officialMu = `${formatOfficialMuMembershipId(c.officialMuMembershipId)}${
             c.officialMuMembershipStatus
               ? ` (${formatOfficialMuMembershipStatus(c.officialMuMembershipStatus)})`
               : ''
           }`
           return [
+            'Travel companion',
             formatMembershipNumber(c.membershipNumber),
             c.fullName ?? '',
             c.mobilePhone ?? '',
             c.email ?? '',
             officialMu,
           ].join(' / ')
-        })
-        .join(' | '),
+        }),
+      ].join(' | '),
     ])
     downloadCsv(`tickets-report-${reportStamp()}.csv`, headers, rows)
   }
@@ -3107,8 +3164,8 @@ function AdminConsole({
           </div>
         </div>
         <p className="admin-page-hint">
-          Admin access is granted via <strong>Admin users</strong> above, or by setting{' '}
-          <code className="admin-inline-code">profiles.is_admin</code> in the Neon database.
+          Manage membership applications, renewals, and member records. Admin access is configured under the{' '}
+          <strong>Admins</strong> tab.
         </p>
       </header>
 
@@ -3123,6 +3180,15 @@ function AdminConsole({
               onClick={() => selectAdminTab('members')}
             >
               Members
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={adminTab === 'admins'}
+              className={`admin-main-tab ${adminTab === 'admins' ? 'is-active' : ''}`}
+              onClick={() => selectAdminTab('admins')}
+            >
+              Admins
             </button>
             <button
               type="button"
@@ -3193,73 +3259,6 @@ function AdminConsole({
         <div className="admin-content">
       {adminTab === 'members' && (
         <>
-      <section className="admin-panel-block" aria-label="Admin users">
-        <div className="admin-block-head">
-          <h2 className="admin-block-title">Admin users</h2>
-          <p className="admin-block-lead">Add admin accounts by email. User must sign in at least once first.</p>
-        </div>
-        <div className="admin-merch-create-row">
-          <input
-            className="admin-merch-create-input"
-            type="email"
-            placeholder="admin@example.com"
-            value={newAdminEmail}
-            onChange={(e) => setNewAdminEmail(e.target.value)}
-            disabled={adminUsersBusy}
-          />
-          <button
-            type="button"
-            className="admin-merch-create-btn"
-            disabled={adminUsersBusy}
-            onClick={async () => {
-              const email = newAdminEmail.trim()
-              if (!email) return
-              setAdminUsersBusy(true)
-              try {
-                await onCreateAdminUser(email)
-                setNewAdminEmail('')
-              } finally {
-                setAdminUsersBusy(false)
-              }
-            }}
-          >
-            {adminUsersBusy ? 'Saving…' : 'Add admin'}
-          </button>
-        </div>
-        {adminUsersLoading ? (
-          <p className="admin-empty">Loading admin users…</p>
-        ) : adminUsers.length === 0 ? (
-          <p className="admin-empty">No admin users configured yet.</p>
-        ) : (
-          <ul className="admin-ticket-request-list">
-            {adminUsers.map((row) => (
-              <li key={row.email} className="admin-ticket-request-card">
-                <div className="admin-ticket-request-main">
-                  <strong>{row.email}</strong>
-                  <small>Added: {new Date(row.createdAt).toLocaleString('en-GB')}</small>
-                </div>
-                <div className="admin-ticket-request-actions">
-                  <button
-                    type="button"
-                    className="admin-news-delete-btn"
-                    disabled={adminUsersBusy}
-                    onClick={async () => {
-                      setAdminUsersBusy(true)
-                      try {
-                        await onDeleteAdminUser(row.email)
-                      } finally {
-                        setAdminUsersBusy(false)
-                      }
-                    }}
-                  >
-                    Remove
-                  </button>
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
       {pendingRenewals.length > 0 && (
         <section className="admin-renewals-block admin-panel-block" aria-label="Pending membership renewals">
           <h2 className="admin-renewals-heading">Pending membership renewals</h2>
@@ -3366,7 +3365,9 @@ function AdminConsole({
         <p className="admin-empty">No applications in this view.</p>
       ) : (
         <ul className="admin-member-list">
-          {filtered.map((m) => (
+          {filtered.map((m) => {
+            const detailsDraft = adminMemberDetailsDraftFromEntry(m, memberDetailsDraftByApplicationId)
+            return (
             <li key={m.applicationId} className="admin-member-card">
               <div className="admin-member-card-top">
                 <label className="admin-member-select">
@@ -3383,7 +3384,7 @@ function AdminConsole({
                     }}
                   />
                 </label>
-                <div>
+                <div className="admin-member-summary">
                   <code className="admin-member-ref">{m.applicationId}</code>
                   <p className="admin-member-name">
                     {m.firstName} {m.lastName}
@@ -3685,31 +3686,276 @@ function AdminConsole({
                       </div>
                     </>
                   )}
-                  {m.sponsorApplicationId && (
-                    <div>
-                      <dt>Family relationship</dt>
-                      <dd>{formatFamilyRelationship(m.familyRelationship, m.familyRelationshipOther)}</dd>
-                    </div>
-                  )}
                   <div>
-                    <dt>Date of birth</dt>
-                    <dd>{formatDateOfBirthDisplay(m.dateOfBirth) || '—'}</dd>
+                    <dt>Member details</dt>
+                    <dd>
+                      <div className="admin-member-details-edit">
+                        <div className="admin-member-details-grid">
+                          <label className="auth-field membership-field">
+                            <span className="auth-label">First name</span>
+                            <input
+                              className="auth-input"
+                              type="text"
+                              value={detailsDraft.firstName}
+                              onChange={(e) =>
+                                setMemberDetailsDraftByApplicationId((prev) => ({
+                                  ...prev,
+                                  [m.applicationId]: { ...detailsDraft, firstName: e.target.value },
+                                }))
+                              }
+                              disabled={busyId !== null}
+                            />
+                          </label>
+                          <label className="auth-field membership-field">
+                            <span className="auth-label">Last name</span>
+                            <input
+                              className="auth-input"
+                              type="text"
+                              value={detailsDraft.lastName}
+                              onChange={(e) =>
+                                setMemberDetailsDraftByApplicationId((prev) => ({
+                                  ...prev,
+                                  [m.applicationId]: { ...detailsDraft, lastName: e.target.value },
+                                }))
+                              }
+                              disabled={busyId !== null}
+                            />
+                          </label>
+                          <label className="auth-field membership-field">
+                            <span className="auth-label">Mobile phone</span>
+                            <input
+                              className="auth-input"
+                              type="tel"
+                              value={detailsDraft.mobilePhone}
+                              onChange={(e) =>
+                                setMemberDetailsDraftByApplicationId((prev) => ({
+                                  ...prev,
+                                  [m.applicationId]: { ...detailsDraft, mobilePhone: e.target.value },
+                                }))
+                              }
+                              disabled={busyId !== null}
+                            />
+                          </label>
+                          <label className="auth-field membership-field">
+                            <span className="auth-label">Date of birth</span>
+                            <input
+                              className="auth-input"
+                              type="date"
+                              value={detailsDraft.dateOfBirth}
+                              onChange={(e) =>
+                                setMemberDetailsDraftByApplicationId((prev) => ({
+                                  ...prev,
+                                  [m.applicationId]: { ...detailsDraft, dateOfBirth: e.target.value },
+                                }))
+                              }
+                              disabled={busyId !== null}
+                            />
+                          </label>
+                          <label className="auth-field membership-field admin-member-details-wide">
+                            <span className="auth-label">Address</span>
+                            <input
+                              className="auth-input"
+                              type="text"
+                              autoComplete="street-address"
+                              value={detailsDraft.address}
+                              onChange={(e) =>
+                                setMemberDetailsDraftByApplicationId((prev) => ({
+                                  ...prev,
+                                  [m.applicationId]: { ...detailsDraft, address: e.target.value },
+                                }))
+                              }
+                              disabled={busyId !== null}
+                            />
+                          </label>
+                          <label className="auth-field membership-field">
+                            <span className="auth-label">Area</span>
+                            <input
+                              className="auth-input"
+                              type="text"
+                              value={detailsDraft.area}
+                              onChange={(e) =>
+                                setMemberDetailsDraftByApplicationId((prev) => ({
+                                  ...prev,
+                                  [m.applicationId]: { ...detailsDraft, area: e.target.value },
+                                }))
+                              }
+                              disabled={busyId !== null}
+                            />
+                          </label>
+                          <label className="auth-field membership-field">
+                            <span className="auth-label">Postal code</span>
+                            <input
+                              className="auth-input"
+                              type="text"
+                              value={detailsDraft.postalCode}
+                              onChange={(e) =>
+                                setMemberDetailsDraftByApplicationId((prev) => ({
+                                  ...prev,
+                                  [m.applicationId]: { ...detailsDraft, postalCode: e.target.value },
+                                }))
+                              }
+                              disabled={busyId !== null}
+                            />
+                          </label>
+                          <label className="auth-field membership-field">
+                            <span className="auth-label">City</span>
+                            <input
+                              className="auth-input"
+                              type="text"
+                              value={detailsDraft.city}
+                              onChange={(e) =>
+                                setMemberDetailsDraftByApplicationId((prev) => ({
+                                  ...prev,
+                                  [m.applicationId]: { ...detailsDraft, city: e.target.value },
+                                }))
+                              }
+                              disabled={busyId !== null}
+                            />
+                          </label>
+                          <label className="auth-field membership-field">
+                            <span className="auth-label">Country</span>
+                            <input
+                              className="auth-input"
+                              type="text"
+                              value={detailsDraft.country}
+                              onChange={(e) =>
+                                setMemberDetailsDraftByApplicationId((prev) => ({
+                                  ...prev,
+                                  [m.applicationId]: { ...detailsDraft, country: e.target.value },
+                                }))
+                              }
+                              disabled={busyId !== null}
+                            />
+                          </label>
+                          {m.sponsorApplicationId && (
+                            <>
+                              <label className="auth-field membership-field">
+                                <span className="auth-label">Family relationship</span>
+                                <select
+                                  className="auth-input"
+                                  value={detailsDraft.familyRelationship}
+                                  onChange={(e) =>
+                                    setMemberDetailsDraftByApplicationId((prev) => ({
+                                      ...prev,
+                                      [m.applicationId]: {
+                                        ...detailsDraft,
+                                        familyRelationship: e.target.value,
+                                        familyRelationshipOther:
+                                          e.target.value === 'other' ? detailsDraft.familyRelationshipOther : '',
+                                      },
+                                    }))
+                                  }
+                                  disabled={busyId !== null}
+                                >
+                                  <option value="">Select relationship</option>
+                                  {FAMILY_RELATIONSHIP_OPTIONS.map((opt) => (
+                                    <option key={opt.value} value={opt.value}>
+                                      {opt.label}
+                                    </option>
+                                  ))}
+                                </select>
+                              </label>
+                              {detailsDraft.familyRelationship === 'other' && (
+                                <label className="auth-field membership-field admin-member-details-wide">
+                                  <span className="auth-label">Relationship details</span>
+                                  <input
+                                    className="auth-input"
+                                    type="text"
+                                    value={detailsDraft.familyRelationshipOther}
+                                    onChange={(e) =>
+                                      setMemberDetailsDraftByApplicationId((prev) => ({
+                                        ...prev,
+                                        [m.applicationId]: {
+                                          ...detailsDraft,
+                                          familyRelationshipOther: e.target.value,
+                                        },
+                                      }))
+                                    }
+                                    disabled={busyId !== null}
+                                  />
+                                </label>
+                              )}
+                            </>
+                          )}
+                        </div>
+                        <button
+                          type="button"
+                          className="admin-merch-create-btn"
+                          disabled={busyId !== null}
+                          onClick={async () => {
+                            setMemberActionError(null)
+                            setBusyId(m.applicationId)
+                            try {
+                              if (!detailsDraft.firstName.trim() || !detailsDraft.lastName.trim()) {
+                                throw new Error('First and last name are required.')
+                              }
+                              if (
+                                !detailsDraft.mobilePhone.trim() ||
+                                !detailsDraft.dateOfBirth.trim() ||
+                                !detailsDraft.address.trim() ||
+                                !detailsDraft.area.trim() ||
+                                !detailsDraft.postalCode.trim() ||
+                                !detailsDraft.city.trim() ||
+                                !detailsDraft.country.trim()
+                              ) {
+                                throw new Error('Please complete all required contact and address fields.')
+                              }
+                              if (!parseDateOfBirthInput(detailsDraft.dateOfBirth)) {
+                                throw new Error('Please enter a valid date of birth.')
+                              }
+                              if (m.sponsorApplicationId) {
+                                if (!detailsDraft.familyRelationship) {
+                                  throw new Error('Please select a family relationship.')
+                                }
+                                if (
+                                  detailsDraft.familyRelationship === 'other' &&
+                                  !detailsDraft.familyRelationshipOther.trim()
+                                ) {
+                                  throw new Error('Please describe the family relationship.')
+                                }
+                              }
+                              const isoDob = parseDateOfBirthInput(detailsDraft.dateOfBirth)!
+                              const yyyy = isoDob.getFullYear()
+                              const mm = String(isoDob.getMonth() + 1).padStart(2, '0')
+                              const dd = String(isoDob.getDate()).padStart(2, '0')
+                              await onUpdateMemberDetails(m.applicationId, {
+                                firstName: detailsDraft.firstName.trim(),
+                                lastName: detailsDraft.lastName.trim(),
+                                mobilePhone: detailsDraft.mobilePhone.trim(),
+                                dateOfBirth: `${yyyy}-${mm}-${dd}`,
+                                address: detailsDraft.address.trim(),
+                                area: detailsDraft.area.trim(),
+                                postalCode: detailsDraft.postalCode.trim(),
+                                city: detailsDraft.city.trim(),
+                                country: detailsDraft.country.trim(),
+                                familyRelationship: m.sponsorApplicationId ? detailsDraft.familyRelationship : null,
+                                familyRelationshipOther:
+                                  m.sponsorApplicationId && detailsDraft.familyRelationship === 'other'
+                                    ? detailsDraft.familyRelationshipOther.trim()
+                                    : null,
+                              })
+                              setMemberDetailsDraftByApplicationId((prev) => {
+                                const next = { ...prev }
+                                delete next[m.applicationId]
+                                return next
+                              })
+                            } catch (error) {
+                              setMemberActionError(
+                                error instanceof Error ? error.message : 'Could not update member details.',
+                              )
+                            } finally {
+                              setBusyId(null)
+                            }
+                          }}
+                        >
+                          {busyId === m.applicationId ? 'Saving…' : 'Save member details'}
+                        </button>
+                      </div>
+                    </dd>
                   </div>
                   <div>
                     <dt>Email</dt>
                     <dd>{m.email ?? '—'}</dd>
-                  </div>
-                  <div>
-                    <dt>Address</dt>
-                    <dd>{m.address}</dd>
-                  </div>
-                  <div>
-                    <dt>Area</dt>
-                    <dd>{m.area}</dd>
-                  </div>
-                  <div>
-                    <dt>Postal code</dt>
-                    <dd>{m.postalCode}</dd>
                   </div>
                   <div>
                     <dt>Official MU package request</dt>
@@ -3802,10 +4048,82 @@ function AdminConsole({
                 </dl>
               )}
             </li>
-          ))}
+          )})}
         </ul>
       )}
         </>
+      )}
+
+      {adminTab === 'admins' && (
+        <section className="admin-panel-block" aria-label="Admin users">
+          <div className="admin-block-head">
+            <h2 className="admin-block-title">Admin users</h2>
+            <p className="admin-block-lead">
+              Add admin accounts by email. The user must sign in at least once before you grant access.
+            </p>
+          </div>
+          <div className="admin-merch-create-row">
+            <input
+              className="admin-merch-create-input"
+              type="email"
+              placeholder="admin@example.com"
+              value={newAdminEmail}
+              onChange={(e) => setNewAdminEmail(e.target.value)}
+              disabled={adminUsersBusy}
+            />
+            <button
+              type="button"
+              className="admin-merch-create-btn"
+              disabled={adminUsersBusy}
+              onClick={async () => {
+                const email = newAdminEmail.trim()
+                if (!email) return
+                setAdminUsersBusy(true)
+                try {
+                  await onCreateAdminUser(email)
+                  setNewAdminEmail('')
+                } finally {
+                  setAdminUsersBusy(false)
+                }
+              }}
+            >
+              {adminUsersBusy ? 'Saving…' : 'Add admin'}
+            </button>
+          </div>
+          {adminUsersLoading ? (
+            <p className="admin-empty">Loading admin users…</p>
+          ) : adminUsers.length === 0 ? (
+            <p className="admin-empty">No admin users configured yet.</p>
+          ) : (
+            <ul className="admin-ticket-request-list">
+              {adminUsers.map((row) => (
+                <li key={row.email} className="admin-ticket-request-card">
+                  <div className="admin-ticket-request-main">
+                    <strong>{row.email}</strong>
+                    <small>Added: {new Date(row.createdAt).toLocaleString('en-GB')}</small>
+                  </div>
+                  <div className="admin-ticket-request-actions">
+                    <button
+                      type="button"
+                      className="admin-news-delete-btn"
+                      disabled={adminUsersBusy}
+                      onClick={async () => {
+                        setAdminUsersBusy(true)
+                        try {
+                          await onDeleteAdminUser(row.email)
+                        } finally {
+                          setAdminUsersBusy(false)
+                        }
+                      }}
+                    >
+                      Remove
+                    </button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
       )}
 
       {adminTab === 'tickets' && (
@@ -4060,71 +4378,57 @@ function AdminConsole({
                       {' · '}
                       Ticket slots: {1 + r.travelCompanions.length}
                     </p>
-                    {r.travelCompanions.length > 0 ? (
-                      <div className="admin-ticket-travel-with">
-                        <p className="auth-label">Travel with</p>
-                        <table className="admin-ticket-travel-with-table">
-                          <thead>
-                            <tr>
-                              <th scope="col">MYCS</th>
-                              <th scope="col">Name</th>
-                              <th scope="col">Phone</th>
-                              <th scope="col">Email</th>
-                              <th scope="col">Official MU</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {r.travelCompanions.map((companion) => (
-                              <tr key={`${r.id}-${companion.membershipNumber}`}>
-                                <td>{formatMembershipNumber(companion.membershipNumber)}</td>
-                                <td>{companion.fullName ?? '—'}</td>
-                                <td>{companion.mobilePhone ?? '—'}</td>
-                                <td>{companion.email ?? '—'}</td>
-                                <td>
-                                  {formatOfficialMuMembershipId(companion.officialMuMembershipId)}
-                                  {companion.officialMuMembershipStatus
-                                    ? ` (${formatOfficialMuMembershipStatus(companion.officialMuMembershipStatus)})`
-                                    : ''}
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    ) : (
-                      <div className="admin-ticket-travel-with">
-                        <p className="auth-label">Member</p>
-                        <table className="admin-ticket-travel-with-table">
-                          <thead>
-                            <tr>
-                              <th scope="col">MYCS</th>
-                              <th scope="col">Name</th>
-                              <th scope="col">Phone</th>
-                              <th scope="col">Email</th>
-                              <th scope="col">Official MU</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            <tr>
+                    <div className="admin-ticket-travel-with">
+                      <p className="auth-label">
+                        {r.travelCompanions.length > 0 ? 'Members (requester + travel companions)' : 'Member'}
+                      </p>
+                      <table className="admin-ticket-travel-with-table">
+                        <thead>
+                          <tr>
+                            <th scope="col">Role</th>
+                            <th scope="col">MYCS</th>
+                            <th scope="col">Name</th>
+                            <th scope="col">Phone</th>
+                            <th scope="col">Email</th>
+                            <th scope="col">Official MU</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <tr>
+                            <td>Requester</td>
+                            <td>
+                              {r.user.membershipNumber != null
+                                ? formatMembershipNumber(r.user.membershipNumber)
+                                : '—'}
+                            </td>
+                            <td>{r.user.fullName ?? '—'}</td>
+                            <td>{r.user.mobilePhone ?? '—'}</td>
+                            <td>{r.user.email ?? '—'}</td>
+                            <td>
+                              {formatOfficialMuMembershipId(r.user.officialMuMembershipId)}
+                              {r.user.officialMuMembershipStatus
+                                ? ` (${formatOfficialMuMembershipStatus(r.user.officialMuMembershipStatus)})`
+                                : ''}
+                            </td>
+                          </tr>
+                          {r.travelCompanions.map((companion) => (
+                            <tr key={`${r.id}-${companion.membershipNumber}`}>
+                              <td>Travel companion</td>
+                              <td>{formatMembershipNumber(companion.membershipNumber)}</td>
+                              <td>{companion.fullName ?? '—'}</td>
+                              <td>{companion.mobilePhone ?? '—'}</td>
+                              <td>{companion.email ?? '—'}</td>
                               <td>
-                                {r.user.membershipNumber != null
-                                  ? formatMembershipNumber(r.user.membershipNumber)
-                                  : '—'}
-                              </td>
-                              <td>{r.user.fullName ?? '—'}</td>
-                              <td>{r.user.mobilePhone ?? '—'}</td>
-                              <td>{r.user.email ?? '—'}</td>
-                              <td>
-                                {formatOfficialMuMembershipId(r.user.officialMuMembershipId)}
-                                {r.user.officialMuMembershipStatus
-                                  ? ` (${formatOfficialMuMembershipStatus(r.user.officialMuMembershipStatus)})`
+                                {formatOfficialMuMembershipId(companion.officialMuMembershipId)}
+                                {companion.officialMuMembershipStatus
+                                  ? ` (${formatOfficialMuMembershipStatus(companion.officialMuMembershipStatus)})`
                                   : ''}
                               </td>
                             </tr>
-                          </tbody>
-                        </table>
-                      </div>
-                    )}
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
                     <span className={`fixtures-ticket-pill fixtures-ticket-pill--${r.status}`}>
                       {r.status === 'approved' ? 'Accepted' : r.status[0].toUpperCase() + r.status.slice(1)}
                     </span>
@@ -4656,6 +4960,20 @@ function AdminConsole({
                   disabled={adminMerchBusy}
                 />
               </label>
+              <label className="auth-field membership-field">
+                <span className="auth-label">Quantity in stock</span>
+                <input
+                  className="auth-input"
+                  type="number"
+                  min={0}
+                  step={1}
+                  inputMode="numeric"
+                  placeholder="e.g. 25"
+                  value={adminMerchStock}
+                  onChange={(ev) => setAdminMerchStock(ev.target.value)}
+                  disabled={adminMerchBusy}
+                />
+              </label>
             </div>
             <label className="auth-field membership-field">
               <span className="auth-label">Photo URLs</span>
@@ -4715,6 +5033,7 @@ function AdminConsole({
                 setAdminMerchError(null)
                 const title = adminMerchTitle.trim()
                 const price = Number(adminMerchPrice.replace(',', '.'))
+                const stock = Number(adminMerchStock.trim())
                 if (!title) {
                   setAdminMerchError('Title is required.')
                   return
@@ -4723,15 +5042,25 @@ function AdminConsole({
                   setAdminMerchError('Please enter a valid price.')
                   return
                 }
+                if (!Number.isInteger(stock) || stock < 0) {
+                  setAdminMerchError('Please enter a valid stock quantity (0 or more).')
+                  return
+                }
                 if (adminMerchPhotos.length === 0) {
                   setAdminMerchError('Add at least one photo URL.')
                   return
                 }
                 setAdminMerchBusy(true)
                 try {
-                  await onCreateMerchandiseProduct({ title, priceEur: price, photos: adminMerchPhotos })
+                  await onCreateMerchandiseProduct({
+                    title,
+                    priceEur: price,
+                    photos: adminMerchPhotos,
+                    stockQuantity: stock,
+                  })
                   setAdminMerchTitle('')
                   setAdminMerchPrice('')
+                  setAdminMerchStock('')
                   setAdminMerchPhotos([])
                   setAdminMerchPhotoUrlDraft('')
                 } catch (err) {
@@ -4748,6 +5077,7 @@ function AdminConsole({
                 const draft = editingMerchById[product.id] ?? {
                   title: product.title,
                   price: product.priceEur.toFixed(2),
+                  stock: String(product.stockQuantity),
                   photos: [...product.photos],
                   photoUrlDraft: '',
                 }
@@ -4765,6 +5095,11 @@ function AdminConsole({
                   <div className="merch-card-body">
                     <h4 className="merch-card-title">{product.title}</h4>
                     <p className="merch-card-price">€{product.priceEur.toFixed(2)}</p>
+                    <p
+                      className={`merch-card-stock${product.stockQuantity <= 0 ? ' is-out' : product.stockQuantity <= 5 ? ' is-low' : ''}`}
+                    >
+                      {formatMerchandiseAvailability(product.stockQuantity)}
+                    </p>
                     <label className="auth-field membership-field">
                       <span className="auth-label">Edit title</span>
                       <input
@@ -4791,6 +5126,24 @@ function AdminConsole({
                           setEditingMerchById((prev) => ({
                             ...prev,
                             [product.id]: { ...draft, price: ev.target.value },
+                          }))
+                        }
+                        disabled={adminMerchBusy}
+                      />
+                    </label>
+                    <label className="auth-field membership-field">
+                      <span className="auth-label">Quantity in stock</span>
+                      <input
+                        className="auth-input"
+                        type="number"
+                        min={0}
+                        step={1}
+                        inputMode="numeric"
+                        value={draft.stock}
+                        onChange={(ev) =>
+                          setEditingMerchById((prev) => ({
+                            ...prev,
+                            [product.id]: { ...draft, stock: ev.target.value },
                           }))
                         }
                         disabled={adminMerchBusy}
@@ -4907,8 +5260,12 @@ function AdminConsole({
                         onClick={async () => {
                           const title = draft.title.trim()
                           const price = Number(draft.price.replace(',', '.'))
+                          const stock = Number(draft.stock.trim())
                           if (!title) return setAdminMerchError('Title is required.')
                           if (!Number.isFinite(price) || price < 0) return setAdminMerchError('Please enter a valid price.')
+                          if (!Number.isInteger(stock) || stock < 0) {
+                            return setAdminMerchError('Please enter a valid stock quantity (0 or more).')
+                          }
                           if (draft.photos.length === 0) return setAdminMerchError('Add at least one photo URL.')
                           setAdminMerchBusy(true)
                           setAdminMerchError(null)
@@ -4917,6 +5274,7 @@ function AdminConsole({
                               title,
                               priceEur: price,
                               photos: draft.photos,
+                              stockQuantity: stock,
                             })
                           } catch (err) {
                             setAdminMerchError(err instanceof Error ? err.message : 'Could not update product.')
@@ -6919,11 +7277,13 @@ function App() {
     title: string
     priceEur: number
     photos: string[]
+    stockQuantity: number
   }) {
     const { error } = await insertMerchandiseProduct({
       title: payload.title,
       priceEur: payload.priceEur,
       photos: payload.photos,
+      stockQuantity: payload.stockQuantity,
       userId: user?.id ?? null,
     })
     if (error) throw new Error(error.message)
@@ -6943,7 +7303,7 @@ function App() {
 
   async function applyUpdateMerchandiseProductFromAdmin(
     id: string,
-    payload: { title: string; priceEur: number; photos?: string[] },
+    payload: { title: string; priceEur: number; photos?: string[]; stockQuantity?: number },
   ) {
     const { error } = await updateMerchandiseProduct(id, payload)
     if (error) throw new Error(error.message)
@@ -7082,7 +7442,7 @@ function App() {
     setMerchDeliveryBranch('')
     setMerchView('shop')
     setMerchOrderMessage('Order submitted. The committee will confirm payment before dispatch.')
-    await loadMyMerchandiseOrders()
+    await Promise.all([loadMyMerchandiseOrders(), loadMerchandiseProducts()])
   }
 
   // news_posts RLS requires a signed-in user; refetch when session appears (first load on login screen returns empty).
@@ -7180,14 +7540,11 @@ function App() {
   const loadAdminMembersData = useCallback(async () => {
     if (!isAdmin) return
     setRegistryLoading(true)
-    setAdminUsersLoading(true)
-    const [{ rows, error }, renewRes, adminsRes] = await Promise.all([
+    const [{ rows, error }, renewRes] = await Promise.all([
       fetchAllMembershipApplications(),
       fetchPendingRenewalRequests(),
-      fetchAdminUsers(),
     ])
     setRegistryLoading(false)
-    setAdminUsersLoading(false)
     if (error) {
       console.error(error)
       setMemberRegistry([])
@@ -7200,6 +7557,13 @@ function App() {
     } else {
       setPendingRenewals(renewRes.rows)
     }
+  }, [isAdmin])
+
+  const loadAdminUsersData = useCallback(async () => {
+    if (!isAdmin) return
+    setAdminUsersLoading(true)
+    const adminsRes = await fetchAdminUsers()
+    setAdminUsersLoading(false)
     if (adminsRes.error) {
       console.error(adminsRes.error)
       setAdminUsers([])
@@ -7227,6 +7591,9 @@ function App() {
         case 'email':
           void loadAdminMembersData()
           break
+        case 'admins':
+          void loadAdminUsersData()
+          break
         case 'ticketRequests':
           void refreshTicketRequestsOnly()
           break
@@ -7241,7 +7608,7 @@ function App() {
           break
       }
     },
-    [isAdmin, loadAdminMembersData, loadAdminMerchandiseOrdersData, loadAdminOfficialRequests, loadOfficialOffers, refreshTicketRequestsOnly],
+    [isAdmin, loadAdminMembersData, loadAdminUsersData, loadAdminMerchandiseOrdersData, loadAdminOfficialRequests, loadOfficialOffers, refreshTicketRequestsOnly],
   )
 
   const reloadMemberRegistryOnly = useCallback(async () => {
@@ -7456,6 +7823,13 @@ function App() {
     setMemberRegistry((prev) => prev.filter((m) => m.applicationId !== applicationId))
     void reloadMemberRegistryOnly()
     void refreshMyMembership()
+  }
+
+  async function applyUpdateMemberDetails(applicationId: string, payload: AdminMemberDetailsPayload) {
+    const { error } = await updateApplicationMemberDetails(applicationId, payload)
+    if (error) throw new Error(error.message)
+    await reloadMemberRegistryOnly()
+    await refreshMyMembership()
   }
 
   async function applyUpdateMemberId(
@@ -8166,6 +8540,7 @@ function App() {
               onSetPending={applySetMembershipPending}
               onDeleteMemberRequest={applyDeleteMemberRequest}
               onUpdateMemberId={applyUpdateMemberId}
+              onUpdateMemberDetails={applyUpdateMemberDetails}
               onUpdateMembershipNumber={applyUpdateMembershipNumber}
               onUpdatePresentReceived={applyUpdatePresentReceived}
               onUpdateAdminMemberFlags={applyUpdateAdminMemberFlags}
@@ -8952,6 +9327,8 @@ function App() {
                     {merchProducts.map((p) => {
                       const cover = p.photos[0]
                       const qty = merchCart[p.id] ?? 0
+                      const inStock = isMerchandiseInStock(p.stockQuantity)
+                      const maxQty = Math.min(99, p.stockQuantity)
                       return (
                         <li key={p.id} className="merch-card">
                           <div className="merch-card-visual">
@@ -8966,6 +9343,11 @@ function App() {
                           <div className="merch-card-body">
                             <h2 className="merch-card-title">{p.title}</h2>
                             <p className="merch-card-price">€{p.priceEur.toFixed(2)}</p>
+                            <p
+                              className={`merch-card-stock${p.stockQuantity <= 0 ? ' is-out' : p.stockQuantity <= 5 ? ' is-low' : ''}`}
+                            >
+                              {formatMerchandiseAvailability(p.stockQuantity)}
+                            </p>
                             {p.photos.length > 1 && (
                               <ul className="merch-card-thumbs" aria-label="More photos">
                                 {p.photos.slice(1).map((src, i) => (
@@ -8976,6 +9358,7 @@ function App() {
                               </ul>
                             )}
                             {user ? (
+                              inStock ? (
                               <div className="merch-qty-row">
                                 <span className="merch-qty-label">Quantity</span>
                                 <div className="merch-qty-controls">
@@ -9003,10 +9386,11 @@ function App() {
                                     type="button"
                                     className="merch-qty-btn"
                                     aria-label="Increase quantity"
+                                    disabled={qty >= maxQty}
                                     onClick={() =>
                                       setMerchCart((prev) => ({
                                         ...prev,
-                                        [p.id]: Math.min(99, (prev[p.id] ?? 0) + 1),
+                                        [p.id]: Math.min(maxQty, (prev[p.id] ?? 0) + 1),
                                       }))
                                     }
                                   >
@@ -9014,6 +9398,9 @@ function App() {
                                   </button>
                                 </div>
                               </div>
+                              ) : (
+                                <p className="merch-card-signin-hint">Currently unavailable.</p>
+                              )
                             ) : (
                               <p className="merch-card-signin-hint">Sign in to order.</p>
                             )}

@@ -420,6 +420,29 @@ export async function updateApplicationMemberId(
   }
 }
 
+export type AdminMemberDetailsPayload = {
+  firstName: string
+  lastName: string
+  mobilePhone: string
+  dateOfBirth: string
+  address: string
+  area: string
+  postalCode: string
+  city: string
+  country: string
+  familyRelationship?: string | null
+  familyRelationshipOther?: string | null
+}
+
+export async function updateApplicationMemberDetails(applicationId: string, payload: AdminMemberDetailsPayload) {
+  try {
+    await apiSend(`/api/membership/applications/${applicationId}/details`, 'PUT', payload)
+    return { error: undefined }
+  } catch (error) {
+    return { error: asError(error) }
+  }
+}
+
 export async function deleteMembershipApplication(applicationId: string) {
   try {
     await apiSend(`/api/membership/applications/${applicationId}`, 'DELETE')
