@@ -891,29 +891,40 @@ function formatTicketMatchTabLabel(matchKey: string): string {
 function formatTicketExportMatchLabel(matchKey: string): string {
   const parsed = parseFixtureMatchKey(matchKey)
   if (!parsed) return formatFixtureMatchKeyLabel(matchKey)
-  return `${formatFixtureMatchKeyLabel(matchKey)} · ${parsed.competition}`
+  return `${formatFixtureMatchKeyLabel(matchKey)} · ${parsed.competition} · ${formatFixtureKickoff(parsed.kickoffIso)}`
 }
 
-function formatTicketExportPersonLine(
+function ticketExportRequestMetaColumns(r: AdminFixtureTicketRequest): unknown[] {
+  return [
+    r.status,
+    r.requestedAt,
+    r.depositConfirmed ? 'yes' : 'no',
+    r.depositConfirmedAt ?? '',
+    r.userCancelledAt ? 'yes' : 'no',
+    r.userCancelledAt ?? '',
+    r.balanceRemainingAmountEur != null ? r.balanceRemainingAmountEur.toFixed(2) : '',
+    r.balancePaymentNotified ? 'yes' : 'no',
+    r.balancePaymentNotifiedAt ?? '',
+    r.balancePaymentDeadline ?? '',
+    String(1 + r.travelCompanions.length),
+  ]
+}
+
+function ticketExportPersonRow(
+  r: AdminFixtureTicketRequest,
+  role: 'Requester' | 'Traveler',
   fullName: string | null | undefined,
   mobilePhone: string | null | undefined,
   officialMuMembershipId: string | null | undefined,
-): string {
+): unknown[] {
   return [
-    fullName?.trim() || '—',
-    mobilePhone?.trim() || '—',
-    formatOfficialMuMembershipId(officialMuMembershipId) || '—',
-  ].join(' · ')
-}
-
-function formatTicketExportRequesterTravelerCell(r: AdminFixtureTicketRequest): string {
-  const lines = [
-    formatTicketExportPersonLine(r.user.fullName, r.user.mobilePhone, r.user.officialMuMembershipId),
-    ...r.travelCompanions.map((c) =>
-      formatTicketExportPersonLine(c.fullName, c.mobilePhone, c.officialMuMembershipId),
-    ),
+    formatTicketExportMatchLabel(r.matchKey),
+    role,
+    fullName?.trim() ?? '',
+    mobilePhone?.trim() ?? '',
+    formatOfficialMuMembershipId(officialMuMembershipId),
+    ...ticketExportRequestMetaColumns(r),
   ]
-  return lines.join('\n')
 }
 
 function parseMaxTicketsDraft(value: string): number | null {
@@ -2923,7 +2934,10 @@ function AdminConsole({
             .slice(0, 48) || 'match'
     const headers = [
       'Match',
-      'Requester / Traveler',
+      'Role',
+      'Full Name',
+      'Mobile Number',
+      'MU Official Membership',
       'Status',
       'Requested At',
       'Deposit Confirmed',
@@ -2936,20 +2950,11 @@ function AdminConsole({
       'Balance Payment Deadline',
       'Ticket Slots',
     ]
-    const rows = requestsToExport.map((r) => [
-      formatTicketExportMatchLabel(r.matchKey),
-      formatTicketExportRequesterTravelerCell(r),
-      r.status,
-      r.requestedAt,
-      r.depositConfirmed ? 'yes' : 'no',
-      r.depositConfirmedAt ?? '',
-      r.userCancelledAt ? 'yes' : 'no',
-      r.userCancelledAt ?? '',
-      r.balanceRemainingAmountEur != null ? r.balanceRemainingAmountEur.toFixed(2) : '',
-      r.balancePaymentNotified ? 'yes' : 'no',
-      r.balancePaymentNotifiedAt ?? '',
-      r.balancePaymentDeadline ?? '',
-      String(1 + r.travelCompanions.length),
+    const rows = requestsToExport.flatMap((r) => [
+      ticketExportPersonRow(r, 'Requester', r.user.fullName, r.user.mobilePhone, r.user.officialMuMembershipId),
+      ...r.travelCompanions.map((c) =>
+        ticketExportPersonRow(r, 'Traveler', c.fullName, c.mobilePhone, c.officialMuMembershipId),
+      ),
     ])
     downloadCsv(`tickets-report-${matchSlug}-${reportStamp()}.csv`, headers, rows)
   }
