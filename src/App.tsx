@@ -888,6 +888,34 @@ function formatTicketMatchTabLabel(matchKey: string): string {
   return `${parsed.opponent} · ${formatFixtureKickoff(parsed.kickoffIso)}`
 }
 
+function formatTicketExportMatchLabel(matchKey: string): string {
+  const parsed = parseFixtureMatchKey(matchKey)
+  if (!parsed) return formatFixtureMatchKeyLabel(matchKey)
+  return `${formatFixtureMatchKeyLabel(matchKey)} · ${parsed.competition}`
+}
+
+function formatTicketExportPersonLine(
+  fullName: string | null | undefined,
+  mobilePhone: string | null | undefined,
+  officialMuMembershipId: string | null | undefined,
+): string {
+  return [
+    fullName?.trim() || '—',
+    mobilePhone?.trim() || '—',
+    formatOfficialMuMembershipId(officialMuMembershipId) || '—',
+  ].join(' · ')
+}
+
+function formatTicketExportRequesterTravelerCell(r: AdminFixtureTicketRequest): string {
+  const lines = [
+    formatTicketExportPersonLine(r.user.fullName, r.user.mobilePhone, r.user.officialMuMembershipId),
+    ...r.travelCompanions.map((c) =>
+      formatTicketExportPersonLine(c.fullName, c.mobilePhone, c.officialMuMembershipId),
+    ),
+  ]
+  return lines.join('\n')
+}
+
 function parseMaxTicketsDraft(value: string): number | null {
   const trimmed = value.trim()
   if (!trimmed) return null
@@ -2879,15 +2907,23 @@ function AdminConsole({
   }
 
   function exportTicketsReport() {
+    const requestsToExport = pendingTicketRequests.filter(
+      (r) =>
+        ticketMatchFilter === 'all' ||
+        r.matchKey === ticketMatchFilter ||
+        matchKeysReferToSameFixture(r.matchKey, ticketMatchFilter),
+    )
+    const matchSlug =
+      ticketMatchFilter === 'all'
+        ? 'all-matches'
+        : formatTicketMatchTabLabel(ticketMatchFilter)
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, '-')
+            .replace(/^-+|-+$/g, '')
+            .slice(0, 48) || 'match'
     const headers = [
-      'Request ID',
-      'Match Key',
-      'Full Name',
-      'Mobile Phone',
-      'Official MU ID',
-      'Official MU Status',
-      'Application ID',
-      'User ID',
+      'Match',
+      'Requester / Traveler',
       'Status',
       'Requested At',
       'Deposit Confirmed',
@@ -2899,17 +2935,10 @@ function AdminConsole({
       'Balance Payment Notified At',
       'Balance Payment Deadline',
       'Ticket Slots',
-      'Travel Companions',
     ]
-    const rows = pendingTicketRequests.map((r) => [
-      r.id,
-      r.matchKey,
-      r.user.fullName ?? '',
-      r.user.mobilePhone ?? '',
-      r.user.officialMuMembershipId ?? '',
-      formatOfficialMuMembershipStatus(r.user.officialMuMembershipStatus),
-      r.user.applicationId ?? '',
-      r.userId,
+    const rows = requestsToExport.map((r) => [
+      formatTicketExportMatchLabel(r.matchKey),
+      formatTicketExportRequesterTravelerCell(r),
       r.status,
       r.requestedAt,
       r.depositConfirmed ? 'yes' : 'no',
@@ -2921,37 +2950,8 @@ function AdminConsole({
       r.balancePaymentNotifiedAt ?? '',
       r.balancePaymentDeadline ?? '',
       String(1 + r.travelCompanions.length),
-      [
-        [
-          'Requester',
-          r.user.membershipNumber != null ? formatMembershipNumber(r.user.membershipNumber) : '',
-          r.user.fullName ?? '',
-          r.user.mobilePhone ?? '',
-          r.user.email ?? '',
-          `${formatOfficialMuMembershipId(r.user.officialMuMembershipId)}${
-            r.user.officialMuMembershipStatus
-              ? ` (${formatOfficialMuMembershipStatus(r.user.officialMuMembershipStatus)})`
-              : ''
-          }`,
-        ].join(' / '),
-        ...r.travelCompanions.map((c) => {
-          const officialMu = `${formatOfficialMuMembershipId(c.officialMuMembershipId)}${
-            c.officialMuMembershipStatus
-              ? ` (${formatOfficialMuMembershipStatus(c.officialMuMembershipStatus)})`
-              : ''
-          }`
-          return [
-            'Travel companion',
-            formatMembershipNumber(c.membershipNumber),
-            c.fullName ?? '',
-            c.mobilePhone ?? '',
-            c.email ?? '',
-            officialMu,
-          ].join(' / ')
-        }),
-      ].join(' | '),
     ])
-    downloadCsv(`tickets-report-${reportStamp()}.csv`, headers, rows)
+    downloadCsv(`tickets-report-${matchSlug}-${reportStamp()}.csv`, headers, rows)
   }
 
   function exportMerchandiseReport() {
