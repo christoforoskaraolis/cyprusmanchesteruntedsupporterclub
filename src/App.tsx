@@ -1671,6 +1671,7 @@ type TicketBalancePaymentConfirmModalProps = {
   memberLabel: string | null
   matchLabel: string | null
   amountEur: number | null
+  ticketSlotCount: number
   paymentDeadline: string | null
   submitting: boolean
   error: string | null
@@ -1683,6 +1684,7 @@ function TicketBalancePaymentConfirmModal({
   memberLabel,
   matchLabel,
   amountEur,
+  ticketSlotCount,
   paymentDeadline,
   submitting,
   error,
@@ -1690,6 +1692,10 @@ function TicketBalancePaymentConfirmModal({
   onConfirm,
 }: TicketBalancePaymentConfirmModalProps) {
   if (!open) return null
+
+  const slots = Math.max(1, ticketSlotCount)
+  const totalAmountEur =
+    amountEur != null ? Math.round(amountEur * slots * 100) / 100 : null
 
   return (
     <div
@@ -1733,10 +1739,17 @@ function TicketBalancePaymentConfirmModal({
               for <strong>{matchLabel}</strong>
             </>
           ) : null}
-          {amountEur != null ? (
+          {amountEur != null && totalAmountEur != null ? (
             <>
               {' '}
-              with remaining amount <strong>€{amountEur.toFixed(2)}</strong>
+              with remaining amount{' '}
+              {slots > 1 ? (
+                <strong>
+                  €{totalAmountEur.toFixed(2)} (€{amountEur.toFixed(2)} × {slots} tickets)
+                </strong>
+              ) : (
+                <strong>€{amountEur.toFixed(2)}</strong>
+              )}
             </>
           ) : null}
           {paymentDeadline ? (
@@ -1747,6 +1760,12 @@ function TicketBalancePaymentConfirmModal({
           ) : null}
           ?
         </p>
+        {slots > 1 && (
+          <p className="renewal-modal-lead">
+            Because this request includes travel companions, the per-ticket remaining amount is multiplied by the
+            number of ticket slots.
+          </p>
+        )}
         {error && <p className="auth-message is-error renewal-modal-error">{error}</p>}
         <div className="renewal-modal-actions">
           <button
@@ -4356,6 +4375,9 @@ function AdminConsole({
                 const amountEur = parseTicketBalanceAmountDraft(amountDraft)
                 const paymentDeadline = parseTicketPaymentDeadlineDraft(deadlineDraft)
                 const canNotifyBalancePayment = amountEur != null && paymentDeadline != null
+                const ticketSlotCount = 1 + r.travelCompanions.length
+                const totalBalanceAmountEur =
+                  amountEur != null ? Math.round(amountEur * ticketSlotCount * 100) / 100 : null
 
                 return (
                 <li key={r.id} className="admin-ticket-request-card">
@@ -4480,7 +4502,11 @@ function AdminConsole({
                     </label>
                     <div className="admin-ticket-balance-payment">
                       <label className="admin-ticket-balance-payment-field">
-                        <span className="auth-label">Ticket payment (remaining €)</span>
+                        <span className="auth-label">
+                          {r.balancePaymentNotified
+                            ? 'Ticket payment (total remaining €)'
+                            : 'Ticket payment (remaining € per ticket)'}
+                        </span>
                         <div className="admin-ticket-balance-payment-input-wrap">
                           <span className="admin-ticket-balance-payment-currency" aria-hidden="true">
                             €
@@ -4509,6 +4535,12 @@ function AdminConsole({
                             }
                           />
                         </div>
+                        {!r.balancePaymentNotified && ticketSlotCount > 1 && totalBalanceAmountEur != null && (
+                          <p className="admin-member-meta">
+                            Total due for {ticketSlotCount} tickets (requester + travelers): €
+                            {totalBalanceAmountEur.toFixed(2)}
+                          </p>
+                        )}
                       </label>
                       <label className="admin-ticket-balance-payment-field">
                         <span className="auth-label">Payment deadline</span>
@@ -6391,6 +6423,9 @@ function AdminConsole({
           ticketBalancePaymentTarget ? formatFixtureMatchKeyLabel(ticketBalancePaymentTarget.request.matchKey) : null
         }
         amountEur={ticketBalancePaymentTarget?.amountEur ?? null}
+        ticketSlotCount={
+          ticketBalancePaymentTarget ? 1 + ticketBalancePaymentTarget.request.travelCompanions.length : 1
+        }
         paymentDeadline={ticketBalancePaymentTarget?.paymentDeadline ?? null}
         submitting={ticketBalancePaymentSubmitting}
         error={ticketBalancePaymentError}
@@ -6412,10 +6447,17 @@ function AdminConsole({
               balancePaymentNotified: true,
             })
             const recipient = ticketBalancePaymentTarget.request.user.fullName || 'the member'
-            setTicketActionNotice(`Ticket payment email sent to ${recipient}.`)
+            const slots = 1 + ticketBalancePaymentTarget.request.travelCompanions.length
+            const totalDue =
+              Math.round(ticketBalancePaymentTarget.amountEur * slots * 100) / 100
+            setTicketActionNotice(
+              slots > 1
+                ? `Ticket payment email sent to ${recipient} for €${totalDue.toFixed(2)} (€${ticketBalancePaymentTarget.amountEur.toFixed(2)} × ${slots} tickets).`
+                : `Ticket payment email sent to ${recipient}.`,
+            )
             setBalanceAmountDraftByRequestId((prev) => ({
               ...prev,
-              [ticketBalancePaymentTarget.request.id]: ticketBalancePaymentTarget.amountEur.toFixed(2),
+              [ticketBalancePaymentTarget.request.id]: totalDue.toFixed(2),
             }))
             setBalanceDeadlineDraftByRequestId((prev) => ({
               ...prev,

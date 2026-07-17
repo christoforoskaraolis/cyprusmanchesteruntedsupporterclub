@@ -47,14 +47,56 @@ function formatPaymentDeadlineGreek(deadline: string | Date): string {
   })
 }
 
+function formatRemainingAmountLines(options: {
+  balanceRemainingAmountEur: number
+  perTicketAmountEur: number
+  ticketSlotCount: number
+}): { textBlock: string; htmlBlock: string } {
+  const total = formatAmountEur(options.balanceRemainingAmountEur)
+  if (options.ticketSlotCount <= 1) {
+    return {
+      textBlock: `€${total}`,
+      htmlBlock: `<p><strong>€${total}</strong></p>`,
+    }
+  }
+
+  const perTicket = formatAmountEur(options.perTicketAmountEur)
+  const slots = options.ticketSlotCount
+  const explanation =
+    `Το υπόλοιπο ποσό υπολογίζεται ανά εισιτήριο (€${perTicket}) και πολλαπλασιάζεται επί ${slots} εισιτήρια ` +
+    `(εσείς και οι συνοδοί σας στο αίτημα).`
+  return {
+    textBlock: `€${total}\n(€${perTicket} × ${slots} εισιτήρια)\n\n${explanation}`,
+    htmlBlock:
+      `<p><strong>€${total}</strong><br>(€${perTicket} × ${slots} εισιτήρια)</p>` +
+      `<p>${explanation}</p>`,
+  }
+}
+
+function securedTicketsLine(ticketSlotCount: number): string {
+  if (ticketSlotCount <= 1) {
+    return 'έχει εγκριθεί και ο Cyprus Manchester United Supporters Club έχει εξασφαλίσει εισιτήριο για εσάς στο Old Trafford!'
+  }
+  return `έχει εγκριθεί και ο Cyprus Manchester United Supporters Club έχει εξασφαλίσει ${ticketSlotCount} εισιτήρια για εσάς στο Old Trafford!`
+}
+
+function issuedTicketsLine(ticketSlotCount: number): string {
+  if (ticketSlotCount <= 1) {
+    return 'Μετά την παραλαβή της πληρωμής σας, το εισιτήριό σας θα εκδοθεί και θα εμφανιστεί στον επίσημο λογαριασμό σας μέσω της εφαρμογής της Manchester United. Παράλληλα, θα λάβετε και σχετική επιβεβαίωση από τη Manchester United στο email σας.'
+  }
+  return 'Μετά την παραλαβή της πληρωμής σας, τα εισιτήριά σας θα εκδοθούν και θα εμφανιστούν στον επίσημο λογαριασμό σας μέσω της εφαρμογής της Manchester United. Παράλληλα, θα λάβετε και σχετική επιβεβαίωση από τη Manchester United στο email σας.'
+}
+
 function buildText(options: {
   matchKey: string
   balanceRemainingAmountEur: number
+  perTicketAmountEur: number
+  ticketSlotCount: number
   paymentDeadlineIso: string | Date
 }): string {
   const { matchName, matchDate } = formatFixtureMatchKeyForEmail(options.matchKey)
-  const amount = formatAmountEur(options.balanceRemainingAmountEur)
   const paymentDeadline = formatPaymentDeadlineGreek(options.paymentDeadlineIso)
+  const amountLines = formatRemainingAmountLines(options)
 
   return `Αγαπητό Μέλος,
 
@@ -63,17 +105,17 @@ function buildText(options: {
 ${matchName}
 ${matchDate}
 
-έχει εγκριθεί και ο Cyprus Manchester United Supporters Club έχει εξασφαλίσει εισιτήριο για εσάς στο Old Trafford!
+${securedTicketsLine(options.ticketSlotCount)}
 
 Για την ολοκλήρωση της διαδικασίας, παρακαλούμε να καταβάλετε το υπόλοιπο ποσό των:
 
-€${amount}
+${amountLines.textBlock}
 
 εντός της καθορισμένης προθεσμίας που αναγράφεται πιο κάτω:
 
 Προθεσμία πληρωμής: ${paymentDeadline}
 
-Μετά την παραλαβή της πληρωμής σας, το εισιτήριό σας θα εκδοθεί και θα εμφανιστεί στον επίσημο λογαριασμό σας μέσω της εφαρμογής της Manchester United. Παράλληλα, θα λάβετε και σχετική επιβεβαίωση από τη Manchester United στο email σας.
+${issuedTicketsLine(options.ticketSlotCount)}
 
 ⚠️ Παρακαλούμε να μην προχωρήσετε σε οποιαδήποτε ταξιδιωτική διευθέτηση χωρίς να παρακολουθείτε τις επίσημες ανακοινώσεις για τον αγώνα. Οι ημερομηνίες και ώρες των αγώνων ενδέχεται να αλλάξουν λόγω τηλεοπτικών μεταδόσεων, ευρωπαϊκών διοργανώσεων ή άλλων αγωνιστικών υποχρεώσεων.
 
@@ -91,22 +133,24 @@ ${clubEmailClosingText()}`
 function buildHtml(options: {
   matchKey: string
   balanceRemainingAmountEur: number
+  perTicketAmountEur: number
+  ticketSlotCount: number
   paymentDeadlineIso: string | Date
 }): string {
   const { matchName, matchDate } = formatFixtureMatchKeyForEmail(options.matchKey)
-  const amount = formatAmountEur(options.balanceRemainingAmountEur)
   const paymentDeadline = formatPaymentDeadlineGreek(options.paymentDeadlineIso)
+  const amountLines = formatRemainingAmountLines(options)
 
   return `<div style="font-family:Arial,Helvetica,sans-serif;line-height:1.6;color:#111;">
   <p>Αγαπητό Μέλος,</p>
   <p>Με μεγάλη χαρά σας ενημερώνουμε ότι το αίτημά σας για τον αγώνα:</p>
   <p><strong>${matchName}</strong><br>${matchDate}</p>
-  <p>έχει εγκριθεί και ο Cyprus Manchester United Supporters Club έχει εξασφαλίσει εισιτήριο για εσάς στο Old Trafford!</p>
+  <p>${securedTicketsLine(options.ticketSlotCount)}</p>
   <p>Για την ολοκλήρωση της διαδικασίας, παρακαλούμε να καταβάλετε το υπόλοιπο ποσό των:</p>
-  <p><strong>€${amount}</strong></p>
+  ${amountLines.htmlBlock}
   <p>εντός της καθορισμένης προθεσμίας που αναγράφεται πιο κάτω:</p>
   <p><strong>Προθεσμία πληρωμής:</strong> ${paymentDeadline}</p>
-  <p>Μετά την παραλαβή της πληρωμής σας, το εισιτήριό σας θα εκδοθεί και θα εμφανιστεί στον επίσημο λογαριασμό σας μέσω της εφαρμογής της Manchester United. Παράλληλα, θα λάβετε και σχετική επιβεβαίωση από τη Manchester United στο email σας.</p>
+  <p>${issuedTicketsLine(options.ticketSlotCount)}</p>
   <p>⚠️ Παρακαλούμε να μην προχωρήσετε σε οποιαδήποτε ταξιδιωτική διευθέτηση χωρίς να παρακολουθείτε τις επίσημες ανακοινώσεις για τον αγώνα. Οι ημερομηνίες και ώρες των αγώνων ενδέχεται να αλλάξουν λόγω τηλεοπτικών μεταδόσεων, ευρωπαϊκών διοργανώσεων ή άλλων αγωνιστικών υποχρεώσεων.</p>
   <p>Εκ μέρους όλων μας, σας ευχόμαστε να απολαύσετε μία μοναδική εμπειρία στο Theatre of Dreams και να δημιουργήσετε αναμνήσεις που θα σας συνοδεύουν για μια ζωή.</p>
   <p>Θα θέλαμε επίσης να σας παρακαλέσουμε, εφόσον το επιθυμείτε, να στηρίξετε τον Σύνδεσμό μας με μια μικρή αναφορά στα μέσα κοινωνικής δικτύωσής σας. Μοιραστείτε φωτογραφίες ή βίντεο από το ταξίδι και την εμπειρία σας στο Old Trafford κάνοντας αναφορά ή ταγκάροντας το Cyprus Manchester United Supporters Club. Οι αναρτήσεις των μελών μας αποτελούν την καλύτερη προβολή για τον Σύνδεσμο και εμπνέουν περισσότερους φίλους της United στην Κύπρο να ζήσουν το όνειρό τους.</p>
@@ -120,6 +164,8 @@ export async function sendTicketBalancePaymentEmail(options: {
   to: string
   matchKey: string
   balanceRemainingAmountEur: number
+  perTicketAmountEur: number
+  ticketSlotCount: number
   paymentDeadlineIso: string | Date
 }): Promise<void> {
   const text = buildText(options)

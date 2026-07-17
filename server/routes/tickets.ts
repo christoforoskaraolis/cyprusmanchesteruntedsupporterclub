@@ -637,9 +637,11 @@ ticketsRouter.put(
       auth_email: string | null
       balance_remaining_amount_eur: string | number | null
       balance_payment_deadline: string | null
+      travel_companion_membership_numbers: number[] | null
     }>(
       `select ftr.balance_payment_notified, ftr.match_key, p.email as profile_email, au.email as auth_email,
-              ftr.balance_remaining_amount_eur, ftr.balance_payment_deadline
+              ftr.balance_remaining_amount_eur, ftr.balance_payment_deadline,
+              ftr.travel_companion_membership_numbers
        from public.fixture_ticket_requests ftr
        left join public.profiles p on p.id = ftr.user_id
        left join public.auth_users au on au.user_id = ftr.user_id
@@ -650,8 +652,15 @@ ticketsRouter.put(
     const existing = existingRows[0]
     if (!existing) throw notFound('Ticket request not found')
 
+    const ticketSlotCount = ticketSlotCountFromCompanionNumbers(existing.travel_companion_membership_numbers)
+    const perTicketAmountEur = balanceRemainingAmountEur
+    const totalBalanceRemainingAmountEur =
+      perTicketAmountEur == null
+        ? null
+        : Math.round(perTicketAmountEur * ticketSlotCount * 100) / 100
+
     const resolvedAmount =
-      balanceRemainingAmountEur ??
+      totalBalanceRemainingAmountEur ??
       (existing.balance_remaining_amount_eur == null ? null : Number(existing.balance_remaining_amount_eur))
     const resolvedDeadline =
       balancePaymentDeadlineIso ??
@@ -683,7 +692,7 @@ ticketsRouter.put(
            updated_at = now()
        where id = $4
        returning balance_remaining_amount_eur, balance_payment_notified, balance_payment_notified_at, balance_payment_deadline`,
-      [balanceRemainingAmountEur, balancePaymentNotified, balancePaymentDeadlineIso, requestId],
+      [totalBalanceRemainingAmountEur, balancePaymentNotified, balancePaymentDeadlineIso, requestId],
     )
     if (rows.length === 0) throw notFound('Ticket request not found')
 
@@ -693,6 +702,9 @@ ticketsRouter.put(
         throw badRequest('No email address on file for this member.')
       }
       const amountForEmail = resolvedAmount!
+      const perTicketForEmail =
+        perTicketAmountEur ??
+        Math.round((amountForEmail / ticketSlotCount) * 100) / 100
       const rawDeadline = rows[0].balance_payment_deadline ?? resolvedDeadline!
       const deadlineForEmail =
         rawDeadline instanceof Date
@@ -702,6 +714,8 @@ ticketsRouter.put(
         to,
         matchKey: existing.match_key,
         balanceRemainingAmountEur: amountForEmail,
+        perTicketAmountEur: perTicketForEmail,
+        ticketSlotCount,
         paymentDeadlineIso: deadlineForEmail,
       })
     }
