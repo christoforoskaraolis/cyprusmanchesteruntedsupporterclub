@@ -3,7 +3,6 @@ import {
   apiFootballConfigured,
   fetchFixtureById,
   fetchLiveManchesterUnitedFixtures,
-  fetchManchesterUnitedFixturesForDate,
   isFinishedStatus,
   isLiveStatus,
   shortTeamName,
@@ -29,34 +28,6 @@ type LivescoreRow = {
 let watcherStarted = false
 let tickInFlight = false
 let nextTickTimer: ReturnType<typeof setTimeout> | null = null
-let matchDayCache: { date: string; fixtures: ApiFootballFixture[]; checkedAt: number } | null = null
-
-function utcDateIso(offsetDays = 0): string {
-  const d = new Date()
-  d.setUTCDate(d.getUTCDate() + offsetDays)
-  return d.toISOString().slice(0, 10)
-}
-
-async function getCachedMatchDayFixtures(): Promise<ApiFootballFixture[]> {
-  const date = utcDateIso(0)
-  if (
-    matchDayCache &&
-    matchDayCache.date === date &&
-    Date.now() - matchDayCache.checkedAt < 60 * 60 * 1000
-  ) {
-    return matchDayCache.fixtures
-  }
-
-  try {
-    const fixtures = await fetchManchesterUnitedFixturesForDate(date)
-    matchDayCache = { date, fixtures, checkedAt: Date.now() }
-    return fixtures
-  } catch (err) {
-    console.warn('[livescore] match-day fixtures check failed:', err)
-    if (matchDayCache && matchDayCache.date === date) return matchDayCache.fixtures
-    return []
-  }
-}
 
 function formatMinute(elapsed: number | null | undefined, extra?: number | null): string {
   if (elapsed == null || !Number.isFinite(elapsed)) return ''
@@ -226,22 +197,15 @@ async function loadStored(): Promise<LivescoreRow | null> {
   return rows[0] ?? null
 }
 
-function msUntilNextPoll(options: { hasLive: boolean; kickoffSoon: boolean }): number {
+function msUntilNextPoll(options: { hasLive: boolean }): number {
+  // Free plans cannot query current-season schedules, so poll live only.
   if (options.hasLive) return 45_000
-  if (options.kickoffSoon) return 60_000
-  return 5 * 60_000
+  return 2 * 60_000
 }
 
-function kickoffWithinMinutes(fixture: ApiFootballFixture, minutes: number): boolean {
-  const kickoff = new Date(fixture.fixture.date).getTime()
-  if (!Number.isFinite(kickoff)) return false
-  const delta = kickoff - Date.now()
-  return delta <= minutes * 60_000 && delta >= -15 * 60_000
-}
-
-async function tick(): Promise<{ hasLive: boolean; kickoffSoon: boolean }> {
+async function tick(): Promise<{ hasLive: boolean }> {
   if (!apiFootballConfigured()) {
-    return { hasLive: false, kickoffSoon: false }
+    return { hasLive: false }
   }
 
   await clearCurrentIfStale()
@@ -251,37 +215,26 @@ async function tick(): Promise<{ hasLive: boolean; kickoffSoon: boolean }> {
     const fixture = live[0]!
     await upsertCurrent(fixture)
     await processFixtureNotifications(fixture)
-    return { hasLive: true, kickoffSoon: false }
+    return { hasLive: true }
   }
 
   const stored = await loadStored()
   if (stored?.fixture_id && stored.is_live) {
-    const refreshed = await fetchFixtureById(stored.fixture_id)
-    if (refreshed) {
-      await upsertCurrent(refreshed)
-      await processFixtureNotifications(refreshed)
-      return {
-        hasLive: isLiveStatus(refreshed.fixture.status.short),
-        kickoffSoon: false,
+    try {
+      const refreshed = await fetchFixtureById(stored.fixture_id)
+      if (refreshed) {
+        await upsertCurrent(refreshed)
+        await processFixtureNotifications(refreshed)
+        return {
+          hasLive: isLiveStatus(refreshed.fixture.status.short),
+        }
       }
+    } catch (err) {
+      console.warn('[livescore] fixture refresh failed:', err)
     }
   }
 
-  if (stored?.fixture_id && isFinishedStatus(stored.status_short) && !stored.is_live) {
-    // Keep FT on homepage until stale cleaner removes it.
-  } else if (!stored?.fixture_id || (!stored.is_live && !isFinishedStatus(stored.status_short))) {
-    // No live match — optionally seed upcoming kickoff soon display? Skip UI until live.
-  }
-
-  let kickoffSoon = false
-  try {
-    const todays = await getCachedMatchDayFixtures()
-    kickoffSoon = todays.some((f) => kickoffWithinMinutes(f, 30))
-  } catch (err) {
-    console.warn('[livescore] upcoming fixtures check failed:', err)
-  }
-
-  return { hasLive: false, kickoffSoon }
+  return { hasLive: false }
 }
 
 async function scheduleNext(delayMs: number): Promise<void> {
@@ -314,7 +267,7 @@ export function startLivescoreWatcher(): void {
     return
   }
 
-  console.log('[livescore] watcher started')
+  console.log('[livescore] watcher started (live polling only — free-plan compatible)')
   void runTick()
 }
 
