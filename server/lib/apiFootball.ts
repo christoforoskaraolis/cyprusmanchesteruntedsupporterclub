@@ -95,12 +95,24 @@ export async function fetchLiveManchesterUnitedFixtures(): Promise<ApiFootballFi
   return Array.isArray(rows) ? rows : []
 }
 
-/** Free-plan safe: uses `date` instead of Pro-only `next`. */
+/** Football season year used by API-Football (season starting August). */
+export function footballSeasonYearForDate(dateIso: string): number {
+  const d = new Date(`${dateIso}T12:00:00.000Z`)
+  if (Number.isNaN(d.getTime())) {
+    const now = new Date()
+    return now.getUTCMonth() >= 7 ? now.getUTCFullYear() : now.getUTCFullYear() - 1
+  }
+  // August (month index 7) starts a new season year in API-Football.
+  return d.getUTCMonth() >= 7 ? d.getUTCFullYear() : d.getUTCFullYear() - 1
+}
+
+/** Free-plan safe: uses `date` + `season` instead of Pro-only `next`. */
 export async function fetchManchesterUnitedFixturesForDate(dateIso: string): Promise<ApiFootballFixture[]> {
   const teamId = String(env.apiFootballTeamId || MAN_UNITED_TEAM_ID_DEFAULT)
   const rows = await apiFootballGet<ApiFootballFixture[]>('fixtures', {
     team: teamId,
     date: dateIso,
+    season: String(footballSeasonYearForDate(dateIso)),
   })
   return Array.isArray(rows) ? rows : []
 }
