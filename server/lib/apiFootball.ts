@@ -95,11 +95,12 @@ export async function fetchLiveManchesterUnitedFixtures(): Promise<ApiFootballFi
   return Array.isArray(rows) ? rows : []
 }
 
-export async function fetchNextManchesterUnitedFixtures(count = 3): Promise<ApiFootballFixture[]> {
+/** Free-plan safe: uses `date` instead of Pro-only `next`. */
+export async function fetchManchesterUnitedFixturesForDate(dateIso: string): Promise<ApiFootballFixture[]> {
   const teamId = String(env.apiFootballTeamId || MAN_UNITED_TEAM_ID_DEFAULT)
   const rows = await apiFootballGet<ApiFootballFixture[]>('fixtures', {
     team: teamId,
-    next: String(Math.max(1, count)),
+    date: dateIso,
   })
   return Array.isArray(rows) ? rows : []
 }

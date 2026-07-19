@@ -3,7 +3,7 @@ import {
   apiFootballConfigured,
   fetchFixtureById,
   fetchLiveManchesterUnitedFixtures,
-  fetchNextManchesterUnitedFixtures,
+  fetchManchesterUnitedFixturesForDate,
   isFinishedStatus,
   isLiveStatus,
   shortTeamName,
@@ -29,6 +29,34 @@ type LivescoreRow = {
 let watcherStarted = false
 let tickInFlight = false
 let nextTickTimer: ReturnType<typeof setTimeout> | null = null
+let matchDayCache: { date: string; fixtures: ApiFootballFixture[]; checkedAt: number } | null = null
+
+function utcDateIso(offsetDays = 0): string {
+  const d = new Date()
+  d.setUTCDate(d.getUTCDate() + offsetDays)
+  return d.toISOString().slice(0, 10)
+}
+
+async function getCachedMatchDayFixtures(): Promise<ApiFootballFixture[]> {
+  const date = utcDateIso(0)
+  if (
+    matchDayCache &&
+    matchDayCache.date === date &&
+    Date.now() - matchDayCache.checkedAt < 60 * 60 * 1000
+  ) {
+    return matchDayCache.fixtures
+  }
+
+  try {
+    const fixtures = await fetchManchesterUnitedFixturesForDate(date)
+    matchDayCache = { date, fixtures, checkedAt: Date.now() }
+    return fixtures
+  } catch (err) {
+    console.warn('[livescore] match-day fixtures check failed:', err)
+    if (matchDayCache && matchDayCache.date === date) return matchDayCache.fixtures
+    return []
+  }
+}
 
 function formatMinute(elapsed: number | null | undefined, extra?: number | null): string {
   if (elapsed == null || !Number.isFinite(elapsed)) return ''
@@ -247,8 +275,8 @@ async function tick(): Promise<{ hasLive: boolean; kickoffSoon: boolean }> {
 
   let kickoffSoon = false
   try {
-    const upcoming = await fetchNextManchesterUnitedFixtures(2)
-    kickoffSoon = upcoming.some((f) => kickoffWithinMinutes(f, 30))
+    const todays = await getCachedMatchDayFixtures()
+    kickoffSoon = todays.some((f) => kickoffWithinMinutes(f, 30))
   } catch (err) {
     console.warn('[livescore] upcoming fixtures check failed:', err)
   }
