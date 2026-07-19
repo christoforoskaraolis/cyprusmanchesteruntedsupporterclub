@@ -138,6 +138,7 @@ import { FamilyOfficialMembershipTeaser } from './components/FamilyOfficialMembe
 import { OfficialMembershipRequestSection } from './components/OfficialMembershipRequestSection.tsx'
 import { OfficialMembershipTeaser } from './components/OfficialMembershipTeaser.tsx'
 import { NewsPushBell } from './components/NewsPushBell.tsx'
+import { LiveScoreBar } from './components/LiveScoreBar.tsx'
 import { AdminNewsPostPreview } from './components/AdminNewsPostPreview.tsx'
 import { NewsFeed } from './components/NewsFeed.tsx'
 
@@ -10172,6 +10173,7 @@ function App() {
         )}
         {activePage === 'home' && (
           <div className="home-page">
+            <LiveScoreBar />
             <p className="home-welcome">
               Welcome
               {(() => {

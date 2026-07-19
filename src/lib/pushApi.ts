@@ -42,14 +42,20 @@ export async function fetchPushConfig() {
 
 export async function fetchPushStatus() {
   try {
-    const data = await apiGet<{ subscribed: boolean }>('/api/push/status')
-    return { subscribed: data.subscribed, error: undefined as Error | undefined }
+    const data = await apiGet<{ subscribed: boolean; matchAlerts?: boolean }>('/api/push/status')
+    return {
+      subscribed: data.subscribed,
+      matchAlerts: data.matchAlerts === true,
+      error: undefined as Error | undefined,
+    }
   } catch (error) {
-    return { subscribed: false, error: asError(error) }
+    return { subscribed: false, matchAlerts: false, error: asError(error) }
   }
 }
 
-export async function subscribeToNewsPush(): Promise<{ error?: Error }> {
+export async function subscribeToNewsPush(options?: {
+  matchAlerts?: boolean
+}): Promise<{ error?: Error }> {
   if (!pushSupportedInBrowser()) {
     return { error: new Error('Push notifications are not supported in this browser.') }
   }
@@ -85,7 +91,17 @@ export async function subscribeToNewsPush(): Promise<{ error?: Error }> {
     await apiSend('/api/push/subscribe', 'POST', {
       endpoint: json.endpoint,
       keys: { p256dh: json.keys.p256dh, auth: json.keys.auth },
+      ...(typeof options?.matchAlerts === 'boolean' ? { matchAlerts: options.matchAlerts } : {}),
     })
+    return {}
+  } catch (error) {
+    return { error: asError(error) }
+  }
+}
+
+export async function updateMatchAlertPreference(matchAlerts: boolean): Promise<{ error?: Error }> {
+  try {
+    await apiSend('/api/push/preferences', 'PUT', { matchAlerts })
     return {}
   } catch (error) {
     return { error: asError(error) }

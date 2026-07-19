@@ -18,7 +18,9 @@ import { adminEmailsRouter } from './routes/adminEmails.ts'
 import { authRouter } from './routes/auth.ts'
 import { pushRouter } from './routes/push.ts'
 import { stripeRouter } from './routes/stripe.ts'
+import { livescoreRouter } from './routes/livescore.ts'
 import { pruneNewsPostsToLimit } from './lib/pruneNewsPosts.ts'
+import { startLivescoreWatcher } from './lib/livescoreWatcher.ts'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
@@ -63,6 +65,7 @@ app.use('/api/health', healthRouter)
 app.use('/api/auth', authRouter)
 app.use('/api/news', newsRouter)
 app.use('/api/push', pushRouter)
+app.use('/api/livescore', livescoreRouter)
 app.use('/api/fixtures', fixturesRouter)
 app.use('/api/tickets', ticketsRouter)
 app.use('/api/merchandise', merchandiseRouter)
@@ -108,4 +111,5 @@ app.use(errorHandler)
 app.listen(env.port, () => {
   console.log(`[api] listening on http://localhost:${env.port}`)
   void pruneNewsPostsToLimit().catch((err) => console.error('[news] initial prune failed:', err))
+  startLivescoreWatcher()
 })

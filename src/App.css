@@ -1484,6 +1484,77 @@
   color: var(--text-h);
 }
 
+.live-score-bar {
+  margin: 0 0 1rem;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid rgba(218, 32, 43, 0.35);
+  background: linear-gradient(135deg, #7a1018 0%, #da202b 55%, #9b1520 100%);
+  color: #fff;
+  box-shadow: 0 8px 20px rgba(122, 16, 24, 0.18);
+}
+
+.live-score-bar.is-finished {
+  background: linear-gradient(135deg, #2f2f2f 0%, #4a4a4a 100%);
+  border-color: rgba(0, 0, 0, 0.2);
+  box-shadow: none;
+}
+
+.live-score-bar-inner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.55rem 0.85rem;
+  padding: 0.75rem 0.9rem;
+}
+
+.live-score-bar-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 2.6rem;
+  padding: 0.2rem 0.45rem;
+  border-radius: 999px;
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  background: rgba(255, 255, 255, 0.18);
+}
+
+.live-score-bar.is-live .live-score-bar-badge {
+  animation: live-score-pulse 1.6s ease-in-out infinite;
+}
+
+.live-score-bar-match {
+  font-size: 0.98rem;
+  letter-spacing: 0.01em;
+}
+
+.live-score-bar-clock {
+  font-weight: 600;
+  opacity: 0.95;
+}
+
+.live-score-bar-comp {
+  margin-left: auto;
+  font-size: 0.78rem;
+  opacity: 0.85;
+}
+
+@keyframes live-score-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.55;
+  }
+}
+
+.news-push-bell-popover-text--spaced {
+  margin-top: 0.85rem;
+}
+
 .home-hint {
   margin: 0;
   color: var(--text-muted);

@@ -7,6 +7,7 @@ import {
   pushSupportedInBrowser,
   subscribeToNewsPush,
   unsubscribeFromNewsPush,
+  updateMatchAlertPreference,
 } from '../lib/pushApi.ts'
 
 function IconBell({ filled, topbar }: { filled: boolean; topbar?: boolean }) {
@@ -46,8 +47,10 @@ export function NewsPushBell({ variant = 'page' }: NewsPushBellProps) {
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
+  const [matchBusy, setMatchBusy] = useState(false)
   const [serverEnabled, setServerEnabled] = useState(false)
   const [subscribed, setSubscribed] = useState(false)
+  const [matchAlerts, setMatchAlerts] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -66,6 +69,7 @@ export function NewsPushBell({ variant = 'page' }: NewsPushBellProps) {
       if (cancelled) return
       setServerEnabled(config.enabled)
       setSubscribed(status.subscribed)
+      setMatchAlerts(status.matchAlerts)
       if (config.error) setError(config.error.message)
       else if (status.error) setError(status.error.message)
       setLoading(false)
@@ -93,6 +97,7 @@ export function NewsPushBell({ variant = 'page' }: NewsPushBellProps) {
       if (unsubError) setError(unsubError.message)
       else {
         setSubscribed(false)
+        setMatchAlerts(false)
         setMessage('Alerts off')
       }
     } else {
@@ -108,10 +113,39 @@ export function NewsPushBell({ variant = 'page' }: NewsPushBellProps) {
     setBusy(false)
   }
 
+  async function handleMatchToggle() {
+    setMatchBusy(true)
+    setError(null)
+    setMessage(null)
+
+    if (!subscribed) {
+      const { error: subError } = await subscribeToNewsPush({ matchAlerts: true })
+      if (subError) {
+        setError(subError.message)
+        setMatchBusy(false)
+        return
+      }
+      setSubscribed(true)
+      setMatchAlerts(true)
+      setMessage('Match alerts on')
+      setMatchBusy(false)
+      return
+    }
+
+    const next = !matchAlerts
+    const { error: prefError } = await updateMatchAlertPreference(next)
+    if (prefError) setError(prefError.message)
+    else {
+      setMatchAlerts(next)
+      setMessage(next ? 'Match alerts on' : 'Match alerts off')
+    }
+    setMatchBusy(false)
+  }
+
   if (!browserSupported) return null
 
-  const bellLabel = subscribed ? 'News alerts on' : 'News alerts off'
-
+  const anyOn = subscribed || matchAlerts
+  const bellLabel = anyOn ? 'Notification alerts on' : 'Notification alerts off'
   const isTopbar = variant === 'topbar'
 
   return (
@@ -123,8 +157,8 @@ export function NewsPushBell({ variant = 'page' }: NewsPushBellProps) {
         type="button"
         className={
           isTopbar
-            ? `top-bar-icon-btn news-push-bell-topbar-btn ${subscribed ? 'is-on is-subscribed' : ''} ${open ? 'is-open' : ''}`
-            : `news-push-bell-btn ${subscribed ? 'is-on' : ''} ${open ? 'is-open' : ''}`
+            ? `top-bar-icon-btn news-push-bell-topbar-btn ${anyOn ? 'is-on is-subscribed' : ''} ${open ? 'is-open' : ''}`
+            : `news-push-bell-btn ${anyOn ? 'is-on' : ''} ${open ? 'is-open' : ''}`
         }
         aria-label={bellLabel}
         aria-expanded={open}
@@ -132,31 +166,28 @@ export function NewsPushBell({ variant = 'page' }: NewsPushBellProps) {
         disabled={loading}
         onClick={() => setOpen((v) => !v)}
       >
-        <IconBell filled={subscribed} topbar={isTopbar} />
-        {subscribed && <span className="news-push-bell-dot" aria-hidden />}
+        <IconBell filled={anyOn} topbar={isTopbar} />
+        {anyOn && <span className="news-push-bell-dot" aria-hidden />}
       </button>
 
       {open && (
         <div
           className={`news-push-bell-popover ${isTopbar ? 'news-push-bell-popover--topbar' : ''}`}
           role="dialog"
-          aria-label="News alert settings"
+          aria-label="Alert settings"
         >
-          <p className="news-push-bell-popover-title">News alerts</p>
+          <p className="news-push-bell-popover-title">Alerts</p>
           {!serverEnabled ? (
             <p className="news-push-bell-popover-text">Alerts are not configured on the server yet.</p>
           ) : (
             <>
-              <p className="news-push-bell-popover-text">
-                {subscribed
-                  ? 'Alerts are on for this device.'
-                  : 'Get notified when new club news is published.'}
-              </p>
               {ios && !standalone && !subscribed && (
                 <p className="news-push-bell-ios-hint">
                   On iPhone, add this site to your Home Screen first, then turn alerts on.
                 </p>
               )}
+
+              <p className="news-push-bell-popover-text">Get notified when new club news is published.</p>
               <button
                 type="button"
                 className={`news-push-bell-toggle ${subscribed ? 'is-on' : ''}`}
@@ -166,7 +197,24 @@ export function NewsPushBell({ variant = 'page' }: NewsPushBellProps) {
                 <span className="news-push-bell-toggle-track" aria-hidden>
                   <span className="news-push-bell-toggle-thumb" />
                 </span>
-                <span>{busy ? 'Updating…' : subscribed ? 'Alerts on' : 'Alerts off'}</span>
+                <span>{busy ? 'Updating…' : subscribed ? 'News alerts on' : 'News alerts off'}</span>
+              </button>
+
+              <p className="news-push-bell-popover-text news-push-bell-popover-text--spaced">
+                Match alerts: kick-off, goals, half-time and full-time.
+              </p>
+              <button
+                type="button"
+                className={`news-push-bell-toggle ${matchAlerts ? 'is-on' : ''}`}
+                onClick={() => void handleMatchToggle()}
+                disabled={matchBusy || (!subscribed && ios && !standalone)}
+              >
+                <span className="news-push-bell-toggle-track" aria-hidden>
+                  <span className="news-push-bell-toggle-thumb" />
+                </span>
+                <span>
+                  {matchBusy ? 'Updating…' : matchAlerts ? 'Match alerts on' : 'Match alerts off'}
+                </span>
               </button>
             </>
           )}

@@ -32,5 +32,8 @@ export const env = {
   vapidPublicKey: read('VAPID_PUBLIC_KEY'),
   vapidPrivateKey: read('VAPID_PRIVATE_KEY'),
   vapidSubject: read('VAPID_SUBJECT'),
+  apiFootballKey: read('API_FOOTBALL_KEY'),
+  apiFootballBaseUrl: read('API_FOOTBALL_BASE_URL') || 'https://v3.football.api-sports.io',
+  apiFootballTeamId: Number(read('API_FOOTBALL_TEAM_ID') || 33),
   isProduction: read('NODE_ENV') === 'production',
 }
