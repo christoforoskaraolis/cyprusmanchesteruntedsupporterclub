@@ -1,5 +1,4 @@
-import { useEffect, useState } from 'react'
-import { fetchCurrentLivescore, type PublicLivescore } from '../lib/livescoreApi.ts'
+import type { PublicLivescore } from '../lib/livescoreApi.ts'
 
 function shortName(name: string): string {
   if (/manchester united/i.test(name)) return 'Man Utd'
@@ -10,30 +9,11 @@ function shortName(name: string): string {
   return name
 }
 
-export function LiveScoreBar() {
-  const [livescore, setLivescore] = useState<PublicLivescore | null>(null)
+type LiveScoreBarProps = {
+  livescore: PublicLivescore | null
+}
 
-  useEffect(() => {
-    let cancelled = false
-    let timer: ReturnType<typeof setTimeout> | null = null
-
-    async function load() {
-      const { livescore: next } = await fetchCurrentLivescore()
-      if (cancelled) return
-      setLivescore(next)
-      const delay = next?.isLive ? 20_000 : next?.active ? 60_000 : 120_000
-      timer = setTimeout(() => {
-        void load()
-      }, delay)
-    }
-
-    void load()
-    return () => {
-      cancelled = true
-      if (timer) clearTimeout(timer)
-    }
-  }, [])
-
+export function LiveScoreBar({ livescore }: LiveScoreBarProps) {
   if (!livescore?.active || !livescore.homeTeam || !livescore.awayTeam) return null
 
   const home = shortName(livescore.homeTeam)
