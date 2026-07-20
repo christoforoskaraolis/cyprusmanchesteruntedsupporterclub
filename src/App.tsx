@@ -139,6 +139,7 @@ import { OfficialMembershipRequestSection } from './components/OfficialMembershi
 import { OfficialMembershipTeaser } from './components/OfficialMembershipTeaser.tsx'
 import { NewsPushBell } from './components/NewsPushBell.tsx'
 import { LiveScoreBar } from './components/LiveScoreBar.tsx'
+import { NextMatchCard } from './components/NextMatchCard.tsx'
 import { AdminNewsPostPreview } from './components/AdminNewsPostPreview.tsx'
 import { NewsFeed } from './components/NewsFeed.tsx'
 
@@ -10201,6 +10202,7 @@ function App() {
         {activePage === 'home' && (
           <div className="home-page">
             <LiveScoreBar />
+            <NextMatchCard fixture={upcomingFixtures[0] ?? null} />
             <p className="home-welcome">
               Welcome
               {(() => {

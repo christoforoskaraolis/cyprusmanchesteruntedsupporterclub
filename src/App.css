@@ -1494,6 +1494,50 @@
   box-shadow: 0 8px 20px rgba(122, 16, 24, 0.18);
 }
 
+.next-match-card {
+  margin: 0 0 1rem;
+  padding: 0.95rem 1rem;
+  border-radius: 12px;
+  border: 1px solid var(--border-strong);
+  background:
+    linear-gradient(180deg, rgba(218, 32, 43, 0.06), transparent 48%),
+    var(--surface);
+}
+
+.next-match-card-eyebrow {
+  margin: 0 0 0.35rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--mu-red);
+}
+
+.next-match-card-title {
+  margin: 0 0 0.4rem;
+  font-size: 1.15rem;
+  font-weight: 700;
+  line-height: 1.25;
+  color: var(--text-h);
+}
+
+.next-match-card-kickoff {
+  margin: 0 0 0.35rem;
+  font-size: 0.98rem;
+  color: var(--text-h);
+}
+
+.next-match-card-tz {
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
+.next-match-card-meta {
+  margin: 0;
+  font-size: 0.86rem;
+  color: var(--text-muted);
+}
+
 .live-score-bar.is-finished {
   background: linear-gradient(135deg, #2f2f2f 0%, #4a4a4a 100%);
   border-color: rgba(0, 0, 0, 0.2);
