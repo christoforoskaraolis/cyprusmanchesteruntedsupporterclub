@@ -35,6 +35,11 @@ export type MerchandiseOrderRow = {
   deliveryBranch: string
   status: string
   createdAt: string
+  user?: {
+    fullName: string | null
+    mobilePhone: string | null
+    membershipNumber: number | null
+  }
 }
 
 export type MerchandiseOrderStatus = 'pending' | 'paid' | 'cancelled'

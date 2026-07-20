@@ -2852,10 +2852,15 @@ function AdminConsole({
   const filteredMerchOrders = merchandiseOrders.filter((o) => {
     const q = merchSearch.trim().toLowerCase()
     if (!q) return true
+    const memberId =
+      o.user?.membershipNumber != null ? formatMembershipNumber(o.user.membershipNumber).toLowerCase() : ''
     return (
       o.userId.toLowerCase().includes(q) ||
       o.id.toLowerCase().includes(q) ||
       o.deliveryBranch.toLowerCase().includes(q) ||
+      (o.user?.fullName ?? '').toLowerCase().includes(q) ||
+      (o.user?.mobilePhone ?? '').toLowerCase().includes(q) ||
+      memberId.includes(q) ||
       o.lines.some((line) => line.title.toLowerCase().includes(q))
     )
   })
@@ -2980,9 +2985,23 @@ function AdminConsole({
   }
 
   function exportMerchandiseReport() {
-    const headers = ['Order ID', 'User ID', 'Status', 'Total EUR', 'Delivery Branch', 'Created At', 'Lines']
+    const headers = [
+      'Order ID',
+      'Cyprus Member ID',
+      'Full Name',
+      'Telephone',
+      'User ID',
+      'Status',
+      'Total EUR',
+      'Delivery Branch',
+      'Created At',
+      'Lines',
+    ]
     const rows = merchandiseOrders.map((o) => [
       o.id,
+      o.user?.membershipNumber != null ? formatMembershipNumber(o.user.membershipNumber) : '',
+      o.user?.fullName ?? '',
+      o.user?.mobilePhone ?? '',
       o.userId,
       o.status,
       o.totalEur.toFixed(2),
@@ -5352,7 +5371,7 @@ function AdminConsole({
             <input
               className="auth-input admin-search-input"
               type="search"
-              placeholder="Search orders by order ID, user ID, product, or delivery branch"
+              placeholder="Search orders by name, member ID, phone, product, or delivery branch"
               value={merchSearch}
               onChange={(e) => setMerchSearch(e.target.value)}
             />
@@ -5376,8 +5395,16 @@ function AdminConsole({
                         </span>
                       </p>
                       <p className="admin-merch-order-total">
-                        <strong>€{o.totalEur.toFixed(2)}</strong> · User <code className="admin-inline-code">{o.userId}</code>
+                        <strong>€{o.totalEur.toFixed(2)}</strong>
                       </p>
+                      <p className="admin-member-meta">
+                        Cyprus Member ID:{' '}
+                        {o.user?.membershipNumber != null
+                          ? formatMembershipNumber(o.user.membershipNumber)
+                          : '—'}
+                      </p>
+                      <p className="admin-member-meta">Full name: {o.user?.fullName?.trim() || '—'}</p>
+                      <p className="admin-member-meta">Telephone: {o.user?.mobilePhone?.trim() || '—'}</p>
                     </div>
                     {o.status === 'pending' && (
                       <div className="admin-merch-order-actions">

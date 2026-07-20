@@ -177,20 +177,54 @@ merchandiseRouter.get(
   '/orders',
   requireAdmin,
   asyncHandler(async (_req, res) => {
-    const { rows } = await query<any>(
-      `select id, user_id, lines, total_eur, delivery_branch, status, created_at
-       from public.merchandise_orders order by created_at desc`,
+    const { rows } = await query<{
+      id: string
+      user_id: string
+      lines: unknown
+      total_eur: string | number
+      delivery_branch: string
+      status: string
+      created_at: string
+      first_name: string | null
+      last_name: string | null
+      profile_full_name: string | null
+      mobile_phone: string | null
+      membership_number: number | null
+    }>(
+      `select mo.id, mo.user_id, mo.lines, mo.total_eur, mo.delivery_branch, mo.status, mo.created_at,
+              m.first_name, m.last_name, p.full_name as profile_full_name,
+              m.mobile_phone, m.membership_number
+       from public.merchandise_orders mo
+       left join public.profiles p on p.id = mo.user_id
+       left join lateral (
+         select ma.first_name, ma.last_name, ma.mobile_phone, ma.membership_number
+         from public.membership_applications ma
+         where ma.user_id = mo.user_id
+           and ma.sponsor_application_id is null
+         order by case when ma.status = 'active' then 0 else 1 end, ma.submitted_at desc
+         limit 1
+       ) m on true
+       order by mo.created_at desc`,
     )
     res.json({
-      rows: rows.map((r) => ({
-        id: r.id,
-        userId: r.user_id,
-        lines: Array.isArray(r.lines) ? r.lines : [],
-        totalEur: Number(r.total_eur),
-        deliveryBranch: r.delivery_branch,
-        status: r.status,
-        createdAt: r.created_at,
-      })),
+      rows: rows.map((r) => {
+        const membershipName = [r.first_name, r.last_name].filter(Boolean).join(' ').trim()
+        const fullName = membershipName || r.profile_full_name?.trim() || null
+        return {
+          id: r.id,
+          userId: r.user_id,
+          lines: Array.isArray(r.lines) ? r.lines : [],
+          totalEur: Number(r.total_eur),
+          deliveryBranch: r.delivery_branch,
+          status: r.status,
+          createdAt: r.created_at,
+          user: {
+            fullName,
+            mobilePhone: r.mobile_phone,
+            membershipNumber: r.membership_number,
+          },
+        }
+      }),
     })
   }),
 )
