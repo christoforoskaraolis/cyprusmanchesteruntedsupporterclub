@@ -310,7 +310,9 @@ ticketsRouter.post(
     }>(
       `select membership_number, official_mu_membership_status
        from public.membership_applications
-       where user_id = $1 and status = 'active'
+       where user_id = $1
+         and status = 'active'
+         and sponsor_application_id is null
        order by submitted_at desc
        limit 1`,
       [req.user!.id],
@@ -423,7 +425,10 @@ ticketsRouter.get(
                 ma.official_mu_membership_id, ma.official_mu_membership_status, ma.application_id
          from public.membership_applications ma
          where ma.user_id = ftr.user_id
-         order by case when ma.status = 'active' then 0 else 1 end, ma.submitted_at desc
+         order by
+           case when ma.sponsor_application_id is null then 0 else 1 end,
+           case when ma.status = 'active' then 0 else 1 end,
+           ma.submitted_at desc
          limit 1
        ) m on true
        order by ftr.requested_at desc`,
