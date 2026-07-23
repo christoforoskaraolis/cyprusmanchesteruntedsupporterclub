@@ -139,6 +139,7 @@ import { OfficialMembershipRequestSection } from './components/OfficialMembershi
 import { OfficialMembershipTeaser } from './components/OfficialMembershipTeaser.tsx'
 import { NewsPushBell } from './components/NewsPushBell.tsx'
 import { HomeMatchPanels } from './components/HomeMatchPanels.tsx'
+import { DateOfBirthInput } from './components/DateOfBirthInput.tsx'
 import { AdminNewsPostPreview } from './components/AdminNewsPostPreview.tsx'
 import { NewsFeed } from './components/NewsFeed.tsx'
 
@@ -531,14 +532,10 @@ function CyprusMembershipForm({
         </label>
         <label className="auth-field membership-field">
           <span className="auth-label">Date of birth</span>
-          <input
-            className="auth-input membership-input-date"
-            type="date"
+          <DateOfBirthInput
             name="membership-dob"
-            autoComplete="bday"
-            max={new Date().toISOString().slice(0, 10)}
             value={dateOfBirth}
-            onChange={(ev) => setDateOfBirth(ev.target.value)}
+            onChange={setDateOfBirth}
           />
         </label>
 
@@ -3782,17 +3779,15 @@ function AdminConsole({
                           </label>
                           <label className="auth-field membership-field">
                             <span className="auth-label">Date of birth</span>
-                            <input
-                              className="auth-input"
-                              type="date"
+                            <DateOfBirthInput
                               value={detailsDraft.dateOfBirth}
-                              onChange={(e) =>
+                              disabled={busyId !== null}
+                              onChange={(next) =>
                                 setMemberDetailsDraftByApplicationId((prev) => ({
                                   ...prev,
-                                  [m.applicationId]: { ...detailsDraft, dateOfBirth: e.target.value },
+                                  [m.applicationId]: { ...detailsDraft, dateOfBirth: next },
                                 }))
                               }
-                              disabled={busyId !== null}
                             />
                           </label>
                           <label className="auth-field membership-field admin-member-details-wide">
@@ -9958,12 +9953,9 @@ function App() {
                                     </label>
                                     <label className="auth-field membership-field">
                                       <span className="auth-label">Date of birth</span>
-                                      <input
-                                        className="auth-input membership-input-date"
-                                        type="date"
-                                        max={new Date().toISOString().slice(0, 10)}
+                                      <DateOfBirthInput
                                         value={familyEditDateOfBirth}
-                                        onChange={(e) => setFamilyEditDateOfBirth(e.target.value)}
+                                        onChange={setFamilyEditDateOfBirth}
                                       />
                                     </label>
                                     <label className="auth-field membership-field">

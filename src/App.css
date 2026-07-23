@@ -4001,6 +4001,59 @@
   color-scheme: light;
 }
 
+.dob-input {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.dob-input-row {
+  display: grid;
+  grid-template-columns: 4.2rem minmax(7.5rem, 1.2fr) 5.5rem;
+  gap: 0.5rem;
+  align-items: end;
+}
+
+.dob-input-part {
+  display: grid;
+  gap: 0.25rem;
+  margin: 0;
+}
+
+.dob-input-part-label {
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.dob-input-day,
+.dob-input-year {
+  text-align: center;
+}
+
+.dob-input-month {
+  padding-right: 0.4rem;
+}
+
+.dob-input-typed {
+  display: grid;
+  gap: 0.25rem;
+  margin: 0;
+}
+
+.dob-input-preview {
+  margin: 0;
+  font-size: 0.86rem;
+  color: var(--text-muted);
+}
+
+@media (max-width: 420px) {
+  .dob-input-row {
+    grid-template-columns: 1fr;
+  }
+}
+
 .membership-payment-card {
   margin: 1.25rem 0 1rem;
   padding: 1.1rem 1.15rem;
