@@ -9092,22 +9092,22 @@ function App() {
                 <p className="contact-name">Χαράλαμπος Λοΐζου (Γραμματέας)</p>
               </li>
               <li className="contact-card">
-                <p className="contact-name">Χρίστος Απέγητος (Βοηθός Γραμματέας)</p>
+                <p className="contact-name">Χριστόφορος Καραολής (Βοηθός Γραμματέας)</p>
               </li>
               <li className="contact-card">
                 <p className="contact-name">Νεόφυτος Ιωάννου (Ταμίας)</p>
               </li>
               <li className="contact-card">
-                <p className="contact-name">Θεόδωρος Σαββίδης (Βοηθός Ταμίας)</p>
+                <p className="contact-name">Εύρος Αλεξάνδρου (Βοηθός Ταμίας)</p>
               </li>
               <li className="contact-card">
-                <p className="contact-name">Γιάννης Νικολαΐδης (Μέλος)</p>
+                <p className="contact-name">Χρίστος Απέγητος (Μέλος)</p>
               </li>
               <li className="contact-card">
                 <p className="contact-name">Στέλιος Χατζηχριστοφή (Μέλος)</p>
               </li>
               <li className="contact-card">
-                <p className="contact-name">Εύρος Αλεξάνδρου (Μέλος)</p>
+                <p className="contact-name">Γιώργος Αντώνη (Μέλος)</p>
               </li>
               <li className="contact-card">
                 <p className="contact-name">Άκης Νικολάου (Μέλος)</p>
@@ -9119,13 +9119,22 @@ function App() {
                 <p className="contact-name">Μιχάλης Πετουφάς (Μέλος)</p>
               </li>
               <li className="contact-card">
-                <p className="contact-name">Μάρκος Ασβεστάς (Μέλος)</p>
+                <p className="contact-name">Θεόδωρος Σαββίδης (Μέλος)</p>
               </li>
               <li className="contact-card">
                 <p className="contact-name">Κωνσταντίνος Πατσιάς (Μέλος)</p>
               </li>
               <li className="contact-card">
-                <p className="contact-name">Ρώνης Σωτηριάδης (Επίτημος Πρόεδρος)</p>
+                <p className="contact-name">Μάκης Χαραλάμπους (Μέλος)</p>
+              </li>
+              <li className="contact-card">
+                <p className="contact-name">Μιχάλης Χαραλάμπους (Μέλος)</p>
+              </li>
+              <li className="contact-card">
+                <p className="contact-name">Ανδρέας Μάρκου (Μέλος)</p>
+              </li>
+              <li className="contact-card">
+                <p className="contact-name">Ρώνης Σωτηριάδης (Επίτιμος Πρόεδρος)</p>
               </li>
             </ul>
           </div>
