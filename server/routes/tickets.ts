@@ -3,6 +3,7 @@ import { query } from '../db.ts'
 import { asyncHandler } from '../lib/asyncHandler.ts'
 import { badRequest, notFound } from '../lib/errors.ts'
 import { sendTicketDepositConfirmedEmail } from '../lib/ticketDepositConfirmedEmail.ts'
+import { sendTicketDepositPaymentReminderEmail } from '../lib/ticketDepositPaymentReminderEmail.ts'
 import { sendTicketBalancePaymentEmail } from '../lib/ticketBalancePaymentEmail.ts'
 import {
   lookupMembersByMembershipNumbers,
@@ -554,6 +555,55 @@ ticketsRouter.put(
       depositConfirmed: row.deposit_confirmed,
       depositConfirmedAt: row.deposit_confirmed_at,
     })
+  }),
+)
+
+ticketsRouter.post(
+  '/requests/:id/deposit-payment-reminder',
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const requestId = String(req.params.id ?? '').trim()
+    if (!requestId) throw badRequest('Request ID is required')
+
+    const { rows } = await query<{
+      deposit_confirmed: boolean
+      user_cancelled_at: string | null
+      travel_companion_membership_numbers: number[] | null
+      profile_email: string | null
+      auth_email: string | null
+    }>(
+      `select ftr.deposit_confirmed, ftr.user_cancelled_at, ftr.travel_companion_membership_numbers,
+              p.email as profile_email, au.email as auth_email
+       from public.fixture_ticket_requests ftr
+       left join public.profiles p on p.id = ftr.user_id
+       left join public.auth_users au on au.user_id = ftr.user_id
+       where ftr.id = $1
+       limit 1`,
+      [requestId],
+    )
+    const request = rows[0]
+    if (!request) throw notFound('Ticket request not found')
+    if (request.deposit_confirmed) {
+      throw badRequest('Deposit is already confirmed for this ticket request.')
+    }
+    if (request.user_cancelled_at) {
+      throw badRequest('Cannot send a deposit reminder for a cancelled ticket request.')
+    }
+
+    const to = (request.profile_email || request.auth_email || '').trim()
+    if (!to) throw badRequest('No email address on file for this member.')
+
+    const ticketSlotCount = ticketSlotCountFromCompanionNumbers(request.travel_companion_membership_numbers)
+    const depositAmountEur = ticketDepositAmountEurFromCompanionNumbers(
+      request.travel_companion_membership_numbers,
+    )
+    await sendTicketDepositPaymentReminderEmail({
+      to,
+      depositAmountEur,
+      ticketSlotCount,
+    })
+
+    res.json({ ok: true })
   }),
 )
 

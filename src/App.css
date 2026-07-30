@@ -3101,6 +3101,10 @@
   margin-top: 0.55rem;
 }
 
+.admin-ticket-deposit-confirm + .admin-payment-reminder-btn {
+  margin-top: 0.45rem;
+}
+
 .admin-ticket-balance-payment {
   display: flex;
   flex-direction: column;

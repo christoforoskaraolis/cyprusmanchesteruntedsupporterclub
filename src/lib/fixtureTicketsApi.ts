@@ -251,6 +251,15 @@ export async function updateFixtureTicketRequestDepositConfirmed(requestId: stri
   }
 }
 
+export async function sendFixtureTicketDepositPaymentReminder(requestId: string) {
+  try {
+    await apiSend(`/api/tickets/requests/${requestId}/deposit-payment-reminder`, 'POST')
+    return { error: undefined }
+  } catch (error) {
+    return { error: asError(error) }
+  }
+}
+
 export async function cancelMyFixtureTicketRequest(matchKey: string, userId: string) {
   void userId
   try {

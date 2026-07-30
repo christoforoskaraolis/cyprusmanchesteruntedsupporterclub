@@ -72,6 +72,7 @@ import {
   requestFixtureTicket,
   setFixtureTicketRequestStatus,
   updateFixtureTicketRequestDepositConfirmed,
+  sendFixtureTicketDepositPaymentReminder,
   updateFixtureTicketRequestBalancePayment,
   updateFixtureTicketRequestTicketConfirmed,
   upsertFixtureTicketWindow,
@@ -2008,6 +2009,7 @@ type PaymentReminderConfirmModalProps = {
   memberLabel: string | null
   submitting: boolean
   error: string | null
+  title?: string
   onClose: () => void
   onConfirm: () => void
 }
@@ -2017,6 +2019,7 @@ function PaymentReminderConfirmModal({
   memberLabel,
   submitting,
   error,
+  title = 'Payment Reminder',
   onClose,
   onConfirm,
 }: PaymentReminderConfirmModalProps) {
@@ -2038,7 +2041,7 @@ function PaymentReminderConfirmModal({
       >
         <div className="renewal-modal-head">
           <h2 id="payment-reminder-modal-title" className="renewal-modal-title">
-            Payment Reminder
+            {title}
           </h2>
           <button
             type="button"
@@ -2507,6 +2510,7 @@ type AdminConsoleProps = {
   onCompleteTicketRequest: (row: AdminFixtureTicketRequest) => Promise<void>
   onCancelTicketRequest: (row: AdminFixtureTicketRequest) => Promise<void>
   onUpdateTicketDepositConfirmed: (requestId: string, depositConfirmed: boolean) => Promise<void>
+  onSendTicketDepositPaymentReminder: (requestId: string) => Promise<void>
   onUpdateTicketBalancePayment: (
     requestId: string,
     options: {
@@ -2587,6 +2591,7 @@ function AdminConsole({
   onCompleteTicketRequest,
   onCancelTicketRequest,
   onUpdateTicketDepositConfirmed,
+  onSendTicketDepositPaymentReminder,
   onUpdateTicketBalancePayment,
   onUpdateTicketConfirmed,
   onRefreshTicketRequests,
@@ -2706,6 +2711,11 @@ function AdminConsole({
   const [ticketDepositConfirmTarget, setTicketDepositConfirmTarget] = useState<AdminFixtureTicketRequest | null>(null)
   const [ticketDepositConfirmSubmitting, setTicketDepositConfirmSubmitting] = useState(false)
   const [ticketDepositConfirmError, setTicketDepositConfirmError] = useState<string | null>(null)
+  const [ticketDepositReminderTarget, setTicketDepositReminderTarget] = useState<AdminFixtureTicketRequest | null>(
+    null,
+  )
+  const [ticketDepositReminderSubmitting, setTicketDepositReminderSubmitting] = useState(false)
+  const [ticketDepositReminderError, setTicketDepositReminderError] = useState<string | null>(null)
   const [ticketBalancePaymentTarget, setTicketBalancePaymentTarget] = useState<{
     request: AdminFixtureTicketRequest
     amountEur: number
@@ -3446,6 +3456,12 @@ function AdminConsole({
                     {m.status === 'active' && m.membershipNumber != null && (
                       <> · Member #{formatMembershipNumber(m.membershipNumber)}</>
                     )}
+                  </p>
+                  <p className="admin-member-meta">
+                    Official MU: {formatOfficialMuMembershipId(m.officialMuMembershipId)}
+                    {m.officialMuMembershipStatus
+                      ? ` (${formatOfficialMuMembershipStatus(m.officialMuMembershipStatus)})`
+                      : ''}
                   </p>
                   <p className="admin-member-meta admin-member-official-request">
                     {formatOfficialMembershipRequestLabel(m.officialMembershipOfferTitle)}
@@ -4515,6 +4531,21 @@ function AdminConsole({
                         </span>
                       )}
                     </label>
+                    {!r.depositConfirmed && !r.userCancelledAt && (
+                      <button
+                        type="button"
+                        className="admin-payment-reminder-btn"
+                        disabled={busyTicketRequestId !== null || ticketDepositReminderSubmitting}
+                        onClick={() => {
+                          setTicketActionError(null)
+                          setTicketActionNotice(null)
+                          setTicketDepositReminderError(null)
+                          setTicketDepositReminderTarget(r)
+                        }}
+                      >
+                        Reminder for payment
+                      </button>
+                    )}
                     <div className="admin-ticket-balance-payment">
                       <label className="admin-ticket-balance-payment-field">
                         <span className="auth-label">
@@ -6405,6 +6436,41 @@ function AdminConsole({
           }
         }}
       />
+      <PaymentReminderConfirmModal
+        open={ticketDepositReminderTarget !== null}
+        title="Reminder for payment"
+        memberLabel={
+          ticketDepositReminderTarget
+            ? `${ticketDepositReminderTarget.user.fullName ?? 'Member'} · ${formatFixtureMatchKeyLabel(ticketDepositReminderTarget.matchKey)}`
+            : null
+        }
+        submitting={ticketDepositReminderSubmitting}
+        error={ticketDepositReminderError}
+        onClose={() => {
+          if (ticketDepositReminderSubmitting) return
+          setTicketDepositReminderTarget(null)
+          setTicketDepositReminderError(null)
+        }}
+        onConfirm={async () => {
+          if (!ticketDepositReminderTarget) return
+          setTicketActionError(null)
+          setTicketActionNotice(null)
+          setTicketDepositReminderSubmitting(true)
+          setTicketDepositReminderError(null)
+          try {
+            await onSendTicketDepositPaymentReminder(ticketDepositReminderTarget.id)
+            const recipient = ticketDepositReminderTarget.user.email || 'the member'
+            setTicketActionNotice(`Deposit payment reminder email sent to ${recipient}.`)
+            setTicketDepositReminderTarget(null)
+          } catch (error) {
+            setTicketDepositReminderError(
+              error instanceof Error ? error.message : 'Could not send deposit payment reminder.',
+            )
+          } finally {
+            setTicketDepositReminderSubmitting(false)
+          }
+        }}
+      />
       <TicketConfirmModal
         open={ticketConfirmTarget !== null}
         requestLabel={
@@ -7127,6 +7193,11 @@ function App() {
     const { error } = await updateFixtureTicketRequestDepositConfirmed(requestId, depositConfirmed)
     if (error) throw new Error(error.message)
     await refreshTicketRequestsOnly()
+  }
+
+  async function applySendTicketDepositPaymentReminder(requestId: string) {
+    const { error } = await sendFixtureTicketDepositPaymentReminder(requestId)
+    if (error) throw new Error(error.message)
   }
 
   async function applyUpdateTicketBalancePayment(
@@ -8623,6 +8694,7 @@ function App() {
               onCompleteTicketRequest={applyCompleteTicketRequest}
               onCancelTicketRequest={applyCancelTicketRequest}
               onUpdateTicketDepositConfirmed={applyUpdateTicketDepositConfirmed}
+              onSendTicketDepositPaymentReminder={applySendTicketDepositPaymentReminder}
               onUpdateTicketBalancePayment={applyUpdateTicketBalancePayment}
               onUpdateTicketConfirmed={applyUpdateTicketConfirmed}
               onRefreshTicketRequests={refreshTicketRequestsOnly}
