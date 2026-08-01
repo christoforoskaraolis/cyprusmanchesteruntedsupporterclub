@@ -5,9 +5,12 @@ const { Pool } = pg
 
 export const pool = new Pool({
   connectionString: env.databaseUrl,
-  max: 10,
-  idleTimeoutMillis: 30_000,
+  // Small API + Neon: keep concurrent clients low so CU stays down.
+  max: 4,
+  // Drop idle clients quickly so Neon can scale to zero after traffic stops.
+  idleTimeoutMillis: 5_000,
   connectionTimeoutMillis: 10_000,
+  allowExitOnIdle: true,
 })
 
 pool.on('error', (err) => {

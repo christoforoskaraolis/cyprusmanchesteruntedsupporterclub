@@ -30,8 +30,6 @@ export type NewsPushPayload = {
   icon?: string
 }
 
-export type MatchPushPayload = NewsPushPayload
-
 function rowToSubscription(row: PushSubscriptionRow): webpush.PushSubscription {
   return {
     endpoint: row.endpoint,
@@ -92,20 +90,6 @@ export async function sendNewsPushToAllSubscribers(payload: NewsPushPayload): Pr
 }> {
   const { rows } = await query<PushSubscriptionRow>(
     `select id, user_id, endpoint, p256dh, auth_key from public.push_subscriptions`,
-  )
-  return sendPushToRows(rows, payload)
-}
-
-export async function sendMatchPushToOptedIn(payload: MatchPushPayload): Promise<{
-  attempted: number
-  sent: number
-  failed: number
-  removed: number
-}> {
-  const { rows } = await query<PushSubscriptionRow>(
-    `select id, user_id, endpoint, p256dh, auth_key
-     from public.push_subscriptions
-     where match_alerts = true`,
   )
   return sendPushToRows(rows, payload)
 }
