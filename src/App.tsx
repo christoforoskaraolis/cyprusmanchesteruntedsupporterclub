@@ -4707,8 +4707,16 @@ function AdminConsole({
                         disabled={busyTicketRequestId !== null}
                         onClick={async () => {
                           setBusyTicketRequestId(r.id)
+                          setTicketActionError(null)
+                          setTicketActionNotice(null)
                           try {
                             await onCompleteTicketRequest(r)
+                            const recipient = r.user.email || 'the member'
+                            setTicketActionNotice(`Ticket marked completed. Confirmation email sent to ${recipient}.`)
+                          } catch (error) {
+                            setTicketActionError(
+                              error instanceof Error ? error.message : 'Could not mark ticket completed.',
+                            )
                           } finally {
                             setBusyTicketRequestId(null)
                           }

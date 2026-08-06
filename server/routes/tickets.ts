@@ -5,6 +5,7 @@ import { badRequest, notFound } from '../lib/errors.ts'
 import { sendTicketDepositConfirmedEmail } from '../lib/ticketDepositConfirmedEmail.ts'
 import { sendTicketDepositPaymentReminderEmail } from '../lib/ticketDepositPaymentReminderEmail.ts'
 import { sendTicketBalancePaymentEmail } from '../lib/ticketBalancePaymentEmail.ts'
+import { sendTicketCompletedEmail } from '../lib/ticketCompletedEmail.ts'
 import {
   lookupMembersByMembershipNumbers,
   ticketDepositAmountEurFromCompanionNumbers,
@@ -483,11 +484,42 @@ ticketsRouter.put(
   '/requests/:id/status',
   requireAdmin,
   asyncHandler(async (req, res) => {
+    const requestId = String(req.params.id ?? '').trim()
     const { status } = req.body as { status: 'approved' | 'completed' | 'cancelled' }
+    if (!requestId) throw badRequest('Request ID is required')
+    if (status !== 'approved' && status !== 'completed' && status !== 'cancelled') {
+      throw badRequest('Invalid ticket request status')
+    }
+
+    const { rows: existingRows } = await query<{
+      status: string
+      profile_email: string | null
+      auth_email: string | null
+    }>(
+      `select ftr.status, p.email as profile_email, au.email as auth_email
+       from public.fixture_ticket_requests ftr
+       left join public.profiles p on p.id = ftr.user_id
+       left join public.auth_users au on au.user_id = ftr.user_id
+       where ftr.id = $1
+       limit 1`,
+      [requestId],
+    )
+    const existing = existingRows[0]
+    if (!existing) throw notFound('Ticket request not found')
+
+    if (status === 'completed' && existing.status !== 'completed') {
+      const to = (existing.profile_email || existing.auth_email || '').trim()
+      if (!to) {
+        throw badRequest('No email address on file for this member.')
+      }
+      await sendTicketCompletedEmail({ to })
+    }
+
     await query(`update public.fixture_ticket_requests set status = $1, updated_at = now() where id = $2`, [
       status,
-      req.params.id,
+      requestId,
     ])
+
     res.json({ ok: true })
   }),
 )
