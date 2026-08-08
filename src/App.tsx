@@ -3418,6 +3418,7 @@ function AdminConsole({
         <ul className="admin-member-list">
           {filtered.map((m) => {
             const detailsDraft = adminMemberDetailsDraftFromEntry(m, memberDetailsDraftByApplicationId)
+            const age = currentAgeFromDateOfBirth(m.dateOfBirth)
             return (
             <li key={m.applicationId} className="admin-member-card">
               <div className="admin-member-card-top">
@@ -3454,7 +3455,11 @@ function AdminConsole({
                     {m.city}, {m.country} · {m.mobilePhone}
                     {m.email ? ` · ${m.email}` : ' · No email on file'}
                     {m.status === 'active' && m.membershipNumber != null && (
-                      <> · Member #{formatMembershipNumber(m.membershipNumber)}</>
+                      <>
+                        {' '}
+                        · Member #{formatMembershipNumber(m.membershipNumber)}
+                        {age != null ? <> Age:{age}</> : null}
+                      </>
                     )}
                   </p>
                   <p className="admin-member-meta">
@@ -6780,6 +6785,19 @@ function dateOfBirthToDateInputValue(raw: string): string {
   }
   const iso = /^(\d{4}-\d{2}-\d{2})/.exec(trimmed)
   return iso ? iso[1] : ''
+}
+
+function currentAgeFromDateOfBirth(raw: string | null | undefined): number | null {
+  const parsed = parseDateOfBirthInput((raw ?? '').trim())
+  if (!parsed) return null
+  const today = new Date()
+  let age = today.getFullYear() - parsed.getFullYear()
+  const monthDiff = today.getMonth() - parsed.getMonth()
+  if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < parsed.getDate())) {
+    age -= 1
+  }
+  if (age < 0 || age > 130) return null
+  return age
 }
 
 function isOldTraffordHomeFixture(f: UpcomingFixture): boolean {
