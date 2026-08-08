@@ -6788,8 +6788,23 @@ function dateOfBirthToDateInputValue(raw: string): string {
 }
 
 function currentAgeFromDateOfBirth(raw: string | null | undefined): number | null {
-  const parsed = parseDateOfBirthInput((raw ?? '').trim())
+  const value = (raw ?? '').trim()
+  if (!value) return null
+
+  // Prefer plain calendar dates (yyyy-mm-dd / dd/mm/yyyy).
+  let parsed = parseDateOfBirthInput(value)
+
+  // API JSON often serializes Postgres `date` as an ISO timestamp shifted by timezone
+  // (e.g. 1982-02-04 -> 1982-02-03T22:00:00.000Z). Use the local calendar day of that instant.
+  if (!parsed) {
+    const instant = new Date(value)
+    if (!Number.isNaN(instant.getTime())) {
+      parsed = new Date(instant.getFullYear(), instant.getMonth(), instant.getDate(), 12, 0, 0, 0)
+    }
+  }
+
   if (!parsed) return null
+
   const today = new Date()
   let age = today.getFullYear() - parsed.getFullYear()
   const monthDiff = today.getMonth() - parsed.getMonth()

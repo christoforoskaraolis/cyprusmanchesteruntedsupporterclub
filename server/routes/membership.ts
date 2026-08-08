@@ -415,7 +415,7 @@ membershipRouter.get(
   requireAdmin,
   asyncHandler(async (_req, res) => {
     const { rows } = await query<any>(
-      `select ma.*, p.email as profile_email,
+      `select ma.*, to_char(ma.date_of_birth, 'YYYY-MM-DD') as date_of_birth, p.email as profile_email,
               (
                 select o.title
                 from public.official_membership_requests r
