@@ -78,6 +78,8 @@ export type ActivationEmailStatus = 'queued' | 'sent' | 'failed' | 'skipped'
 export type MemberRegistryEntry = {
   applicationId: string
   email: string | null
+  /** Per-membership contact email override; does not change account login. */
+  contactEmail: string | null
   status: 'pending' | 'active'
   submittedAt: string
   activatedAt?: string
@@ -146,6 +148,7 @@ export type MemberApplicationPayload = Omit<
   MemberRegistryEntry,
   | 'applicationId'
   | 'email'
+  | 'contactEmail'
   | 'status'
   | 'submittedAt'
   | 'activatedAt'
@@ -185,6 +188,7 @@ export type DbMembershipApplication = {
   activated_at: string | null
   membership_number?: number | null
   valid_until?: string | null
+  contact_email?: string | null
   profile_email?: string | null
   sponsor_application_id?: string | null
   family_relationship?: string | null
@@ -237,9 +241,12 @@ export function formatMembershipNumber(n: number | null | undefined): string {
 }
 
 export function dbRowToMemberEntry(row: DbMembershipApplication): MemberRegistryEntry {
+  const contactEmail = row.contact_email?.trim() || null
+  const profileEmail = row.profile_email?.trim() || null
   return {
     applicationId: row.application_id,
-    email: row.profile_email ?? null,
+    email: contactEmail || profileEmail,
+    contactEmail,
     status: row.status,
     submittedAt: row.submitted_at,
     activatedAt: row.activated_at ?? undefined,
@@ -430,6 +437,7 @@ export type AdminMemberDetailsPayload = {
   postalCode: string
   city: string
   country: string
+  contactEmail?: string | null
   familyRelationship?: string | null
   familyRelationshipOther?: string | null
 }

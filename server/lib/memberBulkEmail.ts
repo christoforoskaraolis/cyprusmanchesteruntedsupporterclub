@@ -43,7 +43,11 @@ export async function listMemberEmailRecipientsByApplicationIds(
 
   const { rows } = await query<MemberEmailRecipientRow & { application_id: string }>(
     `select ma.application_id,
-            lower(trim(coalesce(nullif(trim(p.email), ''), nullif(trim(au.email), '')))) as email,
+            lower(trim(coalesce(
+              nullif(trim(ma.contact_email), ''),
+              nullif(trim(p.email), ''),
+              nullif(trim(au.email), '')
+            ))) as email,
             ma.first_name,
             ma.last_name,
             ma.status
@@ -113,7 +117,11 @@ export async function listMemberEmailRecipients(audience: MemberEmailAudience): 
             recipients.last_name,
             recipients.status
      from (
-       select lower(trim(coalesce(nullif(trim(p.email), ''), nullif(trim(au.email), '')))) as member_email,
+       select lower(trim(coalesce(
+                nullif(trim(ma.contact_email), ''),
+                nullif(trim(p.email), ''),
+                nullif(trim(au.email), '')
+              ))) as member_email,
               ma.first_name,
               ma.last_name,
               ma.status,
@@ -122,7 +130,11 @@ export async function listMemberEmailRecipients(audience: MemberEmailAudience): 
        left join public.profiles p on p.id = ma.user_id
        left join public.auth_users au on au.user_id = ma.user_id
        where ${statusSql}
-         and coalesce(nullif(trim(p.email), ''), nullif(trim(au.email), '')) is not null
+         and coalesce(
+               nullif(trim(ma.contact_email), ''),
+               nullif(trim(p.email), ''),
+               nullif(trim(au.email), '')
+             ) is not null
      ) recipients
      order by recipients.member_email,
               case when recipients.status = 'active' then 0 else 1 end,

@@ -2478,6 +2478,7 @@ function adminMemberDetailsDraftFromEntry(
       postalCode: entry.postalCode,
       city: entry.city,
       country: entry.country,
+      contactEmail: entry.contactEmail ?? '',
       familyRelationship: entry.familyRelationship ?? '',
       familyRelationshipOther: entry.familyRelationshipOther ?? '',
     }
@@ -3988,6 +3989,7 @@ function AdminConsole({
                                 postalCode: detailsDraft.postalCode.trim(),
                                 city: detailsDraft.city.trim(),
                                 country: detailsDraft.country.trim(),
+                                contactEmail: (detailsDraft.contactEmail ?? '').trim() || null,
                                 familyRelationship: m.sponsorApplicationId ? detailsDraft.familyRelationship : null,
                                 familyRelationshipOther:
                                   m.sponsorApplicationId && detailsDraft.familyRelationship === 'other'
@@ -4015,7 +4017,28 @@ function AdminConsole({
                   </div>
                   <div>
                     <dt>Email</dt>
-                    <dd>{m.email ?? '—'}</dd>
+                    <dd>
+                      <label className="auth-field membership-field">
+                        <span className="auth-label">
+                          {m.sponsorApplicationId
+                            ? 'Contact email (family member — does not change login)'
+                            : 'Contact email (optional override — login email unchanged if blank)'}
+                        </span>
+                        <input
+                          className="auth-input"
+                          type="email"
+                          value={detailsDraft.contactEmail ?? ''}
+                          onChange={(e) =>
+                            setMemberDetailsDraftByApplicationId((prev) => ({
+                              ...prev,
+                              [m.applicationId]: { ...detailsDraft, contactEmail: e.target.value },
+                            }))
+                          }
+                          disabled={busyId !== null}
+                          placeholder={m.sponsorApplicationId ? 'family.member@email.com' : m.email ?? ''}
+                        />
+                      </label>
+                    </dd>
                   </div>
                   <div>
                     <dt>Official MU package request</dt>

@@ -801,6 +801,7 @@ membershipRouter.put(
       postalCode?: string
       city?: string
       country?: string
+      contactEmail?: string
       familyRelationship?: string
       familyRelationshipOther?: string
     }
@@ -814,10 +815,14 @@ membershipRouter.put(
     const postalCode = (p.postalCode ?? '').trim()
     const city = (p.city ?? '').trim()
     const country = (p.country ?? '').trim()
+    const contactEmail = (p.contactEmail ?? '').trim() || null
 
     if (!firstName || !lastName) throw badRequest('First and last name are required.')
     if (!mobilePhone || !dateOfBirth || !address || !area || !postalCode || !city || !country) {
       throw badRequest('Please complete all required contact and address fields.')
+    }
+    if (contactEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contactEmail)) {
+      throw badRequest('Please enter a valid email address.')
     }
 
     const { rows: existingRows } = await query<{
@@ -860,8 +865,9 @@ membershipRouter.put(
            postal_code = $8,
            city = $9,
            country = $10,
-           family_relationship = coalesce($11, family_relationship),
-           family_relationship_other = coalesce($12, family_relationship_other)
+           contact_email = $11,
+           family_relationship = coalesce($12, family_relationship),
+           family_relationship_other = coalesce($13, family_relationship_other)
        where id = $1`,
       [
         existing.id,
@@ -874,6 +880,7 @@ membershipRouter.put(
         postalCode,
         city,
         country,
+        contactEmail,
         familyRelationship,
         familyRelationshipOther,
       ],
