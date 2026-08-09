@@ -7954,6 +7954,7 @@ function App() {
     setFamilyPendingRecord({
       applicationId,
       email: membershipRecord.email,
+      contactEmail: null,
       status: 'pending',
       submittedAt,
       validUntil: null,
