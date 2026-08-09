@@ -7954,7 +7954,6 @@ function App() {
     setFamilyPendingRecord({
       applicationId,
       email: membershipRecord.email,
-      contactEmail: null,
       status: 'pending',
       submittedAt,
       validUntil: null,
@@ -7962,6 +7961,7 @@ function App() {
       sponsorApplicationId: membershipRecord.applicationId,
       officialMembershipOfferTitle,
       ...payload,
+      contactEmail: null,
       activationEmailStatus: null,
       activationEmailSentAt: null,
       activationEmailRecipient: null,
