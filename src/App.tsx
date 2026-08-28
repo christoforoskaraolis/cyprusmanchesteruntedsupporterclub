@@ -41,7 +41,7 @@ import {
   updateFamilyMemberDetails,
   updateMyProfileDetails,
 } from './lib/membershipApi.ts'
-import { fetchCachedFixtures, syncFixturesFromManutd, type UpcomingFixture } from './lib/fixturesApi.ts'
+import { fetchCachedFixtures, syncFixturesFromManutd, isLeagueCupCompetition, type UpcomingFixture } from './lib/fixturesApi.ts'
 import {
   deleteNewsPost,
   fetchAdminNewsPosts,
@@ -4236,7 +4236,10 @@ function AdminConsole({
                 const atCapacity = maxTickets != null && activeRequestCount >= maxTickets
                 const busy = busyTicketWindowKey === key
                 return (
-                  <li key={key} className="fixtures-card">
+                  <li
+                    key={key}
+                    className={`fixtures-card${isLeagueCupCompetition(fixture.competition) ? ' fixtures-card--league-cup' : ''}`}
+                  >
                     <div className="fixtures-card-main">
                       <div className="fixtures-card-left">
                         <p className="fixtures-kickoff">{formatFixtureKickoff(fixture.kickoffIso)}</p>
@@ -8918,7 +8921,10 @@ function App() {
             ) : (
               <ul className="fixtures-list">
                 {ticketFixtures.map((f) => (
-                  <li key={`${f.kickoffIso}-${f.opponent}`} className="fixtures-card">
+                  <li
+                    key={`${f.kickoffIso}-${f.opponent}`}
+                    className={`fixtures-card${isLeagueCupCompetition(f.competition) ? ' fixtures-card--league-cup' : ''}`}
+                  >
                     <div className="fixtures-card-main">
                       <div className="fixtures-card-left">
                         <p className="fixtures-kickoff">{formatFixtureKickoff(f.kickoffIso)}</p>

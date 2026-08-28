@@ -9,12 +9,55 @@ import { requireAdmin, requireUser } from '../middleware/auth.ts'
 
 export const fixturesRouter = Router()
 const MANUTD_ICS_URL = 'https://www.manutd.com/en/Manchester_United.ics'
+const MANUTD_LEAGUE_CUP_FIXTURES_URL = 'https://www.manutd.com/en/matches/mens-team/fixtures/league-cup'
 const MU_TEAM_PATTERN = '(?:Manchester United|Man Utd)'
 
 type ParsedFixtureSummary = {
   opponent: string
   home: boolean
   competition?: string
+}
+
+/** Normalize sponsor/official names so League Cup matches merge cleanly. */
+function normalizeCompetitionName(raw: string): string {
+  const value = raw.replace(/\\,/g, ',').trim()
+  if (!value) return 'Match'
+  const lower = value.toLowerCase()
+  if (
+    lower.includes('league cup') ||
+    lower.includes('carabao') ||
+    lower === 'efl cup' ||
+    lower.includes('efl cup')
+  ) {
+    return 'League Cup'
+  }
+  return value
+}
+
+function fixtureDedupeKey(fixture: UpcomingFixture): string {
+  const day = fixture.kickoffIso.slice(0, 10)
+  return `${day}|${normalizeCompetitionName(fixture.competition).toLowerCase()}|${fixture.opponent.trim().toLowerCase()}|${fixture.home ? 'H' : 'A'}`
+}
+
+function mergeFixtures(primary: UpcomingFixture[], extras: UpcomingFixture[]): UpcomingFixture[] {
+  const byKey = new Map<string, UpcomingFixture>()
+  for (const fixture of primary) {
+    byKey.set(fixtureDedupeKey(fixture), {
+      ...fixture,
+      competition: normalizeCompetitionName(fixture.competition),
+    })
+  }
+  for (const fixture of extras) {
+    const normalized = {
+      ...fixture,
+      competition: normalizeCompetitionName(fixture.competition),
+    }
+    const key = fixtureDedupeKey(normalized)
+    if (!byKey.has(key)) byKey.set(key, normalized)
+  }
+  return [...byKey.values()].sort(
+    (a, b) => new Date(a.kickoffIso).getTime() - new Date(b.kickoffIso).getTime(),
+  )
 }
 
 function parseFixtureFromSummary(summary: string): ParsedFixtureSummary | null {
@@ -83,10 +126,9 @@ function parseManUtdIcsFixtures(ics: string): UpcomingFixture[] {
     if (!kickoffIso) continue
     const parsed = parseFixtureFromSummary(summary)
     if (!parsed) continue
-    const resolvedCompetition =
-      parsed.competition ??
-      competition.replace(/\\,/g, ',').trim() ??
-      'Match'
+    const resolvedCompetition = normalizeCompetitionName(
+      parsed.competition ?? competition.replace(/\\,/g, ',').trim() ?? 'Match',
+    )
     fixtures.push({
       kickoffIso,
       competition: resolvedCompetition || 'Match',
@@ -96,6 +138,61 @@ function parseManUtdIcsFixtures(ics: string): UpcomingFixture[] {
     })
   }
   return fixtures
+}
+
+/**
+ * League Cup / Carabao Cup fixtures are often on manutd.com match pages before they
+ * appear in the public ICS calendar. Pull fixture cards from the League Cup page.
+ */
+async function fetchManutdLeagueCupFixtures(): Promise<UpcomingFixture[]> {
+  try {
+    const response = await fetch(MANUTD_LEAGUE_CUP_FIXTURES_URL, {
+      headers: {
+        'User-Agent': 'CyprusMUSC-FixturesSync/1.0',
+        Accept: 'text/html',
+      },
+    })
+    if (!response.ok) return []
+    // Next.js RSC payloads escape quotes as \"; normalize before parsing.
+    const html = (await response.text()).replace(/\\"/g, '"').replace(/\\u0026/g, '&')
+    const fixtures: UpcomingFixture[] = []
+    const seen = new Set<string>()
+
+    for (const kickMatch of html.matchAll(/"kickOffUtc":"([^"]+)"/g)) {
+      const kickoffIso = kickMatch[1]
+      if (!kickoffIso) continue
+      const start = Math.max(0, (kickMatch.index ?? 0) - 4500)
+      const window = html.slice(start, (kickMatch.index ?? 0) + kickMatch[0].length)
+      if (!/"leagueTitle":"(?:League Cup|Carabao Cup|EFL Cup)"/i.test(window)) continue
+
+      const location = window.match(/"matchLocation":"([^"]+)"/)?.[1] ?? ''
+      const shortNames = [...window.matchAll(/"clubShortName":"([^"]+)"/g)].map((m) => m[1])
+      if (shortNames.length < 2) continue
+      const homeName = shortNames[0]!
+      const awayName = shortNames[1]!
+      const homeIsUnited = /^(man utd|manchester united)$/i.test(homeName)
+      const awayIsUnited = /^(man utd|manchester united)$/i.test(awayName)
+      if (!homeIsUnited && !awayIsUnited) continue
+
+      const home = homeIsUnited
+      const opponent = home ? awayName : homeName
+      const leagueTitle = window.match(/"leagueTitle":"([^"]+)"/)?.[1] ?? 'League Cup'
+      const fixture: UpcomingFixture = {
+        kickoffIso,
+        competition: normalizeCompetitionName(leagueTitle),
+        opponent,
+        home,
+        venue: location.trim() || (home ? 'Old Trafford' : 'Away'),
+      }
+      const key = fixtureDedupeKey(fixture)
+      if (seen.has(key)) continue
+      seen.add(key)
+      fixtures.push(fixture)
+    }
+    return fixtures
+  } catch {
+    return []
+  }
 }
 
 fixturesRouter.get(
@@ -148,7 +245,9 @@ fixturesRouter.post(
           continue
         }
         const text = await response.text()
-        const fixtures = parseManUtdIcsFixtures(text)
+        const icsFixtures = parseManUtdIcsFixtures(text)
+        const leagueCupFixtures = await fetchManutdLeagueCupFixtures()
+        const fixtures = mergeFixtures(icsFixtures, leagueCupFixtures)
         if (fixtures.length === 0) {
           lastError = 'Calendar fetched but no fixtures could be parsed'
           continue

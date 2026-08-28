@@ -283,7 +283,14 @@ authRouter.post(
          where token_hash = $1 and consumed_at is null`,
         [tokenHash],
       )
-      await client.query(`update public.auth_users set password_hash = $1 where user_id = $2`, [passwordHash, userId])
+      // Opening the reset link proves mailbox ownership — same as email verification.
+      await client.query(
+        `update public.auth_users
+         set password_hash = $1,
+             email_verified_at = coalesce(email_verified_at, now())
+         where user_id = $2`,
+        [passwordHash, userId],
+      )
     })
 
     res.json({ ok: true })

@@ -390,6 +390,16 @@
   border: 1px solid var(--border);
 }
 
+.fixtures-card--league-cup {
+  background: #e8f7ee;
+  border-color: #86c5a0;
+}
+
+.fixtures-card--league-cup .fixtures-meta {
+  color: #0d5c2e;
+  font-weight: 600;
+}
+
 .fixtures-card-main {
   display: flex;
   align-items: flex-start;

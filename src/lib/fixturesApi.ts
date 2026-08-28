@@ -8,6 +8,12 @@ export type UpcomingFixture = {
   venue: string
 }
 
+/** League Cup / Carabao Cup / EFL Cup — highlighted in the ticket fixtures list. */
+export function isLeagueCupCompetition(competition: string): boolean {
+  const value = competition.trim().toLowerCase()
+  return value.includes('league cup') || value.includes('carabao') || value.includes('efl cup')
+}
+
 function isUpcomingFixtureArray(value: unknown): value is UpcomingFixture[] {
   if (!Array.isArray(value)) return false
   return value.every((v) => {
