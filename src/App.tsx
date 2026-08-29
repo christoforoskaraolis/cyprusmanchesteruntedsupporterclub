@@ -41,7 +41,7 @@ import {
   updateFamilyMemberDetails,
   updateMyProfileDetails,
 } from './lib/membershipApi.ts'
-import { fetchCachedFixtures, syncFixturesFromManutd, isLeagueCupCompetition, type UpcomingFixture } from './lib/fixturesApi.ts'
+import { fetchCachedFixtures, syncFixturesFromManutd, fixtureCompetitionCardClass, type UpcomingFixture } from './lib/fixturesApi.ts'
 import {
   deleteNewsPost,
   fetchAdminNewsPosts,
@@ -4238,7 +4238,7 @@ function AdminConsole({
                 return (
                   <li
                     key={key}
-                    className={`fixtures-card${isLeagueCupCompetition(fixture.competition) ? ' fixtures-card--league-cup' : ''}`}
+                    className={`fixtures-card${fixtureCompetitionCardClass(fixture.competition)}`}
                   >
                     <div className="fixtures-card-main">
                       <div className="fixtures-card-left">
@@ -8923,7 +8923,7 @@ function App() {
                 {ticketFixtures.map((f) => (
                   <li
                     key={`${f.kickoffIso}-${f.opponent}`}
-                    className={`fixtures-card${isLeagueCupCompetition(f.competition) ? ' fixtures-card--league-cup' : ''}`}
+                    className={`fixtures-card${fixtureCompetitionCardClass(f.competition)}`}
                   >
                     <div className="fixtures-card-main">
                       <div className="fixtures-card-left">

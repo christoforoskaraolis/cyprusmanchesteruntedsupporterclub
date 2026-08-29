@@ -400,6 +400,16 @@
   font-weight: 600;
 }
 
+.fixtures-card--champions-league {
+  background: #e8f2fb;
+  border-color: #8bb8e0;
+}
+
+.fixtures-card--champions-league .fixtures-meta {
+  color: #1e4f7a;
+  font-weight: 600;
+}
+
 .fixtures-card-main {
   display: flex;
   align-items: flex-start;

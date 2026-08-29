@@ -8,10 +8,23 @@ export type UpcomingFixture = {
   venue: string
 }
 
-/** League Cup / Carabao Cup / EFL Cup — highlighted in the ticket fixtures list. */
+/** League Cup / Carabao Cup / EFL Cup — highlighted green in the ticket fixtures list. */
 export function isLeagueCupCompetition(competition: string): boolean {
   const value = competition.trim().toLowerCase()
   return value.includes('league cup') || value.includes('carabao') || value.includes('efl cup')
+}
+
+/** Champions League — highlighted light blue in the ticket fixtures list. */
+export function isChampionsLeagueCompetition(competition: string): boolean {
+  const value = competition.trim().toLowerCase()
+  return value.includes('champions league') || value.includes('uefa champions') || value === 'ucl'
+}
+
+/** CSS modifier for competition-coloured fixture cards. */
+export function fixtureCompetitionCardClass(competition: string): string {
+  if (isChampionsLeagueCompetition(competition)) return ' fixtures-card--champions-league'
+  if (isLeagueCupCompetition(competition)) return ' fixtures-card--league-cup'
+  return ''
 }
 
 function isUpcomingFixtureArray(value: unknown): value is UpcomingFixture[] {

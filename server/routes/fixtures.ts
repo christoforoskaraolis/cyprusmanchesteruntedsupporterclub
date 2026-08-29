@@ -10,7 +10,11 @@ import { requireAdmin, requireUser } from '../middleware/auth.ts'
 export const fixturesRouter = Router()
 const MANUTD_ICS_URL = 'https://www.manutd.com/en/Manchester_United.ics'
 const MANUTD_LEAGUE_CUP_FIXTURES_URL = 'https://www.manutd.com/en/matches/mens-team/fixtures/league-cup'
+const MANUTD_CHAMPIONS_LEAGUE_FIXTURES_URL =
+  'https://www.manutd.com/en/matches/mens-team/fixtures/champions-league'
 const MU_TEAM_PATTERN = '(?:Manchester United|Man Utd)'
+
+type UpcomingFixture = FixtureSummary
 
 type ParsedFixtureSummary = {
   opponent: string
@@ -18,7 +22,7 @@ type ParsedFixtureSummary = {
   competition?: string
 }
 
-/** Normalize sponsor/official names so League Cup matches merge cleanly. */
+/** Normalize competition labels so cup/European ties merge cleanly across sources. */
 function normalizeCompetitionName(raw: string): string {
   const value = raw.replace(/\\,/g, ',').trim()
   if (!value) return 'Match'
@@ -31,6 +35,13 @@ function normalizeCompetitionName(raw: string): string {
   ) {
     return 'League Cup'
   }
+  if (
+    lower.includes('champions league') ||
+    lower.includes('uefa champions') ||
+    lower === 'ucl'
+  ) {
+    return 'Champions League'
+  }
   return value
 }
 
@@ -39,25 +50,78 @@ function fixtureDedupeKey(fixture: UpcomingFixture): string {
   return `${day}|${normalizeCompetitionName(fixture.competition).toLowerCase()}|${fixture.opponent.trim().toLowerCase()}|${fixture.home ? 'H' : 'A'}`
 }
 
+/** Prefer same-day same-competition home/away identity when opponent spelling differs slightly. */
+function fixtureDaySideKey(fixture: UpcomingFixture): string {
+  const day = fixture.kickoffIso.slice(0, 10)
+  return `${day}|${normalizeCompetitionName(fixture.competition).toLowerCase()}|${fixture.home ? 'H' : 'A'}`
+}
+
 function mergeFixtures(primary: UpcomingFixture[], extras: UpcomingFixture[]): UpcomingFixture[] {
   const byKey = new Map<string, UpcomingFixture>()
-  for (const fixture of primary) {
-    byKey.set(fixtureDedupeKey(fixture), {
-      ...fixture,
-      competition: normalizeCompetitionName(fixture.competition),
-    })
-  }
-  for (const fixture of extras) {
+  const byDaySide = new Map<string, string>()
+
+  const upsert = (fixture: UpcomingFixture, overwrite: boolean) => {
     const normalized = {
       ...fixture,
       competition: normalizeCompetitionName(fixture.competition),
     }
     const key = fixtureDedupeKey(normalized)
-    if (!byKey.has(key)) byKey.set(key, normalized)
+    const daySide = fixtureDaySideKey(normalized)
+    const existingDayKey = byDaySide.get(daySide)
+    if (existingDayKey && existingDayKey !== key) {
+      // Same competition/day/home-away already present (e.g. provisional vs official opponent name).
+      if (!overwrite) return
+      byKey.delete(existingDayKey)
+    }
+    if (!overwrite && byKey.has(key)) return
+    byKey.set(key, normalized)
+    byDaySide.set(daySide, key)
   }
+
+  for (const fixture of primary) upsert(fixture, true)
+  for (const fixture of extras) upsert(fixture, false)
+
   return [...byKey.values()].sort(
     (a, b) => new Date(a.kickoffIso).getTime() - new Date(b.kickoffIso).getTime(),
   )
+}
+
+/**
+ * Home Champions League league-phase dates confirmed after the 2026/27 draw.
+ * Used only while manutd.com has not published the Champions League fixture cards yet.
+ * Kick-off times are TBC (midnight UTC placeholder, same pattern as League Cup TBC).
+ */
+function provisionalChampionsLeagueHomeFixtures(): UpcomingFixture[] {
+  return [
+    {
+      kickoffIso: '2026-09-10T00:00:00.000Z',
+      competition: 'Champions League',
+      opponent: 'Sabah',
+      home: true,
+      venue: 'Old Trafford, Manchester',
+    },
+    {
+      kickoffIso: '2026-11-03T00:00:00.000Z',
+      competition: 'Champions League',
+      opponent: 'Roma',
+      home: true,
+      venue: 'Old Trafford, Manchester',
+    },
+    {
+      kickoffIso: '2026-12-08T00:00:00.000Z',
+      competition: 'Champions League',
+      opponent: 'RB Leipzig',
+      home: true,
+      venue: 'Old Trafford, Manchester',
+    },
+    {
+      kickoffIso: '2027-01-20T00:00:00.000Z',
+      competition: 'Champions League',
+      opponent: 'Bayern Munich',
+      home: true,
+      venue: 'Old Trafford, Manchester',
+    },
+  ]
 }
 
 function parseFixtureFromSummary(summary: string): ParsedFixtureSummary | null {
@@ -83,8 +147,6 @@ function parseFixtureFromSummary(summary: string): ParsedFixtureSummary | null {
 
   return null
 }
-
-type UpcomingFixture = FixtureSummary
 
 function parseIcsDateToIso(raw: string): string | null {
   const value = raw.trim()
@@ -141,12 +203,16 @@ function parseManUtdIcsFixtures(ics: string): UpcomingFixture[] {
 }
 
 /**
- * League Cup / Carabao Cup fixtures are often on manutd.com match pages before they
- * appear in the public ICS calendar. Pull fixture cards from the League Cup page.
+ * Cup / European fixtures are often on manutd.com competition pages before the ICS.
+ * Pull fixture cards from a competition fixtures URL.
  */
-async function fetchManutdLeagueCupFixtures(): Promise<UpcomingFixture[]> {
+async function fetchManutdCompetitionPageFixtures(
+  pageUrl: string,
+  leagueTitlePattern: RegExp,
+  fallbackCompetition: string,
+): Promise<UpcomingFixture[]> {
   try {
-    const response = await fetch(MANUTD_LEAGUE_CUP_FIXTURES_URL, {
+    const response = await fetch(pageUrl, {
       headers: {
         'User-Agent': 'CyprusMUSC-FixturesSync/1.0',
         Accept: 'text/html',
@@ -163,7 +229,7 @@ async function fetchManutdLeagueCupFixtures(): Promise<UpcomingFixture[]> {
       if (!kickoffIso) continue
       const start = Math.max(0, (kickMatch.index ?? 0) - 4500)
       const window = html.slice(start, (kickMatch.index ?? 0) + kickMatch[0].length)
-      if (!/"leagueTitle":"(?:League Cup|Carabao Cup|EFL Cup)"/i.test(window)) continue
+      if (!leagueTitlePattern.test(window)) continue
 
       const location = window.match(/"matchLocation":"([^"]+)"/)?.[1] ?? ''
       const shortNames = [...window.matchAll(/"clubShortName":"([^"]+)"/g)].map((m) => m[1])
@@ -176,7 +242,7 @@ async function fetchManutdLeagueCupFixtures(): Promise<UpcomingFixture[]> {
 
       const home = homeIsUnited
       const opponent = home ? awayName : homeName
-      const leagueTitle = window.match(/"leagueTitle":"([^"]+)"/)?.[1] ?? 'League Cup'
+      const leagueTitle = window.match(/"leagueTitle":"([^"]+)"/)?.[1] ?? fallbackCompetition
       const fixture: UpcomingFixture = {
         kickoffIso,
         competition: normalizeCompetitionName(leagueTitle),
@@ -193,6 +259,22 @@ async function fetchManutdLeagueCupFixtures(): Promise<UpcomingFixture[]> {
   } catch {
     return []
   }
+}
+
+async function fetchManutdLeagueCupFixtures(): Promise<UpcomingFixture[]> {
+  return fetchManutdCompetitionPageFixtures(
+    MANUTD_LEAGUE_CUP_FIXTURES_URL,
+    /"leagueTitle":"(?:League Cup|Carabao Cup|EFL Cup)"/i,
+    'League Cup',
+  )
+}
+
+async function fetchManutdChampionsLeagueFixtures(): Promise<UpcomingFixture[]> {
+  return fetchManutdCompetitionPageFixtures(
+    MANUTD_CHAMPIONS_LEAGUE_FIXTURES_URL,
+    /"leagueTitle":"(?:Champions League|UEFA Champions League)"/i,
+    'Champions League',
+  )
 }
 
 fixturesRouter.get(
@@ -246,8 +328,16 @@ fixturesRouter.post(
         }
         const text = await response.text()
         const icsFixtures = parseManUtdIcsFixtures(text)
-        const leagueCupFixtures = await fetchManutdLeagueCupFixtures()
-        const fixtures = mergeFixtures(icsFixtures, leagueCupFixtures)
+        const [leagueCupFixtures, championsLeagueFixtures] = await Promise.all([
+          fetchManutdLeagueCupFixtures(),
+          fetchManutdChampionsLeagueFixtures(),
+        ])
+        const fromManutd = mergeFixtures(
+          mergeFixtures(icsFixtures, leagueCupFixtures),
+          championsLeagueFixtures,
+        )
+        // Until manutd publishes CL cards, keep confirmed home league-phase dates available for tickets.
+        const fixtures = mergeFixtures(fromManutd, provisionalChampionsLeagueHomeFixtures())
         if (fixtures.length === 0) {
           lastError = 'Calendar fetched but no fixtures could be parsed'
           continue
