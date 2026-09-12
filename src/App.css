@@ -3960,55 +3960,128 @@
 
 .dob-input {
   display: grid;
+  gap: 0.45rem;
+  position: relative;
+}
+
+.dob-input-trigger {
+  text-align: left;
+  cursor: pointer;
+}
+
+.dob-input-trigger:disabled {
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+.dob-calendar {
+  display: grid;
   gap: 0.55rem;
+  padding: 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.12);
+  z-index: 5;
 }
 
-.dob-input-row {
+.dob-calendar-header {
   display: grid;
-  grid-template-columns: 4.2rem minmax(7.5rem, 1.2fr) 5.5rem;
-  gap: 0.5rem;
-  align-items: end;
+  grid-template-columns: 2.2rem 1fr 2.2rem;
+  gap: 0.4rem;
+  align-items: center;
 }
 
-.dob-input-part {
+.dob-calendar-nav {
+  width: 2.2rem;
+  height: 2.2rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-2);
+  color: var(--text-h);
+  font-size: 1.2rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.dob-calendar-selects {
   display: grid;
-  gap: 0.25rem;
+  grid-template-columns: 1.4fr 0.9fr;
+  gap: 0.4rem;
+}
+
+.dob-calendar-select-wrap {
   margin: 0;
+  min-width: 0;
 }
 
-.dob-input-part-label {
+.dob-calendar-select {
+  width: 100%;
+  min-width: 0;
+  padding-right: 0.35rem;
+}
+
+.dob-calendar-select--year {
+  font-variant-numeric: tabular-nums;
+}
+
+.dob-calendar-weekdays,
+.dob-calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 0.2rem;
+}
+
+.dob-calendar-weekdays span {
+  text-align: center;
   font-size: 0.72rem;
-  font-weight: 600;
-  letter-spacing: 0.04em;
+  font-weight: 700;
+  letter-spacing: 0.03em;
   text-transform: uppercase;
   color: var(--text-muted);
+  padding: 0.15rem 0;
 }
 
-.dob-input-day,
-.dob-input-year {
-  text-align: center;
+.dob-calendar-day {
+  aspect-ratio: 1;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-h);
+  font: inherit;
+  font-size: 0.88rem;
+  font-weight: 600;
+  cursor: pointer;
 }
 
-.dob-input-month {
-  padding-right: 0.4rem;
+.dob-calendar-day:hover:not(:disabled):not(.is-empty) {
+  background: var(--surface-2);
 }
 
-.dob-input-typed {
-  display: grid;
-  gap: 0.25rem;
-  margin: 0;
+.dob-calendar-day.is-empty {
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.dob-calendar-day.is-today {
+  border-color: var(--border-strong);
+}
+
+.dob-calendar-day.is-selected {
+  background: var(--mu-red);
+  color: #fff;
+  border-color: var(--mu-red);
+}
+
+.dob-calendar-day:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
 }
 
 .dob-input-preview {
   margin: 0;
   font-size: 0.86rem;
   color: var(--text-muted);
-}
-
-@media (max-width: 420px) {
-  .dob-input-row {
-    grid-template-columns: 1fr;
-  }
 }
 
 .membership-payment-card {

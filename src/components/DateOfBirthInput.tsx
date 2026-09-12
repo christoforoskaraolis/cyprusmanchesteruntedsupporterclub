@@ -1,47 +1,73 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 
 const MONTH_OPTIONS = [
-  { value: 1, label: '01 - JAN' },
-  { value: 2, label: '02 - FEB' },
-  { value: 3, label: '03 - MAR' },
-  { value: 4, label: '04 - APR' },
-  { value: 5, label: '05 - MAY' },
-  { value: 6, label: '06 - JUN' },
-  { value: 7, label: '07 - JUL' },
-  { value: 8, label: '08 - AUG' },
-  { value: 9, label: '09 - SEP' },
-  { value: 10, label: '10 - OCT' },
-  { value: 11, label: '11 - NOV' },
-  { value: 12, label: '12 - DEC' },
+  { value: 1, label: 'January' },
+  { value: 2, label: 'February' },
+  { value: 3, label: 'March' },
+  { value: 4, label: 'April' },
+  { value: 5, label: 'May' },
+  { value: 6, label: 'June' },
+  { value: 7, label: 'July' },
+  { value: 8, label: 'August' },
+  { value: 9, label: 'September' },
+  { value: 10, label: 'October' },
+  { value: 11, label: 'November' },
+  { value: 12, label: 'December' },
 ] as const
 
-function parseIsoParts(value: string): { day: string; month: string; year: string } {
-  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value.trim())
-  if (!match) return { day: '', month: '', year: '' }
-  return { year: match[1], month: String(Number(match[2])), day: String(Number(match[3])) }
+const WEEKDAY_LABELS = ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'] as const
+
+const MIN_YEAR = 1920
+
+function maxSelectableYear(): number {
+  return new Date().getFullYear()
 }
 
-function toIsoDate(dayRaw: string, monthRaw: string, yearRaw: string): string {
-  const day = Number(dayRaw)
-  const month = Number(monthRaw)
-  const year = Number(yearRaw)
+function yearOptions(): number[] {
+  const max = maxSelectableYear()
+  const years: number[] = []
+  for (let y = max; y >= MIN_YEAR; y -= 1) years.push(y)
+  return years
+}
+
+function parseIsoParts(value: string): { day: number; month: number; year: number } | null {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value.trim())
+  if (!match) return null
+  const year = Number(match[1])
+  const month = Number(match[2])
+  const day = Number(match[3])
+  if (!Number.isInteger(year) || !Number.isInteger(month) || !Number.isInteger(day)) return null
+  const dob = new Date(year, month - 1, day, 12, 0, 0, 0)
+  if (dob.getFullYear() !== year || dob.getMonth() !== month - 1 || dob.getDate() !== day) return null
+  return { year, month, day }
+}
+
+function toIsoDate(day: number, month: number, year: number): string {
   if (!Number.isInteger(day) || !Number.isInteger(month) || !Number.isInteger(year)) return ''
-  if (year < 1900 || year > 2100) return ''
+  if (year < MIN_YEAR || year > maxSelectableYear()) return ''
   if (month < 1 || month > 12) return ''
   if (day < 1 || day > 31) return ''
   const dob = new Date(year, month - 1, day, 12, 0, 0, 0)
   if (dob.getFullYear() !== year || dob.getMonth() !== month - 1 || dob.getDate() !== day) return ''
+  if (dob.getTime() > Date.now()) return ''
   return `${String(year).padStart(4, '0')}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
 }
 
-function parseDmyText(raw: string): { day: string; month: string; year: string } | null {
-  const match = /^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/.exec(raw.trim())
-  if (!match) return null
-  return {
-    day: String(Number(match[1])),
-    month: String(Number(match[2])),
-    year: match[3],
-  }
+function daysInMonth(year: number, month: number): number {
+  return new Date(year, month, 0, 12, 0, 0, 0).getDate()
+}
+
+/** Monday-first index for the first day of the month (0 = Monday). */
+function mondayFirstWeekday(year: number, month: number): number {
+  const sundayBased = new Date(year, month - 1, 1, 12, 0, 0, 0).getDay()
+  return (sundayBased + 6) % 7
+}
+
+function formatDisplay(iso: string): string {
+  const parts = parseIsoParts(iso)
+  if (!parts) return ''
+  const monthLabel = MONTH_OPTIONS.find((m) => m.value === parts.month)?.label ?? String(parts.month)
+  return `${String(parts.day).padStart(2, '0')} ${monthLabel} ${parts.year}`
 }
 
 type DateOfBirthInputProps = {
@@ -53,128 +79,165 @@ type DateOfBirthInputProps = {
 }
 
 export function DateOfBirthInput({ value, onChange, disabled, name, id }: DateOfBirthInputProps) {
-  const initial = useMemo(() => parseIsoParts(value), [value])
-  const [day, setDay] = useState(initial.day)
-  const [month, setMonth] = useState(initial.month)
-  const [year, setYear] = useState(initial.year)
-  const [typedDmy, setTypedDmy] = useState('')
+  const selected = useMemo(() => parseIsoParts(value), [value])
+  const years = useMemo(() => yearOptions(), [])
+  const rootRef = useRef<HTMLDivElement | null>(null)
+  const [open, setOpen] = useState(false)
+
+  const today = new Date()
+  const [viewYear, setViewYear] = useState(selected?.year ?? 1980)
+  const [viewMonth, setViewMonth] = useState(selected?.month ?? 1)
 
   useEffect(() => {
-    if (!value.trim()) return
-    const next = parseIsoParts(value)
-    setDay(next.day)
-    setMonth(next.month)
-    setYear(next.year)
-  }, [value])
+    if (!selected) return
+    setViewYear(selected.year)
+    setViewMonth(selected.month)
+  }, [selected?.year, selected?.month])
 
-  function emit(nextDay: string, nextMonth: string, nextYear: string) {
-    if (!nextDay && !nextMonth && !nextYear) {
-      onChange('')
-      return
+  useEffect(() => {
+    if (!open) return
+    function onPointerDown(event: MouseEvent) {
+      if (!rootRef.current?.contains(event.target as Node)) setOpen(false)
     }
-    const iso = toIsoDate(nextDay, nextMonth, nextYear)
-    if (iso) onChange(iso)
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape') setOpen(false)
+    }
+    document.addEventListener('mousedown', onPointerDown)
+    document.addEventListener('keydown', onKeyDown)
+    return () => {
+      document.removeEventListener('mousedown', onPointerDown)
+      document.removeEventListener('keydown', onKeyDown)
+    }
+  }, [open])
+
+  const dayCount = daysInMonth(viewYear, viewMonth)
+  const leadingBlanks = mondayFirstWeekday(viewYear, viewMonth)
+  const cells: Array<number | null> = [
+    ...Array.from({ length: leadingBlanks }, () => null),
+    ...Array.from({ length: dayCount }, (_, i) => i + 1),
+  ]
+  while (cells.length % 7 !== 0) cells.push(null)
+
+  function selectDay(day: number) {
+    const iso = toIsoDate(day, viewMonth, viewYear)
+    if (!iso) return
+    onChange(iso)
+    setOpen(false)
   }
 
-  function applyTypedDmy() {
-    const parsed = parseDmyText(typedDmy)
-    if (!parsed) return
-    setDay(parsed.day)
-    setMonth(parsed.month)
-    setYear(parsed.year)
-    setTypedDmy('')
-    emit(parsed.day, parsed.month, parsed.year)
+  function isFutureDay(day: number): boolean {
+    const candidate = new Date(viewYear, viewMonth - 1, day, 23, 59, 59, 999)
+    return candidate.getTime() > Date.now()
   }
 
-  const preview =
-    day && month && year
-      ? `${String(day).padStart(2, '0')} / ${MONTH_OPTIONS.find((m) => String(m.value) === month)?.label ?? month} / ${year}`
-      : null
+  function shiftMonth(delta: number) {
+    const base = new Date(viewYear, viewMonth - 1 + delta, 1, 12, 0, 0, 0)
+    const nextYear = Math.min(maxSelectableYear(), Math.max(MIN_YEAR, base.getFullYear()))
+    setViewYear(nextYear)
+    setViewMonth(base.getMonth() + 1)
+  }
 
   return (
-    <div className="dob-input">
-      <div className="dob-input-row" role="group" aria-label="Date of birth">
-        <label className="dob-input-part">
-          <span className="dob-input-part-label">DD</span>
-          <input
-            id={id}
-            className="auth-input dob-input-day"
-            type="text"
-            inputMode="numeric"
-            name={name ? `${name}-day` : undefined}
-            placeholder="15"
-            maxLength={2}
-            disabled={disabled}
-            value={day}
-            onChange={(e) => {
-              const next = e.target.value.replace(/\D/g, '').slice(0, 2)
-              setDay(next)
-              emit(next, month, year)
-            }}
-          />
-        </label>
-        <label className="dob-input-part dob-input-part--month">
-          <span className="dob-input-part-label">Month</span>
-          <select
-            className="auth-input dob-input-month"
-            name={name ? `${name}-month` : undefined}
-            disabled={disabled}
-            value={month}
-            onChange={(e) => {
-              const next = e.target.value
-              setMonth(next)
-              emit(day, next, year)
-            }}
-          >
-            <option value="">MM - MON</option>
-            {MONTH_OPTIONS.map((option) => (
-              <option key={option.value} value={String(option.value)}>
-                {option.label}
-              </option>
+    <div className="dob-input" ref={rootRef}>
+      <button
+        id={id}
+        type="button"
+        className="auth-input dob-input-trigger"
+        name={name}
+        disabled={disabled}
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        onClick={() => {
+          if (disabled) return
+          setOpen((prev) => !prev)
+        }}
+      >
+        {selected ? formatDisplay(value) : 'Choose date of birth'}
+      </button>
+
+      {open && !disabled ? (
+        <div className="dob-calendar" role="dialog" aria-label="Choose date of birth">
+          <div className="dob-calendar-header">
+            <button type="button" className="dob-calendar-nav" aria-label="Previous month" onClick={() => shiftMonth(-1)}>
+              ‹
+            </button>
+            <div className="dob-calendar-selects">
+              <label className="dob-calendar-select-wrap">
+                <span className="visually-hidden">Month</span>
+                <select
+                  className="auth-input dob-calendar-select"
+                  value={viewMonth}
+                  onChange={(e) => setViewMonth(Number(e.target.value))}
+                >
+                  {MONTH_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="dob-calendar-select-wrap">
+                <span className="visually-hidden">Year</span>
+                <select
+                  className="auth-input dob-calendar-select dob-calendar-select--year"
+                  value={viewYear}
+                  onChange={(e) => setViewYear(Number(e.target.value))}
+                >
+                  {years.map((year) => (
+                    <option key={year} value={year}>
+                      {year}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+            <button type="button" className="dob-calendar-nav" aria-label="Next month" onClick={() => shiftMonth(1)}>
+              ›
+            </button>
+          </div>
+
+          <div className="dob-calendar-weekdays" aria-hidden="true">
+            {WEEKDAY_LABELS.map((label) => (
+              <span key={label}>{label}</span>
             ))}
-          </select>
-        </label>
-        <label className="dob-input-part">
-          <span className="dob-input-part-label">YYYY</span>
-          <input
-            className="auth-input dob-input-year"
-            type="text"
-            inputMode="numeric"
-            name={name ? `${name}-year` : undefined}
-            placeholder="1970"
-            maxLength={4}
-            disabled={disabled}
-            value={year}
-            onChange={(e) => {
-              const next = e.target.value.replace(/\D/g, '').slice(0, 4)
-              setYear(next)
-              emit(day, month, next)
-            }}
-          />
-        </label>
-      </div>
+          </div>
 
-      <label className="dob-input-typed">
-        <span className="dob-input-part-label">Or type DD/MM/YYYY</span>
-        <input
-          className="auth-input"
-          type="text"
-          inputMode="numeric"
-          placeholder="15/10/1970"
-          disabled={disabled}
-          value={typedDmy}
-          onChange={(e) => setTypedDmy(e.target.value)}
-          onBlur={() => applyTypedDmy()}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') {
-              e.preventDefault()
-              applyTypedDmy()
-            }
-          }}
-        />
-      </label>
+          <div className="dob-calendar-grid">
+            {cells.map((day, index) => {
+              if (day == null) {
+                return <span key={`empty-${index}`} className="dob-calendar-day is-empty" />
+              }
+              const disabledDay = isFutureDay(day)
+              const isSelected =
+                selected != null &&
+                selected.year === viewYear &&
+                selected.month === viewMonth &&
+                selected.day === day
+              const isToday =
+                today.getFullYear() === viewYear &&
+                today.getMonth() + 1 === viewMonth &&
+                today.getDate() === day
+              return (
+                <button
+                  key={`day-${day}`}
+                  type="button"
+                  className={`dob-calendar-day${isSelected ? ' is-selected' : ''}${isToday ? ' is-today' : ''}`}
+                  disabled={disabledDay}
+                  onClick={() => selectDay(day)}
+                >
+                  {day}
+                </button>
+              )
+            })}
+          </div>
 
-      {preview ? <p className="dob-input-preview">{preview}</p> : null}
+          {selected ? (
+            <p className="dob-input-preview">Selected: {formatDisplay(value)}</p>
+          ) : (
+            <p className="dob-input-preview">Pick a year from the list, then choose the day.</p>
+          )}
+        </div>
+      ) : null}
     </div>
   )
 }
