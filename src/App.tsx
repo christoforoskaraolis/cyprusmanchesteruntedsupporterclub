@@ -837,7 +837,7 @@ function NewsDetailModal({ post, loading, open, onClose }: NewsDetailModalProps)
 
 type AdminFilter = 'all' | 'pending' | 'active'
 type AdminTab = 'members' | 'admins' | 'tickets' | 'ticketRequests' | 'news' | 'merch' | 'official' | 'email'
-type AdminTicketFilter = 'pending' | 'approved' | 'completed' | 'cancelled'
+type AdminTicketFilter = 'all' | 'pending' | 'approved' | 'completed' | 'cancelled'
 
 function isTicketRequestCancelled(request: {
   status: string
@@ -2852,6 +2852,7 @@ function AdminConsole({
         matchKeysReferToSameFixture(r.matchKey, ticketMatchFilter),
     )
     .filter((r) => {
+      if (ticketFilter === 'all') return true
       if (ticketFilter === 'cancelled') return isTicketRequestCancelled(r)
       if (isTicketRequestCancelled(r)) return false
       return r.status === ticketFilter
@@ -4363,7 +4364,7 @@ function AdminConsole({
             <div className="admin-ticket-filter-group">
               <span className="admin-ticket-filter-label">Status</span>
               <div className="admin-ticket-status-tabs" role="tablist" aria-label="Filter ticket requests by status">
-                {(['pending', 'approved', 'completed', 'cancelled'] as const).map((f) => (
+                {(['all', 'pending', 'approved', 'completed', 'cancelled'] as const).map((f) => (
                   <button
                     key={f}
                     type="button"
@@ -4372,13 +4373,15 @@ function AdminConsole({
                     className={`admin-ticket-status-tab ${ticketFilter === f ? 'is-active' : ''}`}
                     onClick={() => setTicketFilter(f)}
                   >
-                    {f === 'pending'
-                      ? 'Pending'
-                      : f === 'approved'
-                        ? 'Accepted'
-                        : f === 'completed'
-                          ? 'Completed'
-                          : 'Cancelled'}
+                    {f === 'all'
+                      ? 'All'
+                      : f === 'pending'
+                        ? 'Pending'
+                        : f === 'approved'
+                          ? 'Accepted'
+                          : f === 'completed'
+                            ? 'Completed'
+                            : 'Cancelled'}
                   </button>
                 ))}
               </div>
@@ -4417,11 +4420,13 @@ function AdminConsole({
           {filteredTicketRequests.length === 0 ? (
             <p className="admin-empty">
               No{' '}
-              {ticketFilter === 'approved'
-                ? 'accepted'
-                : ticketFilter === 'cancelled'
-                  ? 'cancelled'
-                  : ticketFilter}{' '}
+              {ticketFilter === 'all'
+                ? ''
+                : ticketFilter === 'approved'
+                  ? 'accepted '
+                  : ticketFilter === 'cancelled'
+                    ? 'cancelled '
+                    : `${ticketFilter} `}
               ticket requests
               {ticketMatchFilter !== 'all' ? ` for ${formatTicketMatchTabLabel(ticketMatchFilter)}` : ''}.
             </p>
