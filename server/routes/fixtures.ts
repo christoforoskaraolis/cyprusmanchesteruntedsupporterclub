@@ -124,6 +124,22 @@ function provisionalChampionsLeagueHomeFixtures(): UpcomingFixture[] {
   ]
 }
 
+/**
+ * Organized club trip fixture (Hull City) for April 2027 travel weekend.
+ * Kept until manutd.com publishes the official Premier League card.
+ */
+function provisionalHullCityClubTripFixture(): UpcomingFixture[] {
+  return [
+    {
+      kickoffIso: '2027-04-11T14:00:00.000Z',
+      competition: 'Premier League',
+      opponent: 'Hull City',
+      home: true,
+      venue: 'Old Trafford, Manchester',
+    },
+  ]
+}
+
 function parseFixtureFromSummary(summary: string): ParsedFixtureSummary | null {
   const clean = summary.replace(/\s+/g, ' ').trim()
   let mainPart = clean
@@ -337,7 +353,11 @@ fixturesRouter.post(
           championsLeagueFixtures,
         )
         // Until manutd publishes CL cards, keep confirmed home league-phase dates available for tickets.
-        const fixtures = mergeFixtures(fromManutd, provisionalChampionsLeagueHomeFixtures())
+        // Also keep the Hull City organized club-trip provisional home date until the official PL card lands.
+        const fixtures = mergeFixtures(
+          mergeFixtures(fromManutd, provisionalChampionsLeagueHomeFixtures()),
+          provisionalHullCityClubTripFixture(),
+        )
         if (fixtures.length === 0) {
           lastError = 'Calendar fetched but no fixtures could be parsed'
           continue

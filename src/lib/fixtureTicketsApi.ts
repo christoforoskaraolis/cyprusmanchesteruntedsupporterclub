@@ -12,6 +12,16 @@ export type FixtureTicketWindow = {
   activeRequestCount: number
 }
 
+export type OrganizedTripDetails = {
+  fullName: string
+  passportNumber: string
+  dateOfBirth: string
+  passportIssuedAt: string
+  passportExpiresAt: string
+  officialMuMembershipId: string
+  telephone: string
+}
+
 export type MyFixtureTicketRequest = {
   matchKey: string
   status: 'pending' | 'approved' | 'completed' | 'rejected' | 'cancelled'
@@ -24,6 +34,8 @@ export type MyFixtureTicketRequest = {
   ticketSlotCount: number
   travelCompanionCount: number
   depositAmountEur: number
+  isOrganizedClubTrip?: boolean
+  organizedTripDetails?: OrganizedTripDetails | null
 }
 
 export type FixtureTicketTravelCompanion = {
@@ -51,6 +63,8 @@ export type AdminFixtureTicketRequest = {
   ticketConfirmed: boolean
   ticketConfirmedAt: string | null
   travelCompanions: FixtureTicketTravelCompanion[]
+  isOrganizedClubTrip?: boolean
+  organizedTripDetails?: OrganizedTripDetails | null
   user: {
     fullName: string | null
     membershipNumber: number | null
@@ -202,7 +216,9 @@ export async function fetchMyFixtureTicketRequests(matchKeys: string[], userId: 
 export async function requestFixtureTicket(
   matchKey: string,
   userId: string,
-  options?: { travelCompanionMembershipNumbers?: number[] },
+  options?: {
+    travelCompanionMembershipNumbers?: number[]
+  },
 ) {
   void userId
   try {
@@ -210,14 +226,48 @@ export async function requestFixtureTicket(
       ok: boolean
       ticketSlotCount: number
       depositAmountEur: number
+      isOrganizedClubTrip?: boolean
     }>(`/api/tickets/requests/my/${encodeURIComponent(matchKey)}`, 'POST', options ?? {})
     return {
       ticketSlotCount: data.ticketSlotCount,
       depositAmountEur: data.depositAmountEur,
+      isOrganizedClubTrip: Boolean(data.isOrganizedClubTrip),
       error: undefined,
     }
   } catch (error) {
-    return { ticketSlotCount: undefined, depositAmountEur: undefined, error: asError(error) }
+    return {
+      ticketSlotCount: undefined,
+      depositAmountEur: undefined,
+      isOrganizedClubTrip: false,
+      error: asError(error),
+    }
+  }
+}
+
+/** Organized Hull City club-trip deposit (Stripe adds €1 service charge → €151 total). */
+export const CLUB_TRIP_DEPOSIT_EUR = 150
+
+export type ClubTripPendingPayment = {
+  matchKey: string
+  details: OrganizedTripDetails
+}
+
+export const CLUB_TRIP_PENDING_STORAGE_KEY = 'cmusc-club-trip-pending'
+
+export async function completeClubTripAfterStripePayment(options: {
+  sessionId: string
+  matchKey: string
+  organizedTripDetails: OrganizedTripDetails
+}) {
+  try {
+    const data = await apiSend<{
+      ok: boolean
+      depositConfirmed: boolean
+      depositAmountEur: number
+    }>('/api/tickets/requests/my/club-trip/complete', 'POST', options)
+    return { depositConfirmed: data.depositConfirmed, depositAmountEur: data.depositAmountEur, error: undefined }
+  } catch (error) {
+    return { depositConfirmed: false, depositAmountEur: undefined, error: asError(error) }
   }
 }
 

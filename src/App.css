@@ -463,6 +463,13 @@
   appearance: none;
 }
 
+.fixtures-ticket-request-btn--club-trip {
+  white-space: normal;
+  text-align: center;
+  line-height: 1.25;
+  max-width: 12.5rem;
+}
+
 .fixtures-ticket-request-btn:disabled {
   opacity: 0.7;
   cursor: wait;
@@ -3125,6 +3132,88 @@
 
 .admin-ticket-travel-with {
   margin-top: 0.55rem;
+}
+
+.admin-club-trip-details {
+  margin: 0.75rem 0 0.35rem;
+  padding: 0.75rem 0.85rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-2);
+}
+
+.admin-club-trip-details-title {
+  margin: 0 0 0.55rem;
+  font-size: 0.92rem;
+  font-weight: 700;
+  color: var(--text-h);
+}
+
+.admin-club-trip-details-dl {
+  margin: 0;
+  display: grid;
+  gap: 0.4rem;
+}
+
+.admin-club-trip-details-dl > div {
+  display: grid;
+  grid-template-columns: minmax(8rem, 11rem) 1fr;
+  gap: 0.35rem 0.75rem;
+}
+
+.admin-club-trip-details-dl dt {
+  margin: 0;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--text-muted);
+}
+
+.admin-club-trip-details-dl dd {
+  margin: 0;
+  font-size: 0.9rem;
+  color: var(--text-h);
+  word-break: break-word;
+}
+
+.club-trip-modal {
+  width: min(100%, 34rem);
+}
+
+.club-trip-flyer-wrap {
+  margin: 0.35rem 0 0.85rem;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  background: #111;
+}
+
+.club-trip-flyer {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.club-trip-form {
+  display: grid;
+  gap: 0.65rem;
+  margin-bottom: 0.85rem;
+}
+
+.club-trip-notes {
+  display: grid;
+  gap: 0.55rem;
+  margin: 0 0 0.85rem;
+  padding: 0.8rem 0.9rem;
+  border-radius: 10px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+}
+
+.club-trip-notes p {
+  margin: 0;
+  font-size: 0.86rem;
+  line-height: 1.45;
+  color: var(--text);
 }
 
 .admin-ticket-travel-with-table {

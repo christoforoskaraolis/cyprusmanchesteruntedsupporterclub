@@ -6,8 +6,17 @@ import { requireUser } from '../middleware/auth.ts'
 
 export const stripeRouter = Router()
 
-const PAYMENT_KINDS = new Set(['membership', 'renewal', 'ticket', 'merchandise', 'official_membership'])
+const PAYMENT_KINDS = new Set([
+  'membership',
+  'renewal',
+  'ticket',
+  'merchandise',
+  'official_membership',
+  'club_trip',
+])
 const STRIPE_SERVICE_FEE_EUR = 1
+/** Organized Old Trafford club-trip deposit (Stripe adds the €1 service charge). */
+export const CLUB_TRIP_DEPOSIT_EUR = 150
 
 function appBaseUrl(req: { headers: { origin?: string } }): string {
   if (env.publicAppUrl) return env.publicAppUrl.replace(/\/+$/, '')

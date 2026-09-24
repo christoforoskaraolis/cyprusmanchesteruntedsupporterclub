@@ -1,6 +1,12 @@
 import { apiSend, asError } from './apiClient'
 
-export type StripePaymentKind = 'membership' | 'renewal' | 'ticket' | 'merchandise' | 'official_membership'
+export type StripePaymentKind =
+  | 'membership'
+  | 'renewal'
+  | 'ticket'
+  | 'merchandise'
+  | 'official_membership'
+  | 'club_trip'
 
 export type StripeCheckoutPayload = {
   amountEur: number

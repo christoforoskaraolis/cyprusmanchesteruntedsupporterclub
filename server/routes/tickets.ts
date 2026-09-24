@@ -1,5 +1,7 @@
 import { Router } from 'express'
+import Stripe from 'stripe'
 import { query } from '../db.ts'
+import { env } from '../env.ts'
 import { asyncHandler } from '../lib/asyncHandler.ts'
 import { badRequest, notFound } from '../lib/errors.ts'
 import { sendTicketDepositConfirmedEmail } from '../lib/ticketDepositConfirmedEmail.ts'
@@ -20,6 +22,72 @@ import {
 import { requireAdmin, requireUser } from '../middleware/auth.ts'
 
 const MAX_TRAVEL_COMPANIONS = 10
+
+/** Pilot members who can register for the Hull City organized club trip. */
+const ORGANIZED_CLUB_TRIP_MEMBERSHIP_NUMBERS = new Set([1, 2, 7, 13])
+
+/** Club-trip deposit base amount. Stripe checkout adds the €1 service charge (€151 total). */
+export const CLUB_TRIP_DEPOSIT_EUR = 150
+
+function getStripeClient(): Stripe | null {
+  if (!env.stripeSecretKey) return null
+  return new Stripe(env.stripeSecretKey)
+}
+
+export type OrganizedTripDetails = {
+  fullName: string
+  passportNumber: string
+  dateOfBirth: string
+  passportIssuedAt: string
+  passportExpiresAt: string
+  officialMuMembershipId: string
+  telephone: string
+}
+
+function isHullCityMatchKey(matchKey: string): boolean {
+  const parts = String(matchKey).split('|')
+  const opponent = (parts[2] ?? '').trim().toLowerCase()
+  const homeAway = (parts[3] ?? '').trim().toUpperCase()
+  return homeAway === 'H' && opponent.includes('hull')
+}
+
+function parseIsoDateOnly(raw: unknown): string | null {
+  if (typeof raw !== 'string') return null
+  const trimmed = raw.trim()
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return null
+  const [y, m, d] = trimmed.split('-').map(Number)
+  const date = new Date(y, m - 1, d, 12, 0, 0, 0)
+  if (date.getFullYear() !== y || date.getMonth() !== m - 1 || date.getDate() !== d) return null
+  return trimmed
+}
+
+function parseOrganizedTripDetails(raw: unknown): OrganizedTripDetails | null {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null
+  const body = raw as Record<string, unknown>
+  const fullName = typeof body.fullName === 'string' ? body.fullName.trim() : ''
+  const passportNumber = typeof body.passportNumber === 'string' ? body.passportNumber.trim() : ''
+  const officialMuMembershipId =
+    typeof body.officialMuMembershipId === 'string' ? body.officialMuMembershipId.trim() : ''
+  const telephone = typeof body.telephone === 'string' ? body.telephone.trim() : ''
+  const dateOfBirth = parseIsoDateOnly(body.dateOfBirth)
+  const passportIssuedAt = parseIsoDateOnly(body.passportIssuedAt)
+  const passportExpiresAt = parseIsoDateOnly(body.passportExpiresAt)
+  if (!fullName || fullName.length > 200) return null
+  if (!passportNumber || passportNumber.length > 64) return null
+  if (!officialMuMembershipId || officialMuMembershipId.length > 64) return null
+  if (!telephone || telephone.length > 40) return null
+  if (!dateOfBirth || !passportIssuedAt || !passportExpiresAt) return null
+  if (passportExpiresAt < passportIssuedAt) return null
+  return {
+    fullName,
+    passportNumber,
+    dateOfBirth,
+    passportIssuedAt,
+    passportExpiresAt,
+    officialMuMembershipId,
+    telephone,
+  }
+}
 
 function parseTravelCompanionMembershipNumbers(raw: unknown): number[] {
   if (!Array.isArray(raw)) return []
@@ -269,10 +337,11 @@ ticketsRouter.post(
       balance_payment_deadline: string | null
       ticket_confirmed: boolean
       travel_companion_membership_numbers: number[] | null
+      organized_trip_details: OrganizedTripDetails | null
     }>(
       `select distinct on (match_key) match_key, status, deposit_confirmed, user_cancelled_at,
               balance_remaining_amount_eur, balance_payment_notified, balance_payment_deadline,
-              ticket_confirmed, travel_companion_membership_numbers
+              ticket_confirmed, travel_companion_membership_numbers, organized_trip_details
        from public.fixture_ticket_requests
        where user_id = $1 and match_key = any($2::text[])
        order by match_key, requested_at desc`,
@@ -292,6 +361,8 @@ ticketsRouter.post(
         ticketSlotCount: ticketSlotCountFromCompanionNumbers(r.travel_companion_membership_numbers),
         travelCompanionCount: r.travel_companion_membership_numbers?.length ?? 0,
         depositAmountEur: ticketDepositAmountEurFromCompanionNumbers(r.travel_companion_membership_numbers),
+        isOrganizedClubTrip: Boolean(r.organized_trip_details),
+        organizedTripDetails: r.organized_trip_details ?? null,
       })),
     })
   }),
@@ -302,8 +373,18 @@ ticketsRouter.post(
   requireUser,
   asyncHandler(async (req, res) => {
     const matchKey = req.params.matchKey
+    const body = (req.body ?? {}) as {
+      travelCompanionMembershipNumbers?: unknown
+      organizedTripDetails?: unknown
+    }
+    if (body.organizedTripDetails != null) {
+      throw badRequest(
+        'Club trip registration requires Stripe deposit payment first. Use Pay with Stripe on the travel form.',
+      )
+    }
+
     const travelCompanionMembershipNumbers = parseTravelCompanionMembershipNumbers(
-      (req.body as { travelCompanionMembershipNumbers?: unknown })?.travelCompanionMembershipNumbers,
+      body.travelCompanionMembershipNumbers,
     )
 
     const { rows: requesterRows } = await query<{
@@ -358,6 +439,7 @@ ticketsRouter.post(
              ticket_confirmed = false,
              ticket_confirmed_at = null,
              travel_companion_membership_numbers = $2,
+             organized_trip_details = null,
              requested_at = now(),
              updated_at = now()
          where id = $1`,
@@ -365,8 +447,9 @@ ticketsRouter.post(
       )
     } else {
       await query(
-        `insert into public.fixture_ticket_requests (match_key, user_id, status, travel_companion_membership_numbers)
-         values ($1, $2, 'pending', $3)`,
+        `insert into public.fixture_ticket_requests
+           (match_key, user_id, status, travel_companion_membership_numbers, organized_trip_details)
+         values ($1, $2, 'pending', $3, null)`,
         [matchKey, req.user!.id, filteredTravelCompanions],
       )
     }
@@ -375,6 +458,124 @@ ticketsRouter.post(
       ok: true,
       ticketSlotCount: requestedSlotCount,
       depositAmountEur: ticketDepositAmountEurFromCompanionNumbers(filteredTravelCompanions),
+      isOrganizedClubTrip: false,
+    })
+  }),
+)
+
+ticketsRouter.post(
+  '/requests/my/club-trip/complete',
+  requireUser,
+  asyncHandler(async (req, res) => {
+    const body = (req.body ?? {}) as {
+      sessionId?: unknown
+      matchKey?: unknown
+      organizedTripDetails?: unknown
+    }
+    const sessionId = typeof body.sessionId === 'string' ? body.sessionId.trim() : ''
+    const matchKey = typeof body.matchKey === 'string' ? body.matchKey.trim() : ''
+    const organizedTripDetails = parseOrganizedTripDetails(body.organizedTripDetails)
+
+    if (!sessionId) throw badRequest('Stripe session ID is required.')
+    if (!matchKey) throw badRequest('Match key is required.')
+    if (!organizedTripDetails) throw badRequest('Trip registration details are incomplete.')
+    if (!isHullCityMatchKey(matchKey)) {
+      throw badRequest('Organized club trip registration is only available for the Hull City home match.')
+    }
+
+    const stripe = getStripeClient()
+    if (!stripe) throw badRequest('Stripe is not configured on this server.')
+
+    const session = await stripe.checkout.sessions.retrieve(sessionId)
+    if (session.payment_status !== 'paid') {
+      throw badRequest('Stripe payment is not completed yet.')
+    }
+    if (session.metadata?.paymentKind !== 'club_trip') {
+      throw badRequest('This Stripe payment is not a club trip deposit.')
+    }
+    if (session.metadata?.userId !== req.user!.id) {
+      throw badRequest('This Stripe payment does not belong to the signed-in user.')
+    }
+    if ((session.metadata?.referenceId ?? '') !== matchKey) {
+      throw badRequest('This Stripe payment does not match the selected fixture.')
+    }
+    if (session.metadata?.baseAmountEur !== String(CLUB_TRIP_DEPOSIT_EUR)) {
+      throw badRequest('This Stripe payment amount does not match the trip deposit.')
+    }
+
+    const { rows: requesterRows } = await query<{
+      membership_number: number | null
+      official_mu_membership_status: string | null
+    }>(
+      `select membership_number, official_mu_membership_status
+       from public.membership_applications
+       where user_id = $1
+         and status = 'active'
+         and sponsor_application_id is null
+       order by submitted_at desc
+       limit 1`,
+      [req.user!.id],
+    )
+    const requester = requesterRows[0]
+    if (!requester) {
+      throw badRequest('You must have an active Cyprus membership to register for the club trip.')
+    }
+    if (requester.official_mu_membership_status !== 'activated') {
+      throw badRequest('You must have active official Manchester United membership to register for the club trip.')
+    }
+    const requesterMembershipNumber = requester.membership_number ?? null
+    if (
+      requesterMembershipNumber == null ||
+      !ORGANIZED_CLUB_TRIP_MEMBERSHIP_NUMBERS.has(requesterMembershipNumber)
+    ) {
+      throw badRequest('Organized club trip registration is not available for your membership.')
+    }
+
+    const { rows } = await query<{ id: string }>(
+      `select id from public.fixture_ticket_requests where match_key = $1 and user_id = $2 order by requested_at desc limit 1`,
+      [matchKey, req.user!.id],
+    )
+    await assertFixtureTicketCapacityAvailable(matchKey, {
+      existingRequestId: rows[0]?.id ?? null,
+      requestedSlotCount: 1,
+    })
+
+    const detailsJson = JSON.stringify(organizedTripDetails)
+    if (rows[0]?.id) {
+      await query(
+        `update public.fixture_ticket_requests
+         set status = 'pending',
+             user_cancelled_at = null,
+             deposit_confirmed = true,
+             deposit_confirmed_at = now(),
+             balance_remaining_amount_eur = null,
+             balance_payment_notified = false,
+             balance_payment_notified_at = null,
+             balance_payment_deadline = null,
+             ticket_confirmed = false,
+             ticket_confirmed_at = null,
+             travel_companion_membership_numbers = '{}'::int[],
+             organized_trip_details = $2::jsonb,
+             requested_at = now(),
+             updated_at = now()
+         where id = $1`,
+        [rows[0].id, detailsJson],
+      )
+    } else {
+      await query(
+        `insert into public.fixture_ticket_requests
+           (match_key, user_id, status, travel_companion_membership_numbers, organized_trip_details,
+            deposit_confirmed, deposit_confirmed_at)
+         values ($1, $2, 'pending', '{}'::int[], $3::jsonb, true, now())`,
+        [matchKey, req.user!.id, detailsJson],
+      )
+    }
+    await closeFixtureTicketWindowIfAtCapacity(matchKey)
+    res.json({
+      ok: true,
+      isOrganizedClubTrip: true,
+      depositAmountEur: CLUB_TRIP_DEPOSIT_EUR,
+      depositConfirmed: true,
     })
   }),
 )
@@ -409,12 +610,14 @@ ticketsRouter.get(
       ticket_confirmed: boolean
       ticket_confirmed_at: string | null
       travel_companion_membership_numbers: number[] | null
+      organized_trip_details: OrganizedTripDetails | null
     }>(
       `select ftr.id, ftr.match_key, ftr.user_id, ftr.status, ftr.requested_at,
               ftr.deposit_confirmed, ftr.deposit_confirmed_at, ftr.user_cancelled_at,
               ftr.balance_remaining_amount_eur, ftr.balance_payment_notified,
               ftr.balance_payment_notified_at, ftr.balance_payment_deadline,
               ftr.ticket_confirmed, ftr.ticket_confirmed_at, ftr.travel_companion_membership_numbers,
+              ftr.organized_trip_details,
               m.first_name, m.last_name, p.full_name as profile_full_name,
               p.email as profile_email, au.email as auth_email,
               m.mobile_phone, m.membership_number,
@@ -462,6 +665,8 @@ ticketsRouter.get(
           ticketConfirmed: r.ticket_confirmed,
           ticketConfirmedAt: r.ticket_confirmed_at,
           travelCompanions: travelCompanionsByRequestId.get(r.id) ?? [],
+          isOrganizedClubTrip: Boolean(r.organized_trip_details),
+          organizedTripDetails: r.organized_trip_details ?? null,
           user: {
             fullName,
             membershipNumber: r.membership_number,

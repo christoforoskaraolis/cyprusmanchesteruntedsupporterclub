@@ -59,6 +59,9 @@ import {
   completeMyAcceptedTicketRequest,
   type AdminFixtureTicketRequest,
   type FixtureTicketWindowStatus,
+  CLUB_TRIP_PENDING_STORAGE_KEY,
+  type ClubTripPendingPayment,
+  completeClubTripAfterStripePayment,
   fetchPendingFixtureTicketRequests,
   fetchFixtureTicketWindows,
   fetchMyFixtureTicketRequests,
@@ -141,6 +144,7 @@ import { OfficialMembershipTeaser } from './components/OfficialMembershipTeaser.
 import { NewsPushBell } from './components/NewsPushBell.tsx'
 import { HomeMatchPanels } from './components/HomeMatchPanels.tsx'
 import { DateOfBirthInput } from './components/DateOfBirthInput.tsx'
+import { ClubOldTraffordTravelModal } from './components/ClubOldTraffordTravelModal.tsx'
 import { AdminNewsPostPreview } from './components/AdminNewsPostPreview.tsx'
 import { NewsFeed } from './components/NewsFeed.tsx'
 
@@ -836,7 +840,7 @@ function NewsDetailModal({ post, loading, open, onClose }: NewsDetailModalProps)
 }
 
 type AdminFilter = 'all' | 'pending' | 'active'
-type AdminTab = 'members' | 'admins' | 'tickets' | 'ticketRequests' | 'news' | 'merch' | 'official' | 'email'
+type AdminTab = 'members' | 'admins' | 'tickets' | 'ticketRequests' | 'tripRequests' | 'news' | 'merch' | 'official' | 'email'
 type AdminTicketFilter = 'all' | 'pending' | 'approved' | 'completed' | 'cancelled'
 
 function isTicketRequestCancelled(request: {
@@ -2645,6 +2649,7 @@ function AdminConsole({
   const [busyRenewalId, setBusyRenewalId] = useState<string | null>(null)
   const [busyTicketRequestId, setBusyTicketRequestId] = useState<string | null>(null)
   const [ticketFilter, setTicketFilter] = useState<AdminTicketFilter>('pending')
+  const [tripFilter, setTripFilter] = useState<AdminTicketFilter>('pending')
   const [ticketMatchFilter, setTicketMatchFilter] = useState<string>('all')
   const [newsTitle, setNewsTitle] = useState('')
   const [newsBody, setNewsBody] = useState('')
@@ -2845,6 +2850,7 @@ function AdminConsole({
   }, [ticketFixtures, pendingTicketRequests])
 
   const filteredTicketRequests = pendingTicketRequests
+    .filter((r) => !r.isOrganizedClubTrip)
     .filter(
       (r) =>
         ticketMatchFilter === 'all' ||
@@ -2857,6 +2863,23 @@ function AdminConsole({
       if (isTicketRequestCancelled(r)) return false
       return r.status === ticketFilter
     })
+
+  const filteredTripRequests = pendingTicketRequests
+    .filter((r) => Boolean(r.isOrganizedClubTrip))
+    .filter((r) => {
+      if (tripFilter === 'all') return true
+      if (tripFilter === 'cancelled') return isTicketRequestCancelled(r)
+      if (isTicketRequestCancelled(r)) return false
+      return r.status === tripFilter
+    })
+    .sort((a, b) => new Date(b.requestedAt).getTime() - new Date(a.requestedAt).getTime())
+
+  const pendingTicketRequestCount = pendingTicketRequests.filter(
+    (r) => !r.isOrganizedClubTrip && r.status === 'pending',
+  ).length
+  const pendingTripRequestCount = pendingTicketRequests.filter(
+    (r) => r.isOrganizedClubTrip && r.status === 'pending',
+  ).length
 
   const filteredMerchOrders = merchandiseOrders.filter((o) => {
     const q = merchSearch.trim().toLowerCase()
@@ -3264,10 +3287,24 @@ function AdminConsole({
               }}
             >
               Ticket requests
-              {pendingTicketRequests.filter((r) => r.status === 'pending').length > 0 && (
-                <span className="admin-tab-badge">
-                  {pendingTicketRequests.filter((r) => r.status === 'pending').length}
-                </span>
+              {pendingTicketRequestCount > 0 && (
+                <span className="admin-tab-badge">{pendingTicketRequestCount}</span>
+              )}
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={adminTab === 'tripRequests'}
+              className={`admin-main-tab ${adminTab === 'tripRequests' ? 'is-active' : ''}`}
+              onClick={() => {
+                selectAdminTab('tripRequests')
+                setTicketRequestsRefreshing(true)
+                void onRefreshTicketRequests().finally(() => setTicketRequestsRefreshing(false))
+              }}
+            >
+              Trip requests
+              {pendingTripRequestCount > 0 && (
+                <span className="admin-tab-badge">{pendingTripRequestCount}</span>
               )}
             </button>
             <button
@@ -4523,6 +4560,41 @@ function AdminConsole({
                         </tbody>
                       </table>
                     </div>
+                    {r.isOrganizedClubTrip && r.organizedTripDetails && (
+                      <div className="admin-club-trip-details">
+                        <p className="admin-club-trip-details-title">Club trip registration (Old Trafford)</p>
+                        <dl className="admin-club-trip-details-dl" lang="el">
+                          <div>
+                            <dt>Ονοματεπώνυμο</dt>
+                            <dd>{r.organizedTripDetails.fullName}</dd>
+                          </div>
+                          <div>
+                            <dt>Επίσημο Membership ID</dt>
+                            <dd>{r.organizedTripDetails.officialMuMembershipId}</dd>
+                          </div>
+                          <div>
+                            <dt>Τηλέφωνο</dt>
+                            <dd>{r.organizedTripDetails.telephone}</dd>
+                          </div>
+                          <div>
+                            <dt>Αριθμός διαβατηρίου</dt>
+                            <dd>{r.organizedTripDetails.passportNumber}</dd>
+                          </div>
+                          <div>
+                            <dt>Ημερομηνία γέννησης</dt>
+                            <dd>{formatOrganizedTripDateLabel(r.organizedTripDetails.dateOfBirth)}</dd>
+                          </div>
+                          <div>
+                            <dt>Ημερομηνία έκδοσης</dt>
+                            <dd>{formatOrganizedTripDateLabel(r.organizedTripDetails.passportIssuedAt)}</dd>
+                          </div>
+                          <div>
+                            <dt>Ημερομηνία λήξης</dt>
+                            <dd>{formatOrganizedTripDateLabel(r.organizedTripDetails.passportExpiresAt)}</dd>
+                          </div>
+                        </dl>
+                      </div>
+                    )}
                     <span className={`fixtures-ticket-pill fixtures-ticket-pill--${r.status}`}>
                       {r.status === 'approved' ? 'Accepted' : r.status[0].toUpperCase() + r.status.slice(1)}
                     </span>
@@ -4786,6 +4858,239 @@ function AdminConsole({
           )}
         </section>
       )}
+
+      {adminTab === 'tripRequests' && (
+        <section className="admin-ticket-requests-block admin-panel-block" aria-label="Trip requests">
+          <div className="admin-block-head">
+            <h2 className="admin-block-title">Trip requests</h2>
+            <p className="admin-block-lead">
+              Organized club trip registrations for Old Trafford (Hull City). These appear when eligible members
+              submit Travel with the Club.
+            </p>
+            <button
+              type="button"
+              className="admin-merch-create-btn"
+              onClick={() => {
+                setTicketRequestsRefreshing(true)
+                void onRefreshTicketRequests().finally(() => setTicketRequestsRefreshing(false))
+              }}
+              disabled={ticketRequestsRefreshing}
+            >
+              {ticketRequestsRefreshing ? 'Refreshing…' : 'Refresh list'}
+            </button>
+          </div>
+          <div className="admin-ticket-request-filters">
+            <div className="admin-ticket-filter-group">
+              <span className="admin-ticket-filter-label">Status</span>
+              <div className="admin-ticket-status-tabs" role="tablist" aria-label="Filter trip requests by status">
+                {(['all', 'pending', 'approved', 'completed', 'cancelled'] as const).map((f) => (
+                  <button
+                    key={f}
+                    type="button"
+                    role="tab"
+                    aria-selected={tripFilter === f}
+                    className={`admin-ticket-status-tab ${tripFilter === f ? 'is-active' : ''}`}
+                    onClick={() => setTripFilter(f)}
+                  >
+                    {f === 'all'
+                      ? 'All'
+                      : f === 'pending'
+                        ? 'Pending'
+                        : f === 'approved'
+                          ? 'Accepted'
+                          : f === 'completed'
+                            ? 'Completed'
+                            : 'Cancelled'}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+          {ticketActionNotice && <p className="admin-member-action-notice">{ticketActionNotice}</p>}
+          {ticketActionError && (
+            <p className="admin-empty" style={{ color: '#b91c1c' }}>
+              {ticketActionError}
+            </p>
+          )}
+          {filteredTripRequests.length === 0 ? (
+            <p className="admin-empty">
+              No{' '}
+              {tripFilter === 'all'
+                ? ''
+                : tripFilter === 'approved'
+                  ? 'accepted '
+                  : tripFilter === 'cancelled'
+                    ? 'cancelled '
+                    : `${tripFilter} `}
+              trip requests.
+            </p>
+          ) : (
+            <ul className="admin-ticket-request-list">
+              {filteredTripRequests.map((r) => (
+                <li key={r.id} className="admin-ticket-request-card">
+                  <div className="admin-ticket-request-main">
+                    <p className="admin-renewal-name">{r.user.fullName ?? 'Unknown member'}</p>
+                    <p className="admin-member-meta">
+                      <strong>{formatFixtureMatchKeyLabel(r.matchKey)}</strong>
+                      {r.user.membershipNumber != null
+                        ? ` · Member #${formatMembershipNumber(r.user.membershipNumber)}`
+                        : ''}
+                    </p>
+                    <p className="admin-member-meta">
+                      Email: {r.user.email ?? '—'}
+                      {' · '}
+                      Submitted: {new Date(r.requestedAt).toLocaleString('en-GB')}
+                    </p>
+                    {r.organizedTripDetails ? (
+                      <div className="admin-club-trip-details">
+                        <p className="admin-club-trip-details-title">Στοιχεία ταξιδιού</p>
+                        <dl className="admin-club-trip-details-dl" lang="el">
+                          <div>
+                            <dt>Ονοματεπώνυμο</dt>
+                            <dd>{r.organizedTripDetails.fullName}</dd>
+                          </div>
+                          <div>
+                            <dt>Επίσημο Membership ID</dt>
+                            <dd>{r.organizedTripDetails.officialMuMembershipId}</dd>
+                          </div>
+                          <div>
+                            <dt>Τηλέφωνο</dt>
+                            <dd>{r.organizedTripDetails.telephone}</dd>
+                          </div>
+                          <div>
+                            <dt>Αριθμός διαβατηρίου</dt>
+                            <dd>{r.organizedTripDetails.passportNumber}</dd>
+                          </div>
+                          <div>
+                            <dt>Ημερομηνία γέννησης</dt>
+                            <dd>{formatOrganizedTripDateLabel(r.organizedTripDetails.dateOfBirth)}</dd>
+                          </div>
+                          <div>
+                            <dt>Ημερομηνία έκδοσης</dt>
+                            <dd>{formatOrganizedTripDateLabel(r.organizedTripDetails.passportIssuedAt)}</dd>
+                          </div>
+                          <div>
+                            <dt>Ημερομηνία λήξης</dt>
+                            <dd>{formatOrganizedTripDateLabel(r.organizedTripDetails.passportExpiresAt)}</dd>
+                          </div>
+                        </dl>
+                      </div>
+                    ) : (
+                      <p className="admin-empty">No trip form details saved for this request.</p>
+                    )}
+                    <span className={`fixtures-ticket-pill fixtures-ticket-pill--${r.status}`}>
+                      {r.status === 'approved' ? 'Accepted' : r.status[0].toUpperCase() + r.status.slice(1)}
+                    </span>
+                    {r.userCancelledAt && (
+                      <span className="fixtures-ticket-pill fixtures-ticket-pill--user-cancelled">
+                        User cancelled request
+                        <span className="admin-present-received-at">
+                          · {new Date(r.userCancelledAt).toLocaleString('en-GB')}
+                        </span>
+                      </span>
+                    )}
+                    <label className="admin-present-received admin-ticket-deposit-confirm">
+                      <input
+                        type="checkbox"
+                        checked={r.depositConfirmed}
+                        disabled={busyTicketRequestId !== null || ticketDepositConfirmSubmitting}
+                        onChange={async (e) => {
+                          setTicketActionError(null)
+                          setTicketActionNotice(null)
+                          const checked = e.target.checked
+                          if (checked) {
+                            setTicketDepositConfirmError(null)
+                            setTicketDepositConfirmTarget(r)
+                            return
+                          }
+                          setBusyTicketRequestId(r.id)
+                          try {
+                            await onUpdateTicketDepositConfirmed(r.id, false)
+                          } catch (error) {
+                            setTicketActionError(
+                              error instanceof Error ? error.message : 'Could not update deposit confirmation.',
+                            )
+                          } finally {
+                            setBusyTicketRequestId(null)
+                          }
+                        }}
+                      />
+                      Deposit confirmation (€150)
+                      {r.depositConfirmedAt && (
+                        <span className="admin-present-received-at">
+                          · {new Date(r.depositConfirmedAt).toLocaleString('en-GB')}
+                        </span>
+                      )}
+                    </label>
+                  </div>
+                  <div className="admin-ticket-request-actions">
+                    {r.status === 'pending' && (
+                      <button
+                        type="button"
+                        className="board-admin-activate"
+                        disabled={busyTicketRequestId !== null}
+                        onClick={async () => {
+                          setBusyTicketRequestId(r.id)
+                          try {
+                            await onApproveTicketRequest(r)
+                          } finally {
+                            setBusyTicketRequestId(null)
+                          }
+                        }}
+                      >
+                        {busyTicketRequestId === r.id ? 'Updating…' : 'Accept'}
+                      </button>
+                    )}
+                    {r.status === 'approved' && (
+                      <button
+                        type="button"
+                        className="board-admin-activate"
+                        disabled={busyTicketRequestId !== null}
+                        onClick={async () => {
+                          setBusyTicketRequestId(r.id)
+                          setTicketActionError(null)
+                          setTicketActionNotice(null)
+                          try {
+                            await onCompleteTicketRequest(r)
+                            const recipient = r.user.email || 'the member'
+                            setTicketActionNotice(`Trip marked completed. Confirmation email sent to ${recipient}.`)
+                          } catch (error) {
+                            setTicketActionError(
+                              error instanceof Error ? error.message : 'Could not mark trip completed.',
+                            )
+                          } finally {
+                            setBusyTicketRequestId(null)
+                          }
+                        }}
+                      >
+                        {busyTicketRequestId === r.id ? 'Updating…' : 'Mark completed'}
+                      </button>
+                    )}
+                    {r.status !== 'completed' && (
+                      <button
+                        type="button"
+                        className="admin-revoke-btn"
+                        disabled={busyTicketRequestId !== null}
+                        onClick={async () => {
+                          setBusyTicketRequestId(r.id)
+                          try {
+                            await onCancelTicketRequest(r)
+                          } finally {
+                            setBusyTicketRequestId(null)
+                          }
+                        }}
+                      >
+                        {busyTicketRequestId === r.id ? 'Updating…' : 'Cancel'}
+                      </button>
+                    )}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      )}
+
       {adminTab === 'news' && (
         <section className="admin-news-block admin-panel-block" aria-label="Manage news posts">
           <div className="admin-block-head">
@@ -6852,6 +7157,23 @@ function isOldTraffordHomeFixture(f: UpcomingFixture): boolean {
   return venue.includes('old trafford') || venue.includes('manchester')
 }
 
+/** Pilot membership numbers for the Hull City organized club trip. */
+const ORGANIZED_CLUB_TRIP_MEMBERSHIP_NUMBERS = new Set([1, 2, 7, 13])
+
+function isHullCityClubTripFixture(f: UpcomingFixture): boolean {
+  return Boolean(f.home) && /hull/i.test(f.opponent)
+}
+
+function isOrganizedClubTripEligible(membershipNumber: number | null | undefined): boolean {
+  return membershipNumber != null && ORGANIZED_CLUB_TRIP_MEMBERSHIP_NUMBERS.has(membershipNumber)
+}
+
+function formatOrganizedTripDateLabel(isoDate: string): string {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(isoDate.trim())
+  if (!match) return isoDate
+  return `${match[3]}/${match[2]}/${match[1]}`
+}
+
 function csvCell(value: unknown): string {
   const s = value == null ? '' : String(value)
   if (/[",\n\r]/.test(s)) return `"${s.replace(/"/g, '""')}"`
@@ -6962,6 +7284,9 @@ function App() {
   const [ticketRequestConfirmFixture, setTicketRequestConfirmFixture] = useState<UpcomingFixture | null>(null)
   const [ticketRequestConfirmSubmitting, setTicketRequestConfirmSubmitting] = useState(false)
   const [ticketRequestConfirmError, setTicketRequestConfirmError] = useState<string | null>(null)
+  const [clubTripConfirmFixture, setClubTripConfirmFixture] = useState<UpcomingFixture | null>(null)
+  const [clubTripConfirmSubmitting, setClubTripConfirmSubmitting] = useState(false)
+  const [clubTripConfirmError, setClubTripConfirmError] = useState<string | null>(null)
   const [ticketDepositPaymentFixture, setTicketDepositPaymentFixture] = useState<UpcomingFixture | null>(null)
   const [pendingTicketDepositSlotCount, setPendingTicketDepositSlotCount] = useState<number | null>(null)
   const [ticketBalancePaymentFixture, setTicketBalancePaymentFixture] = useState<UpcomingFixture | null>(null)
@@ -7296,6 +7621,57 @@ function App() {
     if (error) throw new Error(error.message)
     setPendingTicketRequests(rows)
   }, [])
+
+  useEffect(() => {
+    if (!user?.id || typeof window === 'undefined') return
+    const params = new URLSearchParams(window.location.search)
+    const payment = params.get('payment')
+    const sessionId = params.get('session_id')?.trim() ?? ''
+    if (payment !== 'success' || !sessionId) return
+
+    let pending: ClubTripPendingPayment | null = null
+    try {
+      const raw = sessionStorage.getItem(CLUB_TRIP_PENDING_STORAGE_KEY)
+      if (raw) pending = JSON.parse(raw) as ClubTripPendingPayment
+    } catch {
+      pending = null
+    }
+    if (!pending?.matchKey || !pending.details) return
+
+    let cancelled = false
+    void (async () => {
+      setClubTripConfirmSubmitting(true)
+      setClubTripConfirmError(null)
+      const { error } = await completeClubTripAfterStripePayment({
+        sessionId,
+        matchKey: pending!.matchKey,
+        organizedTripDetails: pending!.details,
+      })
+      if (cancelled) return
+      setClubTripConfirmSubmitting(false)
+      if (error) {
+        setClubTripConfirmError(error.message)
+        setFixturesError(`Club trip payment received, but registration failed: ${error.message}`)
+        return
+      }
+      try {
+        sessionStorage.removeItem(CLUB_TRIP_PENDING_STORAGE_KEY)
+      } catch {
+        // ignore
+      }
+      const url = new URL(window.location.href)
+      url.searchParams.delete('payment')
+      url.searchParams.delete('session_id')
+      window.history.replaceState({}, '', `${url.pathname}${url.search}${url.hash}`)
+      setClubTripConfirmFixture(null)
+      await refreshFixtureTicketStates()
+      if (isAdmin) await refreshTicketRequestsOnly()
+    })()
+
+    return () => {
+      cancelled = true
+    }
+  }, [user?.id, isAdmin, refreshFixtureTicketStates, refreshTicketRequestsOnly])
 
   async function applyUpdateMerchandiseOrderStatus(orderId: string, status: MerchandiseOrderStatus) {
     const { error } = await updateMerchandiseOrderStatus(orderId, status)
@@ -7808,6 +8184,7 @@ function App() {
           void loadAdminUsersData()
           break
         case 'ticketRequests':
+        case 'tripRequests':
           void refreshTicketRequestsOnly()
           break
         case 'merch':
@@ -8958,9 +9335,13 @@ function App() {
                           const canRequestTicket =
                             membershipRecord?.status === 'active' &&
                             membershipRecord.officialMuMembershipStatus === 'activated'
+                          const isClubTripRequest =
+                            isHullCityClubTripFixture(f) &&
+                            isOrganizedClubTripEligible(membershipRecord?.membershipNumber)
                           const canSubmitNewRequest =
                             !myRequestStatus || userCancelled || myRequestStatus === 'cancelled'
                           const formSubmitted = Boolean(ticketFormSubmittedByKey[key])
+                          const isOrganizedClubTripRequest = Boolean(myRequest?.isOrganizedClubTrip)
                           const showBalancePaymentPending =
                             myRequest?.balancePaymentNotified === true &&
                             myRequest.balanceRemainingAmountEur != null &&
@@ -8978,6 +9359,7 @@ function App() {
                             myRequestStatus !== 'completed'
                           const showDepositAccepted =
                             depositConfirmed &&
+                            !isOrganizedClubTripRequest &&
                             !showBalancePaymentPending &&
                             !showTicketConfirmed &&
                             !userCancelled &&
@@ -9024,14 +9406,25 @@ function App() {
                               {status === 'open' && canSubmitNewRequest && canRequestTicket && !atCapacity && (
                                 <button
                                   type="button"
-                                  className="fixtures-ticket-request-btn"
+                                  className={`fixtures-ticket-request-btn${isClubTripRequest ? ' fixtures-ticket-request-btn--club-trip' : ''}`}
                                   onClick={() => {
+                                    if (isClubTripRequest) {
+                                      setClubTripConfirmError(null)
+                                      setClubTripConfirmFixture(f)
+                                      return
+                                    }
                                     setTicketRequestConfirmError(null)
                                     setTicketRequestConfirmFixture(f)
                                   }}
-                                  disabled={busy || ticketRequestConfirmSubmitting}
+                                  disabled={busy || ticketRequestConfirmSubmitting || clubTripConfirmSubmitting}
                                 >
-                                  {busy ? 'Sending…' : userCancelled ? 'Request again' : 'Request'}
+                                  {busy
+                                    ? 'Sending…'
+                                    : isClubTripRequest
+                                      ? 'Travel with the Club to Old Trafford'
+                                      : userCancelled
+                                        ? 'Request again'
+                                        : 'Request'}
                                 </button>
                               )}
                               {status === 'open' && canSubmitNewRequest && !canRequestTicket && (
@@ -9046,15 +9439,29 @@ function App() {
                               {!userCancelled && myRequestStatus === 'pending' && !depositConfirmed && (
                                 <>
                                   <span className="fixtures-ticket-pill fixtures-ticket-pill--pending">Pending</span>
-                                  <button
-                                    type="button"
-                                    className="fixtures-ticket-request-btn"
-                                    onClick={() => openTicketDepositPayment(f)}
-                                  >
-                                    Pay deposit
-                                  </button>
+                                  {isOrganizedClubTripRequest ? (
+                                    <p className="fixtures-ticket-eligibility-note">
+                                      Trip registration pending deposit confirmation.
+                                    </p>
+                                  ) : (
+                                    <button
+                                      type="button"
+                                      className="fixtures-ticket-request-btn"
+                                      onClick={() => openTicketDepositPayment(f)}
+                                    >
+                                      Pay deposit
+                                    </button>
+                                  )}
                                 </>
                               )}
+                              {!userCancelled &&
+                                myRequestStatus === 'pending' &&
+                                depositConfirmed &&
+                                isOrganizedClubTripRequest && (
+                                  <p className="fixtures-ticket-accepted-msg">
+                                    Trip deposit paid — registration received
+                                  </p>
+                                )}
                               {showDepositAccepted && (
                                 <>
                                   <p className="fixtures-ticket-accepted-msg">Request accepted</p>
@@ -9145,6 +9552,26 @@ function App() {
           onConfirm={(travelCompanionMembershipNumbers) =>
             void confirmTicketRequestAndOpenPayment(travelCompanionMembershipNumbers)
           }
+        />
+        <ClubOldTraffordTravelModal
+          open={clubTripConfirmFixture !== null}
+          fixture={clubTripConfirmFixture}
+          matchKey={clubTripConfirmFixture ? fixtureMatchKey(clubTripConfirmFixture) : ''}
+          membershipNumber={formatMembershipNumber(membershipRecord?.membershipNumber)}
+          submitting={clubTripConfirmSubmitting}
+          error={clubTripConfirmError}
+          initialFullName={[membershipRecord?.firstName, membershipRecord?.lastName]
+            .filter(Boolean)
+            .join(' ')
+            .trim()}
+          initialDateOfBirth={dateOfBirthToDateInputValue(membershipRecord?.dateOfBirth ?? '')}
+          initialOfficialMuMembershipId={(membershipRecord?.officialMuMembershipId ?? '').trim()}
+          initialTelephone={membershipRecord?.mobilePhone?.trim() ?? ''}
+          onClose={() => {
+            if (clubTripConfirmSubmitting) return
+            setClubTripConfirmFixture(null)
+            setClubTripConfirmError(null)
+          }}
         />
         <TicketDepositPaymentModal
           open={ticketDepositPaymentFixture !== null}
