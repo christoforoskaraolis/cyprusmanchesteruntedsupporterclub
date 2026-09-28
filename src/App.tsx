@@ -76,6 +76,7 @@ import {
   setFixtureTicketRequestStatus,
   updateFixtureTicketRequestDepositConfirmed,
   sendFixtureTicketDepositPaymentReminder,
+  sendFixtureTicketBalancePaymentReminder,
   updateFixtureTicketRequestBalancePayment,
   updateFixtureTicketRequestTicketConfirmed,
   upsertFixtureTicketWindow,
@@ -2516,6 +2517,7 @@ type AdminConsoleProps = {
   onCancelTicketRequest: (row: AdminFixtureTicketRequest) => Promise<void>
   onUpdateTicketDepositConfirmed: (requestId: string, depositConfirmed: boolean) => Promise<void>
   onSendTicketDepositPaymentReminder: (requestId: string) => Promise<void>
+  onSendTicketBalancePaymentReminder: (requestId: string) => Promise<void>
   onUpdateTicketBalancePayment: (
     requestId: string,
     options: {
@@ -2597,6 +2599,7 @@ function AdminConsole({
   onCancelTicketRequest,
   onUpdateTicketDepositConfirmed,
   onSendTicketDepositPaymentReminder,
+  onSendTicketBalancePaymentReminder,
   onUpdateTicketBalancePayment,
   onUpdateTicketConfirmed,
   onRefreshTicketRequests,
@@ -2722,6 +2725,11 @@ function AdminConsole({
   )
   const [ticketDepositReminderSubmitting, setTicketDepositReminderSubmitting] = useState(false)
   const [ticketDepositReminderError, setTicketDepositReminderError] = useState<string | null>(null)
+  const [ticketBalanceReminderTarget, setTicketBalanceReminderTarget] = useState<AdminFixtureTicketRequest | null>(
+    null,
+  )
+  const [ticketBalanceReminderSubmitting, setTicketBalanceReminderSubmitting] = useState(false)
+  const [ticketBalanceReminderError, setTicketBalanceReminderError] = useState<string | null>(null)
   const [ticketBalancePaymentTarget, setTicketBalancePaymentTarget] = useState<{
     request: AdminFixtureTicketRequest
     amountEur: number
@@ -4719,21 +4727,38 @@ function AdminConsole({
                         />
                       </label>
                       {r.balancePaymentNotified ? (
-                        <p className="admin-ticket-balance-sent-note">
-                          Payment email sent
-                          {r.balancePaymentNotifiedAt && (
-                            <span className="admin-present-received-at">
-                              {' '}
-                              · {new Date(r.balancePaymentNotifiedAt).toLocaleString('en-GB')}
-                              {r.balanceRemainingAmountEur != null
-                                ? ` · €${r.balanceRemainingAmountEur.toFixed(2)}`
-                                : ''}
-                              {r.balancePaymentDeadline
-                                ? ` · deadline ${new Date(r.balancePaymentDeadline).toLocaleDateString('en-GB')}`
-                                : ''}
-                            </span>
+                        <>
+                          <p className="admin-ticket-balance-sent-note">
+                            Payment email sent
+                            {r.balancePaymentNotifiedAt && (
+                              <span className="admin-present-received-at">
+                                {' '}
+                                · {new Date(r.balancePaymentNotifiedAt).toLocaleString('en-GB')}
+                                {r.balanceRemainingAmountEur != null
+                                  ? ` · €${r.balanceRemainingAmountEur.toFixed(2)}`
+                                  : ''}
+                                {r.balancePaymentDeadline
+                                  ? ` · deadline ${new Date(r.balancePaymentDeadline).toLocaleDateString('en-GB')}`
+                                  : ''}
+                              </span>
+                            )}
+                          </p>
+                          {!r.ticketConfirmed && !r.userCancelledAt && (
+                            <button
+                              type="button"
+                              className="admin-payment-reminder-btn"
+                              disabled={busyTicketRequestId !== null || ticketBalanceReminderSubmitting}
+                              onClick={() => {
+                                setTicketActionError(null)
+                                setTicketActionNotice(null)
+                                setTicketBalanceReminderError(null)
+                                setTicketBalanceReminderTarget(r)
+                              }}
+                            >
+                              Remaining amount reminder
+                            </button>
                           )}
-                        </p>
+                        </>
                       ) : (
                         <button
                           type="button"
@@ -6820,6 +6845,45 @@ function AdminConsole({
           }
         }}
       />
+      <PaymentReminderConfirmModal
+        open={ticketBalanceReminderTarget !== null}
+        title="Remaining amount reminder"
+        memberLabel={
+          ticketBalanceReminderTarget
+            ? `${ticketBalanceReminderTarget.user.fullName ?? 'Member'} · ${formatFixtureMatchKeyLabel(ticketBalanceReminderTarget.matchKey)}${
+                ticketBalanceReminderTarget.balanceRemainingAmountEur != null
+                  ? ` · €${ticketBalanceReminderTarget.balanceRemainingAmountEur.toFixed(2)}`
+                  : ''
+              }`
+            : null
+        }
+        submitting={ticketBalanceReminderSubmitting}
+        error={ticketBalanceReminderError}
+        onClose={() => {
+          if (ticketBalanceReminderSubmitting) return
+          setTicketBalanceReminderTarget(null)
+          setTicketBalanceReminderError(null)
+        }}
+        onConfirm={async () => {
+          if (!ticketBalanceReminderTarget) return
+          setTicketActionError(null)
+          setTicketActionNotice(null)
+          setTicketBalanceReminderSubmitting(true)
+          setTicketBalanceReminderError(null)
+          try {
+            await onSendTicketBalancePaymentReminder(ticketBalanceReminderTarget.id)
+            const recipient = ticketBalanceReminderTarget.user.email || 'the member'
+            setTicketActionNotice(`Remaining amount reminder email sent to ${recipient}.`)
+            setTicketBalanceReminderTarget(null)
+          } catch (error) {
+            setTicketBalanceReminderError(
+              error instanceof Error ? error.message : 'Could not send remaining amount reminder.',
+            )
+          } finally {
+            setTicketBalanceReminderSubmitting(false)
+          }
+        }}
+      />
       <TicketConfirmModal
         open={ticketConfirmTarget !== null}
         requestLabel={
@@ -7594,6 +7658,11 @@ function App() {
 
   async function applySendTicketDepositPaymentReminder(requestId: string) {
     const { error } = await sendFixtureTicketDepositPaymentReminder(requestId)
+    if (error) throw new Error(error.message)
+  }
+
+  async function applySendTicketBalancePaymentReminder(requestId: string) {
+    const { error } = await sendFixtureTicketBalancePaymentReminder(requestId)
     if (error) throw new Error(error.message)
   }
 
@@ -9145,6 +9214,7 @@ function App() {
               onCancelTicketRequest={applyCancelTicketRequest}
               onUpdateTicketDepositConfirmed={applyUpdateTicketDepositConfirmed}
               onSendTicketDepositPaymentReminder={applySendTicketDepositPaymentReminder}
+              onSendTicketBalancePaymentReminder={applySendTicketBalancePaymentReminder}
               onUpdateTicketBalancePayment={applyUpdateTicketBalancePayment}
               onUpdateTicketConfirmed={applyUpdateTicketConfirmed}
               onRefreshTicketRequests={refreshTicketRequestsOnly}

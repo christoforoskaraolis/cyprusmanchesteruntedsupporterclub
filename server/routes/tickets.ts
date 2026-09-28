@@ -6,6 +6,7 @@ import { asyncHandler } from '../lib/asyncHandler.ts'
 import { badRequest, notFound } from '../lib/errors.ts'
 import { sendTicketDepositConfirmedEmail } from '../lib/ticketDepositConfirmedEmail.ts'
 import { sendTicketDepositPaymentReminderEmail } from '../lib/ticketDepositPaymentReminderEmail.ts'
+import { sendTicketBalancePaymentReminderEmail } from '../lib/ticketBalancePaymentReminderEmail.ts'
 import { sendTicketBalancePaymentEmail } from '../lib/ticketBalancePaymentEmail.ts'
 import { sendTicketCompletedEmail } from '../lib/ticketCompletedEmail.ts'
 import {
@@ -838,6 +839,66 @@ ticketsRouter.post(
       to,
       depositAmountEur,
       ticketSlotCount,
+    })
+
+    res.json({ ok: true })
+  }),
+)
+
+ticketsRouter.post(
+  '/requests/:id/balance-payment-reminder',
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const requestId = String(req.params.id ?? '').trim()
+    if (!requestId) throw badRequest('Request ID is required')
+
+    const { rows } = await query<{
+      deposit_confirmed: boolean
+      user_cancelled_at: string | null
+      ticket_confirmed: boolean
+      balance_payment_notified: boolean
+      balance_remaining_amount_eur: string | number | null
+      balance_payment_deadline: string | null
+      profile_email: string | null
+      auth_email: string | null
+    }>(
+      `select ftr.deposit_confirmed, ftr.user_cancelled_at, ftr.ticket_confirmed,
+              ftr.balance_payment_notified, ftr.balance_remaining_amount_eur, ftr.balance_payment_deadline,
+              p.email as profile_email, au.email as auth_email
+       from public.fixture_ticket_requests ftr
+       left join public.profiles p on p.id = ftr.user_id
+       left join public.auth_users au on au.user_id = ftr.user_id
+       where ftr.id = $1
+       limit 1`,
+      [requestId],
+    )
+    const request = rows[0]
+    if (!request) throw notFound('Ticket request not found')
+    if (request.user_cancelled_at) {
+      throw badRequest('Cannot send a remaining amount reminder for a cancelled ticket request.')
+    }
+    if (!request.deposit_confirmed) {
+      throw badRequest('Deposit must be confirmed before sending a remaining amount reminder.')
+    }
+    if (request.ticket_confirmed) {
+      throw badRequest('Ticket is already confirmed for this request.')
+    }
+    if (!request.balance_payment_notified) {
+      throw badRequest('Send the remaining amount email first before sending a reminder.')
+    }
+    const balanceRemainingAmountEur =
+      request.balance_remaining_amount_eur == null ? null : Number(request.balance_remaining_amount_eur)
+    if (balanceRemainingAmountEur == null || !Number.isFinite(balanceRemainingAmountEur) || balanceRemainingAmountEur <= 0) {
+      throw badRequest('No remaining balance amount is set for this ticket request.')
+    }
+
+    const to = (request.profile_email || request.auth_email || '').trim()
+    if (!to) throw badRequest('No email address on file for this member.')
+
+    await sendTicketBalancePaymentReminderEmail({
+      to,
+      balanceRemainingAmountEur,
+      paymentDeadline: request.balance_payment_deadline,
     })
 
     res.json({ ok: true })

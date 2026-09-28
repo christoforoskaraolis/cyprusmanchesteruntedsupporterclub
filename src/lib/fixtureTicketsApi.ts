@@ -310,6 +310,15 @@ export async function sendFixtureTicketDepositPaymentReminder(requestId: string)
   }
 }
 
+export async function sendFixtureTicketBalancePaymentReminder(requestId: string) {
+  try {
+    await apiSend(`/api/tickets/requests/${requestId}/balance-payment-reminder`, 'POST')
+    return { error: undefined }
+  } catch (error) {
+    return { error: asError(error) }
+  }
+}
+
 export async function cancelMyFixtureTicketRequest(matchKey: string, userId: string) {
   void userId
   try {
