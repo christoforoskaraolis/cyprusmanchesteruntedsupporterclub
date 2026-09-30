@@ -435,7 +435,7 @@ export function ClubOldTraffordTravelModal({
               </label>
 
               <label className="auth-field membership-field">
-                <span className="auth-label">Αριθμός διαβατηρίου</span>
+                <span className="auth-label">Αριθμός διαβατηρίου (όχι ταυτότητα)</span>
                 <input
                   className="auth-input"
                   type="text"
@@ -538,7 +538,7 @@ export function ClubOldTraffordTravelModal({
               <p>
                 Όσον αφορά την ETA για την Αγγλία, θα σας στείλουμε την εφαρμογή/σύνδεσμο για την αίτηση. Κάθε
                 ταξιδιώτης θα πρέπει να κάνει την αίτηση από το δικό του κινητό τηλέφωνο. Εάν κάποιος χρειάζεται
-                βοήθεια, μπορεί να περάσει από το γραφείο μας και θα τον βοηθήσουμε να ολοκληρώσει τη διαδικασία.
+                βοήθεια, μπορεί να περάσει από το ταξιδιωτικό γραφείο μας και θα τον βοηθήσουμε να ολοκληρώσει τη διαδικασία.
               </p>
               <p>
                 Το κόστος της ETA είναι περίπου <strong>€23</strong> ανά άτομο.
