@@ -14,6 +14,8 @@ export type StripeCheckoutPayload = {
   paymentKind: StripePaymentKind
   referenceId?: string
   returnPath?: string
+  /** For club_trip: Stripe service charge is €1 × travelerCount. */
+  travelerCount?: number
 }
 
 export async function fetchStripeConfig() {

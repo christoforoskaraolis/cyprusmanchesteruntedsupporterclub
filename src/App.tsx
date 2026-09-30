@@ -4965,7 +4965,60 @@ function AdminConsole({
                       Email: {r.user.email ?? '—'}
                       {' · '}
                       Submitted: {new Date(r.requestedAt).toLocaleString('en-GB')}
+                      {' · '}
+                      Travelers: {1 + r.travelCompanions.length}
                     </p>
+                    <div className="admin-ticket-travel-with">
+                      <p className="admin-member-meta">
+                        {r.travelCompanions.length > 0 ? 'Members (requester + travel companions)' : 'Member'}
+                      </p>
+                      <table className="admin-ticket-travel-with-table">
+                        <thead>
+                          <tr>
+                            <th scope="col">Role</th>
+                            <th scope="col">MYCS</th>
+                            <th scope="col">Name</th>
+                            <th scope="col">Phone</th>
+                            <th scope="col">Email</th>
+                            <th scope="col">Official MU</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <tr>
+                            <td>Requester</td>
+                            <td>
+                              {r.user.membershipNumber != null
+                                ? formatMembershipNumber(r.user.membershipNumber)
+                                : '—'}
+                            </td>
+                            <td>{r.user.fullName ?? '—'}</td>
+                            <td>{r.user.mobilePhone ?? '—'}</td>
+                            <td>{r.user.email ?? '—'}</td>
+                            <td>
+                              {formatOfficialMuMembershipId(r.user.officialMuMembershipId)}
+                              {r.user.officialMuMembershipStatus
+                                ? ` (${formatOfficialMuMembershipStatus(r.user.officialMuMembershipStatus)})`
+                                : ''}
+                            </td>
+                          </tr>
+                          {r.travelCompanions.map((companion) => (
+                            <tr key={`${r.id}-${companion.membershipNumber}`}>
+                              <td>Travel companion</td>
+                              <td>{formatMembershipNumber(companion.membershipNumber)}</td>
+                              <td>{companion.fullName ?? '—'}</td>
+                              <td>{companion.mobilePhone ?? '—'}</td>
+                              <td>{companion.email ?? '—'}</td>
+                              <td>
+                                {formatOfficialMuMembershipId(companion.officialMuMembershipId)}
+                                {companion.officialMuMembershipStatus
+                                  ? ` (${formatOfficialMuMembershipStatus(companion.officialMuMembershipStatus)})`
+                                  : ''}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
                     {r.organizedTripDetails ? (
                       <div className="admin-club-trip-details">
                         <p className="admin-club-trip-details-title">Στοιχεία ταξιδιού</p>
@@ -5040,7 +5093,11 @@ function AdminConsole({
                           }
                         }}
                       />
-                      Deposit confirmation (€150)
+                      Deposit confirmation (€{(150 * (1 + r.travelCompanions.length)).toFixed(0)}
+                      {r.travelCompanions.length > 0
+                        ? ` = €150 × ${1 + r.travelCompanions.length}`
+                        : ''}
+                      )
                       {r.depositConfirmedAt && (
                         <span className="admin-present-received-at">
                           · {new Date(r.depositConfirmedAt).toLocaleString('en-GB')}
@@ -7715,6 +7772,7 @@ function App() {
         sessionId,
         matchKey: pending!.matchKey,
         organizedTripDetails: pending!.details,
+        travelCompanionMembershipNumbers: pending!.travelCompanionMembershipNumbers ?? [],
       })
       if (cancelled) return
       setClubTripConfirmSubmitting(false)
@@ -9628,6 +9686,7 @@ function App() {
           fixture={clubTripConfirmFixture}
           matchKey={clubTripConfirmFixture ? fixtureMatchKey(clubTripConfirmFixture) : ''}
           membershipNumber={formatMembershipNumber(membershipRecord?.membershipNumber)}
+          requesterMembershipNumber={membershipRecord?.membershipNumber ?? null}
           submitting={clubTripConfirmSubmitting}
           error={clubTripConfirmError}
           initialFullName={[membershipRecord?.firstName, membershipRecord?.lastName]

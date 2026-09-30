@@ -23,10 +23,23 @@ export type StripePaymentOption = {
   paymentKind: StripePaymentKind
   referenceId?: string
   returnPath?: string
+  /** For club_trip: Stripe service charge is €1 × travelerCount. */
+  travelerCount?: number
 }
 
-function StripePaySection({ stripe }: { stripe: StripePaymentOption }) {
-  const stripeTotalEur = stripe.amountEur + STRIPE_SERVICE_FEE_EUR
+function StripePaySection({
+  stripe,
+  stripeOnly = false,
+}: {
+  stripe: StripePaymentOption
+  stripeOnly?: boolean
+}) {
+  const travelerCount =
+    stripe.paymentKind === 'club_trip' && stripe.travelerCount != null && stripe.travelerCount >= 1
+      ? Math.floor(stripe.travelerCount)
+      : 1
+  const serviceFeeEur = STRIPE_SERVICE_FEE_EUR * travelerCount
+  const stripeTotalEur = stripe.amountEur + serviceFeeEur
   const [status, setStatus] = useState<'loading' | 'ready' | 'unavailable'>('loading')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -55,6 +68,7 @@ function StripePaySection({ stripe }: { stripe: StripePaymentOption }) {
       paymentKind: stripe.paymentKind,
       referenceId: stripe.referenceId,
       returnPath: stripe.returnPath,
+      travelerCount: stripe.paymentKind === 'club_trip' ? travelerCount : undefined,
     }
     const { url, error: checkoutError } = await createStripeCheckoutSession(payload)
     setBusy(false)
@@ -65,19 +79,23 @@ function StripePaySection({ stripe }: { stripe: StripePaymentOption }) {
     window.location.href = url
   }
 
+  const feeCopy =
+    travelerCount > 1
+      ? `A <strong>€${STRIPE_SERVICE_FEE_EUR.toFixed(2)} service charge per traveler</strong> applies (€${stripe.amountEur.toFixed(2)} + €${serviceFeeEur.toFixed(2)} = <strong>€${stripeTotalEur.toFixed(2)} total</strong>).`
+      : `A <strong>€${STRIPE_SERVICE_FEE_EUR.toFixed(2)} service charge</strong> applies to Stripe payments only (€${stripe.amountEur.toFixed(2)} + €${STRIPE_SERVICE_FEE_EUR.toFixed(2)} = <strong>€${stripeTotalEur.toFixed(2)} total</strong>).`
+
   return (
     <div className="membership-payment-method membership-payment-method--stripe">
       <span className="membership-payment-method-label">Pay with card (Stripe)</span>
       <p className="membership-payment-intro">
-        Pay securely online with card. A <strong>€{STRIPE_SERVICE_FEE_EUR.toFixed(2)} service charge</strong> applies to
-        Stripe payments only (€{stripe.amountEur.toFixed(2)} + €{STRIPE_SERVICE_FEE_EUR.toFixed(2)} ={' '}
-        <strong>€{stripeTotalEur.toFixed(2)} total</strong>). You will be redirected to Stripe to complete payment.
+        Pay securely online with card. {feeCopy} You will be redirected to Stripe to complete payment.
       </p>
       {status === 'loading' && <p className="membership-payment-intro">Loading card payment option…</p>}
       {status === 'unavailable' && (
         <p className="membership-payment-stripe-unavailable" role="note">
-          Card payment is not available on the server yet. Please use bank transfer or Revolut above, or try again
-          later after the club enables Stripe.
+          {stripeOnly
+            ? 'Card payment is not available on the server yet. Please try again later after the club enables Stripe.'
+            : 'Card payment is not available on the server yet. Please use bank transfer or Revolut above, or try again later after the club enables Stripe.'}
         </p>
       )}
       {status === 'ready' && (
@@ -97,7 +115,17 @@ function StripePaySection({ stripe }: { stripe: StripePaymentOption }) {
   )
 }
 
-export function ClubPaymentMethodFields({ stripe }: { stripe?: StripePaymentOption }) {
+export function ClubPaymentMethodFields({
+  stripe,
+  stripeOnly = false,
+}: {
+  stripe?: StripePaymentOption
+  stripeOnly?: boolean
+}) {
+  if (stripeOnly) {
+    return stripe ? <StripePaySection stripe={stripe} stripeOnly /> : null
+  }
+
   return (
     <>
       <div className="membership-payment-method">

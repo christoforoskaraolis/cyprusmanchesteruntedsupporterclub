@@ -9,6 +9,7 @@ import { sendTicketDepositPaymentReminderEmail } from '../lib/ticketDepositPayme
 import { sendTicketBalancePaymentReminderEmail } from '../lib/ticketBalancePaymentReminderEmail.ts'
 import { sendTicketBalancePaymentEmail } from '../lib/ticketBalancePaymentEmail.ts'
 import { sendTicketCompletedEmail } from '../lib/ticketCompletedEmail.ts'
+import { sendClubTripConfirmedEmail } from '../lib/clubTripConfirmedEmail.ts'
 import {
   lookupMembersByMembershipNumbers,
   ticketDepositAmountEurFromCompanionNumbers,
@@ -472,36 +473,20 @@ ticketsRouter.post(
       sessionId?: unknown
       matchKey?: unknown
       organizedTripDetails?: unknown
+      travelCompanionMembershipNumbers?: unknown
     }
     const sessionId = typeof body.sessionId === 'string' ? body.sessionId.trim() : ''
     const matchKey = typeof body.matchKey === 'string' ? body.matchKey.trim() : ''
     const organizedTripDetails = parseOrganizedTripDetails(body.organizedTripDetails)
+    const travelCompanionMembershipNumbers = parseTravelCompanionMembershipNumbers(
+      body.travelCompanionMembershipNumbers,
+    )
 
     if (!sessionId) throw badRequest('Stripe session ID is required.')
     if (!matchKey) throw badRequest('Match key is required.')
     if (!organizedTripDetails) throw badRequest('Trip registration details are incomplete.')
     if (!isHullCityMatchKey(matchKey)) {
       throw badRequest('Organized club trip registration is only available for the Hull City home match.')
-    }
-
-    const stripe = getStripeClient()
-    if (!stripe) throw badRequest('Stripe is not configured on this server.')
-
-    const session = await stripe.checkout.sessions.retrieve(sessionId)
-    if (session.payment_status !== 'paid') {
-      throw badRequest('Stripe payment is not completed yet.')
-    }
-    if (session.metadata?.paymentKind !== 'club_trip') {
-      throw badRequest('This Stripe payment is not a club trip deposit.')
-    }
-    if (session.metadata?.userId !== req.user!.id) {
-      throw badRequest('This Stripe payment does not belong to the signed-in user.')
-    }
-    if ((session.metadata?.referenceId ?? '') !== matchKey) {
-      throw badRequest('This Stripe payment does not match the selected fixture.')
-    }
-    if (session.metadata?.baseAmountEur !== String(CLUB_TRIP_DEPOSIT_EUR)) {
-      throw badRequest('This Stripe payment amount does not match the trip deposit.')
     }
 
     const { rows: requesterRows } = await query<{
@@ -532,13 +517,40 @@ ticketsRouter.post(
       throw badRequest('Organized club trip registration is not available for your membership.')
     }
 
+    const filteredTravelCompanions = travelCompanionMembershipNumbers.filter(
+      (n) => requesterMembershipNumber == null || n !== requesterMembershipNumber,
+    )
+    await validateTravelCompanionMembershipNumbers(filteredTravelCompanions)
+    const requestedSlotCount = ticketSlotCountFromCompanionNumbers(filteredTravelCompanions)
+    const expectedDepositEur = CLUB_TRIP_DEPOSIT_EUR * requestedSlotCount
+
+    const stripe = getStripeClient()
+    if (!stripe) throw badRequest('Stripe is not configured on this server.')
+
+    const session = await stripe.checkout.sessions.retrieve(sessionId)
+    if (session.payment_status !== 'paid') {
+      throw badRequest('Stripe payment is not completed yet.')
+    }
+    if (session.metadata?.paymentKind !== 'club_trip') {
+      throw badRequest('This Stripe payment is not a club trip deposit.')
+    }
+    if (session.metadata?.userId !== req.user!.id) {
+      throw badRequest('This Stripe payment does not belong to the signed-in user.')
+    }
+    if ((session.metadata?.referenceId ?? '') !== matchKey) {
+      throw badRequest('This Stripe payment does not match the selected fixture.')
+    }
+    if (session.metadata?.baseAmountEur !== String(expectedDepositEur)) {
+      throw badRequest('This Stripe payment amount does not match the trip deposit for the selected travelers.')
+    }
+
     const { rows } = await query<{ id: string }>(
       `select id from public.fixture_ticket_requests where match_key = $1 and user_id = $2 order by requested_at desc limit 1`,
       [matchKey, req.user!.id],
     )
     await assertFixtureTicketCapacityAvailable(matchKey, {
       existingRequestId: rows[0]?.id ?? null,
-      requestedSlotCount: 1,
+      requestedSlotCount,
     })
 
     const detailsJson = JSON.stringify(organizedTripDetails)
@@ -555,28 +567,47 @@ ticketsRouter.post(
              balance_payment_deadline = null,
              ticket_confirmed = false,
              ticket_confirmed_at = null,
-             travel_companion_membership_numbers = '{}'::int[],
-             organized_trip_details = $2::jsonb,
+             travel_companion_membership_numbers = $2,
+             organized_trip_details = $3::jsonb,
              requested_at = now(),
              updated_at = now()
          where id = $1`,
-        [rows[0].id, detailsJson],
+        [rows[0].id, filteredTravelCompanions, detailsJson],
       )
     } else {
       await query(
         `insert into public.fixture_ticket_requests
            (match_key, user_id, status, travel_companion_membership_numbers, organized_trip_details,
             deposit_confirmed, deposit_confirmed_at)
-         values ($1, $2, 'pending', '{}'::int[], $3::jsonb, true, now())`,
-        [matchKey, req.user!.id, detailsJson],
+         values ($1, $2, 'pending', $3, $4::jsonb, true, now())`,
+        [matchKey, req.user!.id, filteredTravelCompanions, detailsJson],
       )
     }
     await closeFixtureTicketWindowIfAtCapacity(matchKey)
+
+    const { rows: emailRows } = await query<{
+      profile_email: string | null
+      auth_email: string | null
+    }>(
+      `select p.email as profile_email, au.email as auth_email
+       from (select $1::uuid as user_id) u
+       left join public.profiles p on p.id = u.user_id
+       left join public.auth_users au on au.user_id = u.user_id
+       limit 1`,
+      [req.user!.id],
+    )
+    const to = (emailRows[0]?.profile_email || emailRows[0]?.auth_email || '').trim()
+    if (to) {
+      await sendClubTripConfirmedEmail({ to })
+    }
+
     res.json({
       ok: true,
       isOrganizedClubTrip: true,
-      depositAmountEur: CLUB_TRIP_DEPOSIT_EUR,
+      depositAmountEur: expectedDepositEur,
+      ticketSlotCount: requestedSlotCount,
       depositConfirmed: true,
+      confirmationEmailSent: Boolean(to),
     })
   }),
 )

@@ -244,12 +244,17 @@ export async function requestFixtureTicket(
   }
 }
 
-/** Organized Hull City club-trip deposit (Stripe adds €1 service charge → €151 total). */
+/** Organized Hull City club-trip deposit per traveler (Stripe adds €1 service charge). */
 export const CLUB_TRIP_DEPOSIT_EUR = 150
+
+export function clubTripDepositAmountEur(ticketSlotCount: number): number {
+  return CLUB_TRIP_DEPOSIT_EUR * Math.max(1, ticketSlotCount)
+}
 
 export type ClubTripPendingPayment = {
   matchKey: string
   details: OrganizedTripDetails
+  travelCompanionMembershipNumbers: number[]
 }
 
 export const CLUB_TRIP_PENDING_STORAGE_KEY = 'cmusc-club-trip-pending'
@@ -258,6 +263,7 @@ export async function completeClubTripAfterStripePayment(options: {
   sessionId: string
   matchKey: string
   organizedTripDetails: OrganizedTripDetails
+  travelCompanionMembershipNumbers?: number[]
 }) {
   try {
     const data = await apiSend<{

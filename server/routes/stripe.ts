@@ -47,20 +47,19 @@ stripeRouter.post(
       return
     }
 
-    const { amountEur, description, paymentKind, referenceId, returnPath } = req.body as {
+    const { amountEur, description, paymentKind, referenceId, returnPath, travelerCount } = req.body as {
       amountEur: number
       description: string
       paymentKind: string
       referenceId?: string
       returnPath?: string
+      travelerCount?: number
     }
 
     if (!Number.isFinite(amountEur) || amountEur <= 0) {
       res.status(400).json({ error: 'amountEur must be a positive number.' })
       return
     }
-
-    const chargeAmountEur = amountEur + STRIPE_SERVICE_FEE_EUR
 
     const desc = (description ?? '').trim()
     if (!desc) {
@@ -72,6 +71,14 @@ stripeRouter.post(
       res.status(400).json({ error: 'Invalid paymentKind.' })
       return
     }
+
+    // Club trip: €1 Stripe service charge per traveler. Other payments keep a flat €1 fee.
+    const parsedTravelerCount = Number(travelerCount)
+    const serviceFeeEur =
+      paymentKind === 'club_trip' && Number.isInteger(parsedTravelerCount) && parsedTravelerCount >= 1
+        ? STRIPE_SERVICE_FEE_EUR * parsedTravelerCount
+        : STRIPE_SERVICE_FEE_EUR
+    const chargeAmountEur = amountEur + serviceFeeEur
 
     const base = appBaseUrl(req)
     const path = (returnPath ?? '/mycmusc').startsWith('/') ? (returnPath ?? '/mycmusc') : `/${returnPath ?? 'mycmusc'}`
@@ -93,8 +100,13 @@ stripeRouter.post(
         {
           price_data: {
             currency: 'eur',
-            product_data: { name: 'Service charge (Stripe)' },
-            unit_amount: Math.round(STRIPE_SERVICE_FEE_EUR * 100),
+            product_data: {
+              name:
+                serviceFeeEur > STRIPE_SERVICE_FEE_EUR
+                  ? `Service charge (Stripe) × ${serviceFeeEur}`
+                  : 'Service charge (Stripe)',
+            },
+            unit_amount: Math.round(serviceFeeEur * 100),
           },
           quantity: 1,
         },
@@ -104,8 +116,9 @@ stripeRouter.post(
         referenceId: (referenceId ?? '').slice(0, 200),
         userId: req.user!.id,
         baseAmountEur: String(amountEur),
-        serviceFeeEur: String(STRIPE_SERVICE_FEE_EUR),
+        serviceFeeEur: String(serviceFeeEur),
         chargeAmountEur: String(chargeAmountEur),
+        travelerCount: paymentKind === 'club_trip' ? String(Math.max(1, parsedTravelerCount || 1)) : '1',
       },
       success_url: successUrl,
       cancel_url: cancelUrl,
