@@ -25,9 +25,6 @@ import { requireAdmin, requireUser } from '../middleware/auth.ts'
 
 const MAX_TRAVEL_COMPANIONS = 10
 
-/** Pilot members who can register for the Hull City organized club trip. */
-const ORGANIZED_CLUB_TRIP_MEMBERSHIP_NUMBERS = new Set([1, 2, 7, 13])
-
 /** Club-trip deposit base amount. Stripe checkout adds the €1 service charge (€151 total). */
 export const CLUB_TRIP_DEPOSIT_EUR = 150
 
@@ -510,12 +507,6 @@ ticketsRouter.post(
       throw badRequest('You must have active official Manchester United membership to register for the club trip.')
     }
     const requesterMembershipNumber = requester.membership_number ?? null
-    if (
-      requesterMembershipNumber == null ||
-      !ORGANIZED_CLUB_TRIP_MEMBERSHIP_NUMBERS.has(requesterMembershipNumber)
-    ) {
-      throw badRequest('Organized club trip registration is not available for your membership.')
-    }
 
     const filteredTravelCompanions = travelCompanionMembershipNumbers.filter(
       (n) => requesterMembershipNumber == null || n !== requesterMembershipNumber,

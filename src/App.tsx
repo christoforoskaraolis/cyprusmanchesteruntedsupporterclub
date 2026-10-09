@@ -4889,7 +4889,7 @@ function AdminConsole({
           <div className="admin-block-head">
             <h2 className="admin-block-title">Trip requests</h2>
             <p className="admin-block-lead">
-              Organized club trip registrations for Old Trafford (Hull City). These appear when eligible members
+              Organized club trip registrations for Old Trafford (Hull City). These appear when members
               submit Travel with the Club.
             </p>
             <button
@@ -7278,15 +7278,8 @@ function isOldTraffordHomeFixture(f: UpcomingFixture): boolean {
   return venue.includes('old trafford') || venue.includes('manchester')
 }
 
-/** Pilot membership numbers for the Hull City organized club trip. */
-const ORGANIZED_CLUB_TRIP_MEMBERSHIP_NUMBERS = new Set([1, 2, 7, 13])
-
 function isHullCityClubTripFixture(f: UpcomingFixture): boolean {
   return Boolean(f.home) && /hull/i.test(f.opponent)
-}
-
-function isOrganizedClubTripEligible(membershipNumber: number | null | undefined): boolean {
-  return membershipNumber != null && ORGANIZED_CLUB_TRIP_MEMBERSHIP_NUMBERS.has(membershipNumber)
 }
 
 function formatOrganizedTripDateLabel(isoDate: string): string {
@@ -9463,9 +9456,7 @@ function App() {
                           const canRequestTicket =
                             membershipRecord?.status === 'active' &&
                             membershipRecord.officialMuMembershipStatus === 'activated'
-                          const isClubTripRequest =
-                            isHullCityClubTripFixture(f) &&
-                            isOrganizedClubTripEligible(membershipRecord?.membershipNumber)
+                          const isClubTripRequest = isHullCityClubTripFixture(f)
                           const canSubmitNewRequest =
                             !myRequestStatus || userCancelled || myRequestStatus === 'cancelled'
                           const formSubmitted = Boolean(ticketFormSubmittedByKey[key])
